@@ -9,9 +9,10 @@
 
 //opencl
 #define CL_HPP_ENABLE_EXCEPTIONS
-// #define CL_HPP_TARGET_OPENCL_VERSION 200
-// #include "CL/cl2.hpp"
-#include "CL/cl.hpp"
+#define CL_HPP_TARGET_OPENCL_VERSION 200
+#include "CL/cl2.hpp"
+#include <CL/cl.h>
+// #include "CL/cl.hpp"
 
 //My stuff
 #include "stereo_depth_cl/Mesh.h"
@@ -31,6 +32,8 @@ public:
     void init_opencl();
 
     void run_speed_test();
+    void run_speed_test_img(Frame& frame);
+    void run_speed_test_img2(Frame& frame);
 
     // Scene get_scene();
     bool is_modified(){return m_scene_is_modified;};
@@ -40,10 +43,13 @@ public:
     std::shared_ptr<Profiler> m_profiler;
     std::shared_ptr<igl::opengl::glfw::Viewer> m_view;
 
-    //opencl
+    //opencl global stuff
     cl::Context m_context;
     cl::Device m_device;
     cl::CommandQueue m_queue;
+
+    //opencl things for processing the images
+    cl::Kernel m_kernel_simple_copy;
 
 
     //databasse
@@ -57,7 +63,7 @@ public:
 
 
 private:
-
+    void compile_kernels();
 
 };
 
@@ -74,9 +80,9 @@ private:
     TIME_END_2(name,m_profiler);
 
 #define TIME_START_CL(name)\
-    if (m_cl_profiling_enabled) cl::finish();\
+    if (m_cl_profiling_enabled){ m_queue.finish();}\
     TIME_START_2(name,m_profiler);
 
 #define TIME_END_CL(name)\
-    if (m_cl_profiling_enabled) cl::finish();\
+    if (m_cl_profiling_enabled){ m_queue.finish();}\
     TIME_END_2(name,m_profiler);

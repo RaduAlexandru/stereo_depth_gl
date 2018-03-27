@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(stereo_depth_cl)
 
-set(CMAKE_BUILD_TYPE RelWithDebInfo)
+set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/../deps/libigl/shared/cmake/)
 set(PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include
@@ -21,12 +21,8 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DAPC_CAPTURE_DEBUG=1")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -O2") #optimizations
 
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-
-
 find_package(catkin REQUIRED)
+find_package(OpenMP REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(MPI REQUIRED)
@@ -47,6 +43,12 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf_conversions
 )
+
+if (OPENMP_FOUND)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
 
 # fix for https://github.com/ros-perception/vision_opencv/issues/193
 find_package(OpenCV 3 REQUIRED)
@@ -123,7 +125,7 @@ include_directories(${LIBIGL_INCLUDE_DIRS})
 add_definitions(${LIBIGL_DEFINITIONS})
 include_directories(${nanoflann_INCLUDE_DIRS})
 include_directories(${KQUEUE_INCLUDE_DIRS})
-include_directories(${OpenCL_INCLUDE_DIRS})
+include_directories(${OPENCL_INCLUDE})
 #add_definitions(${GLM_DEFINITIONS})
 #include_directories("/media/alex/Data/Master/SHK/c_ws/src/laser_mesher/deps/libigl/external/nanogui/ext/glew/include/")
 
@@ -167,7 +169,7 @@ target_link_libraries(stereo_depth_cl ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${O
           ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
           ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
           ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
-          ${OpenCL_LIBRARY}
+          ${OPENCL_LIBRARY}
 )
 #definitions for cmake variables that are necesarry during runtime
 target_compile_definitions(stereo_depth_cl PRIVATE AWESOMEFONT_DIR="${CMAKE_SOURCE_DIR}/deps/imgui_ext/fontawesome-webfont.ttf")

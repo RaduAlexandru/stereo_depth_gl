@@ -65,7 +65,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
 
      boost::thread t(&DataLoader::load_data, m_loader);
 
-     m_depth_estimator->run_speed_test();
+     // m_depth_estimator->run_speed_test();
 
 }
 
@@ -107,6 +107,11 @@ void Core::update() {
                 // Eigen::Vector3d eye_pos=frame.tf_cam_world.inverse().translation();
                 // m_scene.get_mesh_with_name("debug_mesh").V=eye_pos.transpose();
                 // m_scene.get_mesh_with_name("debug_mesh").m_visualization_should_change=true;
+
+
+                Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
+                m_depth_estimator->run_speed_test_img2(frame);
+                display_frame(frame);
 
 
                 nr_cams_processed++;
@@ -173,6 +178,30 @@ void Core::init_params() {
     m_bag_args = getParamElseThrow<std::string>(private_nh, "bag_args");
 
     //TODO read all the other parameters from the launch file
+}
+
+
+void Core::display_frame(const Frame& frame){
+    int max_size=300;
+
+    //resize to a reasonable size
+    cv::Mat rgb_vis, classes_vis, probs_vis;
+    double scale = static_cast<double>(max_size) / std::max(frame.rgb.rows, frame.rgb.cols);
+    cv::Size size(frame.rgb.cols*scale, frame.rgb.rows*scale);
+    cv::resize(frame.rgb, rgb_vis, size );
+    cv::resize(frame.classes_original_size, classes_vis, size, 0, 0, cv::INTER_NEAREST );
+    cv::resize(frame.probs_original_size, probs_vis, size, 0, 0, cv::INTER_NEAREST);
+
+    //color them
+    cv::Mat classes_vis_colored;
+
+
+    //display
+    cv::imshow("rgb", rgb_vis);
+    // cv::imshow("probs", probs_vis);
+    cv::waitKey(10);
+
+
 }
 
 
