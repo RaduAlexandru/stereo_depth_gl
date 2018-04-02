@@ -34,6 +34,8 @@ public:
     void run_speed_test();
     void run_speed_test_img(Frame& frame);
     void run_speed_test_img2(Frame& frame);
+    void run_speed_test_img_3_blur(Frame& frame);
+    void run_speed_test_img_4_sobel(Frame& frame);
 
     // Scene get_scene();
     bool is_modified(){return m_scene_is_modified;};
@@ -50,6 +52,8 @@ public:
 
     //opencl things for processing the images
     cl::Kernel m_kernel_simple_copy;
+    cl::Kernel m_kernel_blur;
+    cl::Kernel m_kernel_sobel;
 
 
     //databasse

@@ -3,7 +3,7 @@ project(stereo_depth_cl)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/../deps/libigl/shared/cmake/)
+list(APPEND CMAKE_MODULE_PATH /media/alex/Data/Programs_linux/libigl/shared/cmake/)
 set(PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include
                         ${CMAKE_SOURCE_DIR}/deps
                         ${CMAKE_SOURCE_DIR}/deps/imgui
@@ -100,7 +100,7 @@ if(LIBIGL_WITH_CGAL) # Do not remove or move this block, the cgal build system f
   set(CGAL_DONT_OVERRIDE_CMAKE_FLAGS TRUE CACHE BOOL "CGAL's CMAKE Setup is super annoying ")
   include(${CGAL_USE_FILE})
 endif()
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../deps/libigl/shared/cmake/" "libigl")
+add_subdirectory("/media/alex/Data/Programs_linux/libigl/shared/cmake/" "libigl")
 
 
 

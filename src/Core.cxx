@@ -110,7 +110,7 @@ void Core::update() {
 
 
                 Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-                m_depth_estimator->run_speed_test_img2(frame);
+                m_depth_estimator->run_speed_test_img_4_sobel(frame);
                 display_frame(frame);
 
 

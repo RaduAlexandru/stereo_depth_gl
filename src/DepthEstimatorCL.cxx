@@ -115,6 +115,8 @@ void DepthEstimatorCL::compile_kernels(){
          file_to_string("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/kernels_cl/img_proc_test.cl"));
     program.build({m_device},"-cl-std=CL2.0");
 	m_kernel_simple_copy=cl::Kernel (program, "simple_copy");
+    m_kernel_blur=cl::Kernel (program, "gaussian_blur");
+    m_kernel_sobel=cl::Kernel (program, "sobel");
 }
 
 void DepthEstimatorCL::run_speed_test(){
@@ -389,6 +391,223 @@ void DepthEstimatorCL::run_speed_test_img2(Frame& frame){
     //
     // cv::Mat wrapped(height, width, CV_8UC4, destination);
     // frame.rgb=wrapped.clone();
+
+
+    //read the results back attempt 2
+    TIME_START_CL("read_results");
+    auto origin = cl::array<cl::size_type, 3U>{0, 0, 0};
+    auto region = cl::array<cl::size_type, 3U>{width, height, 1};
+    cl::size_type row_pitch, slice_pitch;
+    std::uint8_t* destination = (std::uint8_t*)m_queue.enqueueMapImage(cl_img_out, CL_TRUE,CL_MAP_READ, origin, region, &row_pitch, &slice_pitch);
+    std::cout << "row_pitch is " << row_pitch << '\n';
+    TIME_END_CL("read_results");
+
+    //put into a mat so as to view it
+    TIME_START_CL("put_int_mat");
+    cv::Mat wrapped(height, width, CV_8UC4, destination, row_pitch); //row pitch is the step of a opencv mat
+    frame.rgb=wrapped.clone();
+    TIME_END_CL("put_int_mat");
+
+    TIME_END_CL("run_speed_test_img");
+
+
+    //cleanup
+    free(mat_buf);
+    free(mat_out_buf);
+    m_queue.enqueueUnmapMemObject(cl_img_out,destination);
+
+
+}
+
+float * createBlurMask(float sigma, int * maskSizePointer) {
+    int maskSize = (int)ceil(3.0f*sigma);
+    float * mask = new float[(maskSize*2+1)*(maskSize*2+1)];
+    float sum = 0.0f;
+    for(int a = -maskSize; a < maskSize+1; a++) {
+        for(int b = -maskSize; b < maskSize+1; b++) {
+            float temp = exp(-((float)(a*a+b*b) / (2*sigma*sigma)));
+            sum += temp;
+            mask[a+maskSize+(b+maskSize)*(maskSize*2+1)] = temp;
+        }
+    }
+    // Normalize the mask
+    for(int i = 0; i < (maskSize*2+1)*(maskSize*2+1); i++)
+        mask[i] = mask[i] / sum;
+
+    *maskSizePointer = maskSize;
+
+    return mask;
+}
+
+void DepthEstimatorCL::run_speed_test_img_3_blur(Frame& frame){
+
+    //based on https://github.com/smistad/OpenCL-Gaussian-Blur
+
+    TIME_START_CL("run_speed_test_img");
+
+    TIME_START_CL("add_alpha");
+    uchar *mat_buf;
+    int size_bytes=frame.rgb.size().width*frame.rgb.size().height*4;
+    //round up to nearest multiple of 64 bytes
+    std::cout << "size in bytes was " << size_bytes << '\n';
+    round_up_to_nearest_multiple(size_bytes,64); //allocate memory that is multiple of 64 bytes
+    std::cout << "size in bytes is now " << size_bytes << '\n';
+    if(frame.rgb.isContinuous()){
+        TIME_START_CL("alloc");
+        mat_buf = (uchar *)aligned_alloc(4096, sizeof(uchar) * size_bytes);
+        TIME_END_CL("alloc");
+
+        // copy attempt 2
+        TIME_START_CL("copy");
+        int idx_insert=0;
+        cv::Vec3b* pixel = frame.rgb.ptr<cv::Vec3b>(0);
+        for (size_t i = 0; i < frame.rgb.rows*frame.rgb.cols; i++) {
+            std::memcpy(&mat_buf[idx_insert], &((*pixel)[0]),4*sizeof(uchar)); //WARNING it does copy undefined values for alpha but we don't care
+            pixel++;
+            idx_insert+=4;
+        }
+        TIME_END_CL("copy");
+
+
+    }else{
+        LOG(FATAL) << "RGB image not continuous, which means the pixel iteration must be done in differnt way: look at https://docs.opencv.org/2.4/doc/tutorials/core/how_to_scan_images/how_to_scan_images.html#howtoscanimagesopencv";
+    }
+    int width = frame.rgb.size().width;
+    int height = frame.rgb.size().height;
+    TIME_END_CL("add_alpha");
+
+	// Create OpenCL image
+    TIME_START_CL("transfer");
+    //make a buffer and then view it as image because it's faster as it's actually using the fully allocated buffer which is aligned and everything
+    cl::ImageFormat cl_img_format(CL_RGBA,CL_UNORM_INT8);
+
+    cl::Buffer cl_img_buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, size_bytes, mat_buf);
+    cl::Image2D cl_img(m_context, cl_img_format, cl_img_buffer, width, height );
+
+    //out using an aligned buffer makes the mapping of it way faster
+    uchar* mat_out_buf = (uchar *)aligned_alloc(4096, sizeof(uchar) * size_bytes);
+    cl::Buffer cl_img_out_buffer(m_context, CL_MEM_WRITE_ONLY | CL_MEM_USE_HOST_PTR, size_bytes, mat_out_buf);
+    cl::Image2D cl_img_out(m_context, cl_img_format, cl_img_out_buffer, width, height);
+    TIME_END_CL("transfer");
+
+
+    //gaussian kernel
+    int maskSize;
+    float * mask = createBlurMask(10.0f, &maskSize);
+    // Create buffer for mask and transfer it to the device
+    cl::Buffer clMask = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*(maskSize*2+1)*(maskSize*2+1), mask);
+
+
+    // Set the kernel arguments
+    TIME_START_CL("set_args");
+    m_kernel_blur.setArg(0, cl_img);
+    m_kernel_blur.setArg(1, clMask);
+    m_kernel_blur.setArg(2, maskSize);
+    m_kernel_blur.setArg(3, cl_img_out);
+    TIME_END_CL("set_args");
+
+
+    //run
+    TIME_START_CL("run_kenel");
+    m_queue.enqueueNDRangeKernel(m_kernel_blur, cl::NullRange, cl::NDRange(width, height), cl::NullRange);
+    TIME_END_CL("run_kenel");
+
+    // //read result back to host
+
+
+    //read the results back attempt 2
+    TIME_START_CL("read_results");
+    auto origin = cl::array<cl::size_type, 3U>{0, 0, 0};
+    auto region = cl::array<cl::size_type, 3U>{width, height, 1};
+    cl::size_type row_pitch, slice_pitch;
+    std::uint8_t* destination = (std::uint8_t*)m_queue.enqueueMapImage(cl_img_out, CL_TRUE,CL_MAP_READ, origin, region, &row_pitch, &slice_pitch);
+    std::cout << "row_pitch is " << row_pitch << '\n';
+    TIME_END_CL("read_results");
+
+    //put into a mat so as to view it
+    TIME_START_CL("put_int_mat");
+    cv::Mat wrapped(height, width, CV_8UC4, destination, row_pitch); //row pitch is the step of a opencv mat
+    frame.rgb=wrapped.clone();
+    TIME_END_CL("put_int_mat");
+
+    TIME_END_CL("run_speed_test_img");
+
+
+    //cleanup
+    free(mat_buf);
+    free(mat_out_buf);
+    m_queue.enqueueUnmapMemObject(cl_img_out,destination);
+
+
+}
+
+void DepthEstimatorCL::run_speed_test_img_4_sobel(Frame& frame){
+
+    //based on https://github.com/smistad/OpenCL-Gaussian-Blur
+
+    TIME_START_CL("run_speed_test_img");
+
+    TIME_START_CL("add_alpha");
+    uchar *mat_buf;
+    int size_bytes=frame.rgb.size().width*frame.rgb.size().height*4;
+    //round up to nearest multiple of 64 bytes
+    std::cout << "size in bytes was " << size_bytes << '\n';
+    round_up_to_nearest_multiple(size_bytes,64); //allocate memory that is multiple of 64 bytes
+    std::cout << "size in bytes is now " << size_bytes << '\n';
+    if(frame.rgb.isContinuous()){
+        TIME_START_CL("alloc");
+        mat_buf = (uchar *)aligned_alloc(4096, sizeof(uchar) * size_bytes);
+        TIME_END_CL("alloc");
+
+        // copy attempt 2
+        TIME_START_CL("copy");
+        int idx_insert=0;
+        cv::Vec3b* pixel = frame.rgb.ptr<cv::Vec3b>(0);
+        for (size_t i = 0; i < frame.rgb.rows*frame.rgb.cols; i++) {
+            std::memcpy(&mat_buf[idx_insert], &((*pixel)[0]),4*sizeof(uchar)); //WARNING it does copy undefined values for alpha but we don't care
+            pixel++;
+            idx_insert+=4;
+        }
+        TIME_END_CL("copy");
+
+
+    }else{
+        LOG(FATAL) << "RGB image not continuous, which means the pixel iteration must be done in differnt way: look at https://docs.opencv.org/2.4/doc/tutorials/core/how_to_scan_images/how_to_scan_images.html#howtoscanimagesopencv";
+    }
+    int width = frame.rgb.size().width;
+    int height = frame.rgb.size().height;
+    TIME_END_CL("add_alpha");
+
+	// Create OpenCL image
+    TIME_START_CL("transfer");
+    //make a buffer and then view it as image because it's faster as it's actually using the fully allocated buffer which is aligned and everything
+    cl::ImageFormat cl_img_format(CL_RGBA,CL_UNORM_INT8);
+
+    cl::Buffer cl_img_buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, size_bytes, mat_buf);
+    cl::Image2D cl_img(m_context, cl_img_format, cl_img_buffer, width, height );
+
+    //out using an aligned buffer makes the mapping of it way faster
+    uchar* mat_out_buf = (uchar *)aligned_alloc(4096, sizeof(uchar) * size_bytes);
+    cl::Buffer cl_img_out_buffer(m_context, CL_MEM_WRITE_ONLY | CL_MEM_USE_HOST_PTR, size_bytes, mat_out_buf);
+    cl::Image2D cl_img_out(m_context, cl_img_format, cl_img_out_buffer, width, height);
+    TIME_END_CL("transfer");
+
+
+
+
+    // Set the kernel arguments
+    TIME_START_CL("set_args");
+    m_kernel_sobel.setArg(0, cl_img);
+    m_kernel_sobel.setArg(1, cl_img_out);
+    TIME_END_CL("set_args");
+
+
+    //run
+    TIME_START_CL("run_kenel");
+    m_queue.enqueueNDRangeKernel(m_kernel_sobel, cl::NullRange, cl::NDRange(width, height), cl::NullRange);
+    TIME_END_CL("run_kenel");
+
+    // //read result back to host
 
 
     //read the results back attempt 2
