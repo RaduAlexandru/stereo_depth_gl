@@ -36,6 +36,15 @@ public:
     void run_speed_test_img2(Frame& frame);
     void run_speed_test_img_3_blur(Frame& frame);
     void run_speed_test_img_4_sobel(Frame& frame);
+    void run_speed_test_img_4_sobel_gray(Frame& frame);
+    void run_speed_test_img_4_blur_gray(Frame& frame);
+    void run_speed_test_img_4_blur_gray_safe(Frame& frame);
+
+    void create_blur_mask(std::vector<float>& mask, const int sigma); //create a 1d mask for gaussian blurring (doesn't matter if it's used in x or y)
+    void gaussian_blur(cl::Image2D& dest_img, const cl::Image2D& src_img, const int sigma);
+
+    void compute_depth(const Frame& frame);
+
 
     // Scene get_scene();
     bool is_modified(){return m_scene_is_modified;};
