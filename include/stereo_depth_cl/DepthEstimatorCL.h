@@ -42,6 +42,7 @@ public:
     void run_speed_test_img_4_blur_gray_safe(Frame& frame);
 
     void create_blur_mask(std::vector<float>& mask, const int sigma); //create a 1d mask for gaussian blurring (doesn't matter if it's used in x or y)
+    void create_half_blur_mask(std::vector<float>& mask, const int sigma); //creates only half of gaussian because it's symetric
     void gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2DSafe& src_img, const int sigma);
 
     void compute_depth(Frame& frame);

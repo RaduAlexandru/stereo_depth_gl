@@ -450,7 +450,25 @@ void DepthEstimatorCL::create_blur_mask(std::vector<float>& mask, const int sigm
     for(int i = 0; i < mask_size; i++){
         mask[i] = mask[i] / sum;
     }
+}
 
+void DepthEstimatorCL::create_half_blur_mask(std::vector<float>& mask, const int sigma){
+    int mask_size = (int)ceil(3.0f*sigma)/2;
+    mask.resize(mask_size);
+    float sum=0.0;
+    for (int i = 0; i < mask_size+1; i++) {
+        float temp = exp(-((float)(i*i) / (2*sigma*sigma)));
+        sum += temp;
+        mask[i]=temp;
+    }
+    // Normalize the mask
+    for(int i = 0; i < mask_size; i++){
+        mask[i] = mask[i] / sum;
+    }
+
+    for (size_t i = 0; i < mask_size; i++) {
+        std::cout << "mask is " << mask[i] << '\n';
+    }
 }
 
 void DepthEstimatorCL::run_speed_test_img_3_blur(Frame& frame){
@@ -916,47 +934,31 @@ void DepthEstimatorCL::gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2
     // Create buffer for mask and transfer it to the device
     cl::Buffer gaus_mask_cl = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*gaus_mask.size(), gaus_mask.data());
 
-    //create aux img for storing values after blurx
-    // cl::Image2DSafe cl_img_aux = cl_img_like(src_img);
-
-    //attempt 2
+    //attempt 3
+    TIME_START_CL("make_alloc_host");
     int size_bytes=src_img.get_size_bytes();
-    cl::ImageFormat cl_img_format(CL_R,CL_UNORM_INT8);
-    cl::Image2DSafe cl_img_aux(m_context, cl_img_format, CL_MEM_READ_WRITE, src_img.get_width(), src_img.get_height(), size_bytes);
+    cl::Buffer cl_buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, size_bytes);
+    cl::Image2D cl_img_aux(m_context, src_img.get_format(), cl_buffer, src_img.get_width(), src_img.get_height());
+    TIME_END_CL("make_alloc_host");
 
-    // //blurx
-    // m_kernel_blurx.setArg(0, src_img.get_img());
-    // m_kernel_blurx.setArg(1, gaus_mask_cl);
-    // m_kernel_blurx.setArg(2, (int)gaus_mask.size());
-    // m_kernel_blurx.setArg(3, cl_img_aux.get_img());
-    // m_queue.enqueueNDRangeKernel(m_kernel_blurx, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
-    //
-    // //blury
-    // m_kernel_blury.setArg(0, cl_img_aux.get_img());
-    // m_kernel_blury.setArg(1, gaus_mask_cl);
-    // m_kernel_blury.setArg(2, (int)gaus_mask.size());
-    // m_kernel_blury.setArg(3, dest_img.get_img());
-    // m_queue.enqueueNDRangeKernel(m_kernel_blury, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
+    //blurx
+    m_kernel_blurx.setArg(0, src_img.get_img());
+    m_kernel_blurx.setArg(1, gaus_mask_cl);
+    m_kernel_blurx.setArg(2, (int)gaus_mask.size());
+    m_kernel_blurx.setArg(3, cl_img_aux);
+    m_queue.enqueueNDRangeKernel(m_kernel_blurx, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
+
+    //blury
+    m_kernel_blury.setArg(0, cl_img_aux);
+    m_kernel_blury.setArg(1, gaus_mask_cl);
+    m_kernel_blury.setArg(2, (int)gaus_mask.size());
+    m_kernel_blury.setArg(3, dest_img.get_img());
+    m_queue.enqueueNDRangeKernel(m_kernel_blury, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
 
 
-
-    // //only blurx
-    // //blurx
-    // std::cout << "1111" << '\n';
-    // m_kernel_blurx.setArg(0, src_img.get_img());
-    // std::cout << "22222" << '\n';
-    // m_kernel_blurx.setArg(1, gaus_mask_cl);
-    // std::cout << "33333" << '\n';
-    // m_kernel_blurx.setArg(2, (int)gaus_mask.size());
-    // std::cout << "444444" << '\n';
-    // m_kernel_blurx.setArg(3, dest_img.get_img());
-    // m_queue.enqueueNDRangeKernel(m_kernel_blurx, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
 
 
     // attempt 3
-
-
-
 
 }
 
@@ -974,36 +976,7 @@ void DepthEstimatorCL::compute_depth(Frame& frame){
 
 
     TIME_START_CL("gaussian_blur");
-    // gaussian_blur(cl_img,cl_img,13);
-
-    std::vector<float> gaus_mask;
-    create_blur_mask(gaus_mask,15);
-    std::cout << "gaus mask has size" << gaus_mask.size() << '\n';
-    // Create buffer for mask and transfer it to the device
-    cl::Buffer gaus_mask_cl = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*gaus_mask.size(), gaus_mask.data());
-
-    //create aux img for storing values after blurx
-    cl::Image2DSafe cl_img_aux = cl_img_like(cl_img);
-
-    // //attempt 2
-    // int size_bytes=cl_img.get_size_bytes();
-    // cl::Image2DSafe cl_img_aux(m_context, cl_img_format, CL_MEM_READ_WRITE, cl_img.get_width(), cl_img.get_height(), size_bytes);
-
-    //works!!!
-    //blurx
-    m_kernel_blurx.setArg(0, cl_img.get_img());
-    m_kernel_blurx.setArg(1, gaus_mask_cl);
-    m_kernel_blurx.setArg(2, (int)gaus_mask.size());
-    m_kernel_blurx.setArg(3, cl_img_aux.get_img());
-    m_queue.enqueueNDRangeKernel(m_kernel_blurx, cl::NullRange, cl::NDRange(cl_img.get_width(), cl_img.get_height()), cl::NullRange);
-
-    //blury
-    m_kernel_blury.setArg(0, cl_img_aux.get_img());
-    m_kernel_blury.setArg(1, gaus_mask_cl);
-    m_kernel_blury.setArg(2, (int)gaus_mask.size());
-    m_kernel_blury.setArg(3, cl_img.get_img());
-    m_queue.enqueueNDRangeKernel(m_kernel_blury, cl::NullRange, cl::NDRange(cl_img.get_width(), cl_img.get_height()), cl::NullRange);
-
+    gaussian_blur(cl_img,cl_img,13);
     TIME_END_CL("gaussian_blur");
 
 
