@@ -453,13 +453,17 @@ void DepthEstimatorCL::create_blur_mask(std::vector<float>& mask, const int sigm
     for(int i = 0; i < mask_size; i++){
         mask[i] = mask[i] / sum;
     }
+
+    // for (size_t i = 0; i < mask_size; i++) {
+    //     std::cout << "mask is " << mask[i] << '\n';
+    // }
 }
 
 void DepthEstimatorCL::create_half_blur_mask(std::vector<float>& mask, const int sigma){
-    int mask_size = (int)ceil(3.0f*sigma)/2;
+    int mask_size = (int)ceil(3.0f*sigma)/2 +1;
     mask.resize(mask_size);
     float sum=0.0;
-    for (int i = 0; i < mask_size+1; i++) {
+    for (int i = 0; i < mask_size; i++) {
         float temp = exp(-((float)(i*i) / (2*sigma*sigma)));
         sum += temp;
         if(i!=0) sum+=temp; //(the sum is not complete yet because the mask is only half) so we add another time to make up for the other side of the gaussian
@@ -469,6 +473,11 @@ void DepthEstimatorCL::create_half_blur_mask(std::vector<float>& mask, const int
     for(int i = 0; i < mask_size; i++){
         mask[i] = mask[i] / sum;
     }
+
+    // for (size_t i = 0; i < mask_size; i++) {
+    //     std::cout << "mask is " << mask[i] << '\n';
+    // }
+
 
 }
 

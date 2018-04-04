@@ -215,6 +215,38 @@ kernel void blurx_fast( read_only image2d_t input, constant float * mask, privat
 
     write_imagef(output, (int2)(x, y), (float4)(acum,0,0,1));
 
+    // //attempt 2 with local mem
+    // __local float local_mem[2048];
+    // //read into local mem
+    // int x_local=get_local_id(0);
+    // int y_local=get_local_id(1);
+    // int idx_local = (y_local * 32) + x_local; // Indexes
+    // float4 p_local = read_imagef(input, sampler, (int2)(x, y));
+    // local_mem[idx_local]=p_local.x;
+    // barrier(CLK_LOCAL_MEM_FENCE);
+
+    // // //attempt 2 with local mem
+    // __local float local_mem[2048];
+    // //read into local mem
+    // int x_local=get_local_id(0);
+    // int y_local=get_local_id(1);
+    // int idx_local = (y_local * 32) + x_local; // Indexes
+    // float4 p_local = read_imagef(input, sampler, (int2)(x, y));
+    // local_mem[idx_local]=p_local.x;
+    // barrier(CLK_LOCAL_MEM_FENCE);
+    //
+    // float acum=0.0;
+    // acum=(read_imagef(input, sampler, (int2)(x, y))).x * mask[0];
+    // for (int i=1; i<mask_size; i++) {
+    //     int l = (y_local * 32) + x_local + offsets[i]; // Indexes
+    //     float p = local_mem[l];
+    //
+    //     acum += p * mask[i];
+    //     acum += p * mask[i];
+    // }
+    //
+    // write_imagef(output, (int2)(x, y), (float4)(acum,0,0,1));
+
 }
 
 
