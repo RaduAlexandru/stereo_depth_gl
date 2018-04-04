@@ -113,7 +113,8 @@ void Core::update() {
                 // m_depth_estimator->run_speed_test_img_4_sobel(frame);
                 // m_depth_estimator->run_speed_test_img_4_sobel_gray(frame);
                 // m_depth_estimator->run_speed_test_img_4_blur_gray(frame);
-                m_depth_estimator->run_speed_test_img_4_blur_gray_safe(frame);
+                // m_depth_estimator->run_speed_test_img_4_blur_gray_safe(frame);
+                m_depth_estimator->compute_depth(frame);
                 display_frame(frame);
 
 
@@ -185,7 +186,7 @@ void Core::init_params() {
 
 
 void Core::display_frame(const Frame& frame){
-    int max_size=300;
+    int max_size=400;
 
     //resize to a reasonable size
     cv::Mat rgb_vis, classes_vis, probs_vis;

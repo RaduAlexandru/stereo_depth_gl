@@ -13,6 +13,7 @@
 #include "CL/cl2.hpp"
 #include <CL/cl.h>
 // #include "CL/cl.hpp"
+#include "Image2DSafe.h"
 
 //My stuff
 #include "stereo_depth_cl/Mesh.h"
@@ -41,9 +42,9 @@ public:
     void run_speed_test_img_4_blur_gray_safe(Frame& frame);
 
     void create_blur_mask(std::vector<float>& mask, const int sigma); //create a 1d mask for gaussian blurring (doesn't matter if it's used in x or y)
-    void gaussian_blur(cl::Image2D& dest_img, const cl::Image2D& src_img, const int sigma);
+    void gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2DSafe& src_img, const int sigma);
 
-    void compute_depth(const Frame& frame);
+    void compute_depth(Frame& frame);
 
 
     // Scene get_scene();
@@ -63,6 +64,8 @@ public:
     cl::Kernel m_kernel_simple_copy;
     cl::Kernel m_kernel_blur;
     cl::Kernel m_kernel_sobel;
+    cl::Kernel m_kernel_blurx;
+    cl::Kernel m_kernel_blury;
 
 
     //databasse

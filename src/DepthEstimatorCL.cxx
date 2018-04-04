@@ -112,6 +112,8 @@ void DepthEstimatorCL::compile_kernels(){
 	m_kernel_simple_copy=cl::Kernel (program, "simple_copy");
     m_kernel_blur=cl::Kernel (program, "gaussian_blur");
     m_kernel_sobel=cl::Kernel (program, "sobel");
+    m_kernel_blurx=cl::Kernel (program, "blurx");
+    m_kernel_blury=cl::Kernel (program, "blury");
 }
 
 void DepthEstimatorCL::run_speed_test(){
@@ -906,55 +908,165 @@ void DepthEstimatorCL::run_speed_test_img_4_blur_gray_safe(Frame& frame){
 
 }
 
-void DepthEstimatorCL::gaussian_blur(cl::Image2D& dest_img, const cl::Image2D& src_img, const int sigma){
+//dest_img and src_img can be the same reference but both need to have allocated buffers
+void DepthEstimatorCL::gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2DSafe& src_img, const int sigma){
 
-    //get the size in bytes
-    int width = src_img.getImageInfo<CL_IMAGE_WIDTH>();
-    int height = src_img.getImageInfo<CL_IMAGE_HEIGHT>();
-    int pitch =src_img.getImageInfo<CL_IMAGE_ROW_PITCH>(); //Return size in bytes of a row in the img
-    int size_bytes=height*pitch;
+    std::vector<float> gaus_mask;
+    create_blur_mask(gaus_mask,sigma);
+    // Create buffer for mask and transfer it to the device
+    cl::Buffer gaus_mask_cl = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*gaus_mask.size(), gaus_mask.data());
 
-    cl_image_format format =src_img.getImageInfo<CL_IMAGE_FORMAT>();
-    cl::ImageFormat cl_img_format{format.image_channel_order, format.image_channel_data_type};
+    //create aux img for storing values after blurx
+    // cl::Image2DSafe cl_img_aux = cl_img_like(src_img);
 
-    //create an auxiliary buffer to store the values after blurx
-    uchar* aux_buf = (uchar *)aligned_alloc(4096, sizeof(uchar) * size_bytes);
-    cl::Buffer cl_buffer_aux(m_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, size_bytes, aux_buf);
-    cl::Image2D cl_img_aux(m_context, cl_img_format, cl_buffer_aux, width, height);
+    //attempt 2
+    int size_bytes=src_img.get_size_bytes();
+    cl::ImageFormat cl_img_format(CL_R,CL_UNORM_INT8);
+    cl::Image2DSafe cl_img_aux(m_context, cl_img_format, CL_MEM_READ_WRITE, src_img.get_width(), src_img.get_height(), size_bytes);
 
-    //allocate dest img only id the reference is not the same as the src
+    // //blurx
+    // m_kernel_blurx.setArg(0, src_img.get_img());
+    // m_kernel_blurx.setArg(1, gaus_mask_cl);
+    // m_kernel_blurx.setArg(2, (int)gaus_mask.size());
+    // m_kernel_blurx.setArg(3, cl_img_aux.get_img());
+    // m_queue.enqueueNDRangeKernel(m_kernel_blurx, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
+    //
+    // //blury
+    // m_kernel_blury.setArg(0, cl_img_aux.get_img());
+    // m_kernel_blury.setArg(1, gaus_mask_cl);
+    // m_kernel_blury.setArg(2, (int)gaus_mask.size());
+    // m_kernel_blury.setArg(3, dest_img.get_img());
+    // m_queue.enqueueNDRangeKernel(m_kernel_blury, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
 
 
-    free(aux_buf);
+
+    // //only blurx
+    // //blurx
+    // std::cout << "1111" << '\n';
+    // m_kernel_blurx.setArg(0, src_img.get_img());
+    // std::cout << "22222" << '\n';
+    // m_kernel_blurx.setArg(1, gaus_mask_cl);
+    // std::cout << "33333" << '\n';
+    // m_kernel_blurx.setArg(2, (int)gaus_mask.size());
+    // std::cout << "444444" << '\n';
+    // m_kernel_blurx.setArg(3, dest_img.get_img());
+    // m_queue.enqueueNDRangeKernel(m_kernel_blurx, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
+
+
+    // attempt 3
+
+
+
+
 }
 
-void DepthEstimatorCL::compute_depth(const Frame& frame){
-    //are we going to use the same windows approach as in dso which add frames and then margianzlies them afterwards? because that is tricky to do in opencl and would require some vector on the gpu which keeps track where the image are in a 3D image and then do like a rolling buffer
+void DepthEstimatorCL::compute_depth(Frame& frame){
 
-    //get frame to gray
-    //get frame to float
-    //apply blur to img (as done at the finale of Undistort::undistort)
+    cv::Mat img_gray;
+    cv::cvtColor(frame.rgb, img_gray, CV_BGR2GRAY);
+    int width=img_gray.cols;
+    int height=img_gray.rows;
 
-    //cv_mat2cl_buf(img_gray)
+    TIME_START_CL("create_cl_img");
+    cl::ImageFormat cl_img_format(CL_R,CL_UNORM_INT8);
+    cl::Image2DSafe cl_img=cv_mat2cl_img(img_gray, cl_img_format, CL_MEM_READ_WRITE, m_context);
+    TIME_END_CL("create_cl_img");
+
+
+    TIME_START_CL("gaussian_blur");
+    // gaussian_blur(cl_img,cl_img,13);
+
+    std::vector<float> gaus_mask;
+    create_blur_mask(gaus_mask,15);
+    std::cout << "gaus mask has size" << gaus_mask.size() << '\n';
+    // Create buffer for mask and transfer it to the device
+    cl::Buffer gaus_mask_cl = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*gaus_mask.size(), gaus_mask.data());
+
+    //create aux img for storing values after blurx
+    cl::Image2DSafe cl_img_aux = cl_img_like(cl_img);
+
+    // //attempt 2
+    // int size_bytes=cl_img.get_size_bytes();
+    // cl::Image2DSafe cl_img_aux(m_context, cl_img_format, CL_MEM_READ_WRITE, cl_img.get_width(), cl_img.get_height(), size_bytes);
+
+    //works!!!
+    //blurx
+    m_kernel_blurx.setArg(0, cl_img.get_img());
+    m_kernel_blurx.setArg(1, gaus_mask_cl);
+    m_kernel_blurx.setArg(2, (int)gaus_mask.size());
+    m_kernel_blurx.setArg(3, cl_img_aux.get_img());
+    m_queue.enqueueNDRangeKernel(m_kernel_blurx, cl::NullRange, cl::NDRange(cl_img.get_width(), cl_img.get_height()), cl::NullRange);
+
+    //blury
+    m_kernel_blury.setArg(0, cl_img_aux.get_img());
+    m_kernel_blury.setArg(1, gaus_mask_cl);
+    m_kernel_blury.setArg(2, (int)gaus_mask.size());
+    m_kernel_blury.setArg(3, cl_img.get_img());
+    m_queue.enqueueNDRangeKernel(m_kernel_blury, cl::NullRange, cl::NDRange(cl_img.get_width(), cl_img.get_height()), cl::NullRange);
+
+    TIME_END_CL("gaussian_blur");
 
 
 
+    //read the results back attempt 2
+    auto origin = cl::array<cl::size_type, 3U>{0, 0, 0};
+    auto region = cl::array<cl::size_type, 3U>{width, height, 1};
+    cl::size_type row_pitch, slice_pitch;
+    std::uint8_t* destination = (std::uint8_t*)m_queue.enqueueMapImage(cl_img.get_img(), CL_TRUE,CL_MAP_READ, origin, region, &row_pitch, &slice_pitch);
+    std::cout << "row_pitch is " << row_pitch << '\n';
+
+    //put into a mat so as to view it
+    TIME_START_CL("put_int_mat");
+    std::cout << "11111" << '\n';
+    std::cout << "height and width is " << height << " " << width << '\n';
+    cv::Mat wrapped(height, width, CV_8UC1, destination, row_pitch); //row pitch is the step of a opencv mat
+    std::cout << "222222" << '\n';
+    frame.rgb=wrapped.clone();
+    std::cout << "done cloning" << '\n';
+    TIME_END_CL("put_int_mat");
 
 
-    // full_system:makeNewTraces //computes new imature points and adds them to the current frame
-    //     pixelSelector->make_maps()
-    //     for (size_t i = 0; i < count; i++) {
-    //         for (size_t i = 0; i < count; i++) {
-    //             if(selectionMap==)continue
-    //             create_imature_point which contains
-    //                 weights for each point in the patter (default 8)
-    //                 gradH value
-    //                 energuTH
-    //                 idepthGT
-    //                 quality
-    //         }
-    //     }
+
+    //cleanup
+    std::cout << "33333" << '\n';
+    m_queue.enqueueUnmapMemObject(cl_img.get_img(),destination);
+
+
+
+    // TIME_START("opencv_gaus");
+    // cv::GaussianBlur( img_gray, frame.rgb, cv::Size( 45, 45 ), 0, 0);
+    //
+    // TIME_END("opencv_gaus")
+
 
 
 
 }
+
+
+
+//are we going to use the same windows approach as in dso which add frames and then margianzlies them afterwards? because that is tricky to do in opencl and would require some vector on the gpu which keeps track where the image are in a 3D image and then do like a rolling buffer
+
+//get frame to gray
+//get frame to float
+//apply blur to img (as done at the finale of Undistort::undistort)
+
+//cv_mat2cl_buf(img_gray)
+
+
+
+
+
+// full_system:makeNewTraces //computes new imature points and adds them to the current frame
+//     pixelSelector->make_maps()
+//     for (size_t i = 0; i < count; i++) {
+//         for (size_t i = 0; i < count; i++) {
+//             if(selectionMap==)continue
+//             create_imature_point which contains
+//                 weights for each point in the patter (default 8)
+//                 gradH value
+//                 energuTH
+//                 idepthGT
+//                 quality
+//         }
+//     }

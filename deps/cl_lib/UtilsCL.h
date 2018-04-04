@@ -21,6 +21,7 @@
 
 namespace cl{
 
+//from a cv_mat creates a cl_img which buffer is allocated in host and is memory aligned
 inline cl::Image2DSafe cv_mat2cl_img(const cv::Mat& cv_mat, const cl::ImageFormat& format, const cl_mem_flags& flags, const Context& context){
     int size_bytes=cv_mat.step[0] * cv_mat.rows;
     round_up_to_nearest_multiple(size_bytes,64); //allocate memory that is multiple of 64 bytes
@@ -42,6 +43,20 @@ inline cl::Image2DSafe cv_mat2cl_img(const cv::Mat& cv_mat, const cl::ImageForma
     }else{
         LOG(FATAL) << "RGB image not continuous, which means the pixel iteration must be done in differnt way: look at https://docs.opencv.org/2.4/doc/tutorials/core/how_to_scan_images/how_to_scan_images.html#howtoscanimagesopencv";
     }
+    return cl_img;
+}
+
+//creates a cl_img with the same format, size and flags as the source one but with empty buffer
+inline cl::Image2DSafe cl_img_like(const cl::Image2DSafe& src_cl_img){
+    cl::Image2DSafe cl_img( src_cl_img.get_context(), src_cl_img.get_format(), src_cl_img.get_flags(),
+                            src_cl_img.get_width(), src_cl_img.get_height(), src_cl_img.get_size_bytes());
+    return cl_img;
+}
+
+//same but user specified format
+inline cl::Image2DSafe cl_img_like(const cl::Image2DSafe& src_cl_img, const cl::ImageFormat& format){
+    cl::Image2DSafe cl_img( src_cl_img.get_context(), format, src_cl_img.get_flags(),
+                            src_cl_img.get_width(), src_cl_img.get_height(), src_cl_img.get_size_bytes());
     return cl_img;
 }
 
