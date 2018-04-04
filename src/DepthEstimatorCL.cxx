@@ -114,6 +114,9 @@ void DepthEstimatorCL::compile_kernels(){
     m_kernel_sobel=cl::Kernel (program, "sobel");
     m_kernel_blurx=cl::Kernel (program, "blurx");
     m_kernel_blury=cl::Kernel (program, "blury");
+
+    m_kernel_blurx_fast=cl::Kernel (program, "blurx_fast");
+    m_kernel_blury_fast=cl::Kernel (program, "blury_fast");
 }
 
 void DepthEstimatorCL::run_speed_test(){
@@ -459,6 +462,7 @@ void DepthEstimatorCL::create_half_blur_mask(std::vector<float>& mask, const int
     for (int i = 0; i < mask_size+1; i++) {
         float temp = exp(-((float)(i*i) / (2*sigma*sigma)));
         sum += temp;
+        if(i!=0) sum+=temp; //(the sum is not complete yet because the mask is only half) so we add another time to make up for the other side of the gaussian
         mask[i]=temp;
     }
     // Normalize the mask
@@ -466,10 +470,34 @@ void DepthEstimatorCL::create_half_blur_mask(std::vector<float>& mask, const int
         mask[i] = mask[i] / sum;
     }
 
-    for (size_t i = 0; i < mask_size; i++) {
-        std::cout << "mask is " << mask[i] << '\n';
-    }
 }
+
+void DepthEstimatorCL::optimize_blur_for_gpu_sampling(std::vector<float>&gaus_mask, std::vector<float>& gaus_offsets){
+    gaus_offsets.resize(gaus_mask.size());
+    for (size_t i = 0; i < gaus_mask.size(); i++) {
+        gaus_offsets[i]=i;
+    }
+
+    std::vector<float> gaus_mask_optimized(1+gaus_mask.size()/2); //1 because the middle points stays the same, for the rest we need N/2 less texture fetches
+    std::vector<float> gaus_offsets_optimized(1+gaus_mask.size()/2);
+
+    //optimize them // http://roxlu.com/2014/045/fast-opengl-blur-shader and // http://rastergrid.com/blog/2010/09/efficient-gaussian-blur-with-linear-sampling/
+    gaus_mask_optimized[0]=gaus_mask[0];
+    gaus_offsets_optimized[0]=0.0;
+    int idx_original_gaus=1;
+    for (size_t i = 1; i < gaus_mask_optimized.size(); i++) {  //go from 2 by 2 because a texture fetch actually gets us 2 pixels
+        gaus_mask_optimized[i] = gaus_mask[idx_original_gaus]+gaus_mask[idx_original_gaus+1];
+        gaus_offsets_optimized[i] = (gaus_mask[idx_original_gaus]*gaus_offsets[idx_original_gaus] +
+                                     gaus_mask[idx_original_gaus+1]*gaus_offsets[idx_original_gaus+1] ) / gaus_mask_optimized[i];
+        idx_original_gaus+=2;
+    }
+
+    gaus_mask=gaus_mask_optimized;
+    gaus_offsets=gaus_offsets_optimized;
+
+}
+
+
 
 void DepthEstimatorCL::run_speed_test_img_3_blur(Frame& frame){
 
@@ -929,10 +957,76 @@ void DepthEstimatorCL::run_speed_test_img_4_blur_gray_safe(Frame& frame){
 //dest_img and src_img can be the same reference but both need to have allocated buffers
 void DepthEstimatorCL::gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2DSafe& src_img, const int sigma){
 
+
+    // //works
+    // std::vector<float> gaus_mask;
+    // create_blur_mask(gaus_mask,sigma);
+    // // Create buffer for mask and transfer it to the device
+    // cl::Buffer gaus_mask_cl = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*gaus_mask.size(), gaus_mask.data());
+    //
+    // //attempt 3
+    // TIME_START_CL("make_alloc_host");
+    // int size_bytes=src_img.get_size_bytes();
+    // cl::Buffer cl_buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, size_bytes);
+    // cl::Image2D cl_img_aux(m_context, src_img.get_format(), cl_buffer, src_img.get_width(), src_img.get_height());
+    // TIME_END_CL("make_alloc_host");
+    //
+    // //blurx
+    // m_kernel_blurx.setArg(0, src_img.get_img());
+    // m_kernel_blurx.setArg(1, gaus_mask_cl);
+    // m_kernel_blurx.setArg(2, (int)gaus_mask.size());
+    // m_kernel_blurx.setArg(3, cl_img_aux);
+    // m_queue.enqueueNDRangeKernel(m_kernel_blurx, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
+    //
+    // //blury
+    // m_kernel_blury.setArg(0, cl_img_aux);
+    // m_kernel_blury.setArg(1, gaus_mask_cl);
+    // m_kernel_blury.setArg(2, (int)gaus_mask.size());
+    // m_kernel_blury.setArg(3, dest_img.get_img());
+    // m_queue.enqueueNDRangeKernel(m_kernel_blury, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
+
+
+
+
+    // // attempt 2
+    // std::vector<float> gaus_mask;
+    // std::vector<float> gaus_offsets;
+    // create_half_blur_mask(gaus_mask,sigma);
+    // optimize_blur_for_gpu_sampling(gaus_mask,gaus_offsets); //offset in order to have the sampler perfor bilinear interpolation in shader
+    // cl::Buffer gaus_mask_cl = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*gaus_mask.size(), gaus_mask.data());
+    // cl::Buffer gaus_offsets_cl = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*gaus_offsets.size(), gaus_offsets.data());
+    //
+    // //attempt 3
+    // TIME_START_CL("make_alloc_host");
+    // int size_bytes=src_img.get_size_bytes();
+    // cl::Buffer cl_buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, size_bytes);
+    // cl::Image2D cl_img_aux(m_context, src_img.get_format(), cl_buffer, src_img.get_width(), src_img.get_height());
+    // TIME_END_CL("make_alloc_host");
+    //
+    // //blurx
+    // m_kernel_blurx_fast.setArg(0, src_img.get_img());
+    // m_kernel_blurx_fast.setArg(1, gaus_mask_cl);
+    // m_kernel_blurx_fast.setArg(2, (int)gaus_mask.size());
+    // m_kernel_blurx_fast.setArg(3, cl_img_aux);
+    // m_queue.enqueueNDRangeKernel(m_kernel_blurx_fast, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
+    //
+    // //blury
+    // m_kernel_blury_fast.setArg(0, cl_img_aux);
+    // m_kernel_blury_fast.setArg(1, gaus_mask_cl);
+    // m_kernel_blury_fast.setArg(2, (int)gaus_mask.size());
+    // m_kernel_blury_fast.setArg(3, dest_img.get_img());
+    // m_queue.enqueueNDRangeKernel(m_kernel_blury_fast, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
+
+
+
+
+    //attempt 3 wtf is happening with attemp 2
     std::vector<float> gaus_mask;
-    create_blur_mask(gaus_mask,sigma);
-    // Create buffer for mask and transfer it to the device
+    std::vector<float> gaus_offsets;
+    create_half_blur_mask(gaus_mask,sigma);
+    optimize_blur_for_gpu_sampling(gaus_mask,gaus_offsets); //offset in order to have the sampler perfor bilinear interpolation in shader
     cl::Buffer gaus_mask_cl = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*gaus_mask.size(), gaus_mask.data());
+    cl::Buffer gaus_offsets_cl = cl::Buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*gaus_offsets.size(), gaus_offsets.data());
 
     //attempt 3
     TIME_START_CL("make_alloc_host");
@@ -942,23 +1036,20 @@ void DepthEstimatorCL::gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2
     TIME_END_CL("make_alloc_host");
 
     //blurx
-    m_kernel_blurx.setArg(0, src_img.get_img());
-    m_kernel_blurx.setArg(1, gaus_mask_cl);
-    m_kernel_blurx.setArg(2, (int)gaus_mask.size());
-    m_kernel_blurx.setArg(3, cl_img_aux);
-    m_queue.enqueueNDRangeKernel(m_kernel_blurx, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
+    m_kernel_blurx_fast.setArg(0, src_img.get_img());
+    m_kernel_blurx_fast.setArg(1, gaus_mask_cl);
+    m_kernel_blurx_fast.setArg(2, (int)gaus_mask.size());
+    m_kernel_blurx_fast.setArg(3, gaus_offsets_cl);
+    m_kernel_blurx_fast.setArg(4, cl_img_aux);
+    m_queue.enqueueNDRangeKernel(m_kernel_blurx_fast, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
 
     //blury
-    m_kernel_blury.setArg(0, cl_img_aux);
-    m_kernel_blury.setArg(1, gaus_mask_cl);
-    m_kernel_blury.setArg(2, (int)gaus_mask.size());
-    m_kernel_blury.setArg(3, dest_img.get_img());
-    m_queue.enqueueNDRangeKernel(m_kernel_blury, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
-
-
-
-
-    // attempt 3
+    m_kernel_blury_fast.setArg(0, cl_img_aux);
+    m_kernel_blury_fast.setArg(1, gaus_mask_cl);
+    m_kernel_blury_fast.setArg(2, (int)gaus_mask.size());
+    m_kernel_blury_fast.setArg(3, gaus_offsets_cl);
+    m_kernel_blury_fast.setArg(4, dest_img.get_img());
+    m_queue.enqueueNDRangeKernel(m_kernel_blury_fast, cl::NullRange, cl::NDRange(src_img.get_width(), src_img.get_height()), cl::NullRange);
 
 }
 
@@ -976,7 +1067,7 @@ void DepthEstimatorCL::compute_depth(Frame& frame){
 
 
     TIME_START_CL("gaussian_blur");
-    gaussian_blur(cl_img,cl_img,13);
+    gaussian_blur(cl_img,cl_img,5); //sigma 15 at around 60 ms
     TIME_END_CL("gaussian_blur");
 
 

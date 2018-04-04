@@ -43,6 +43,7 @@ public:
 
     void create_blur_mask(std::vector<float>& mask, const int sigma); //create a 1d mask for gaussian blurring (doesn't matter if it's used in x or y)
     void create_half_blur_mask(std::vector<float>& mask, const int sigma); //creates only half of gaussian because it's symetric
+    void optimize_blur_for_gpu_sampling(std::vector<float>&gaus_mask, std::vector<float>& gaus_offsets);
     void gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2DSafe& src_img, const int sigma);
 
     void compute_depth(Frame& frame);
@@ -67,6 +68,8 @@ public:
     cl::Kernel m_kernel_sobel;
     cl::Kernel m_kernel_blurx;
     cl::Kernel m_kernel_blury;
+    cl::Kernel m_kernel_blurx_fast;
+    cl::Kernel m_kernel_blury_fast;
 
 
     //databasse

@@ -200,3 +200,35 @@ kernel void blury( read_only image2d_t input, constant float * mask, private int
     write_imagef(output, (int2)(x, y), (float4)(acum,0,0,1));
 
 }
+
+
+kernel void blurx_fast( read_only image2d_t input, constant float * mask, private int mask_size, constant float * offsets, write_only image2d_t output){
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+
+    float acum=0.0;
+    acum=(read_imagef(input, sampler, (int2)(x, y))).x * mask[0];
+    for (int i=1; i<mask_size; i++) {
+        acum += (read_imagef(input, sampler_linear, (int2)(x, y) + (int2)(offsets[i], 0) )).x * mask[i];
+        acum += (read_imagef(input, sampler_linear, (int2)(x, y) - (int2)(offsets[i], 0) )).x * mask[i];
+    }
+
+    write_imagef(output, (int2)(x, y), (float4)(acum,0,0,1));
+
+}
+
+
+kernel void blury_fast( read_only image2d_t input, constant float * mask, private int mask_size, constant float * offsets, write_only image2d_t output){
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+
+    float acum=0.0;
+    acum=(read_imagef(input, sampler, (int2)(x, y))).x * mask[0];
+    for (int i=1; i<mask_size; i++) {
+        acum += (read_imagef(input, sampler_linear, (int2)(x, y) + (int2)(0, offsets[i]) )).x * mask[i];
+        acum += (read_imagef(input, sampler_linear, (int2)(x, y) - (int2)(0, offsets[i]) )).x * mask[i];
+    }
+
+    write_imagef(output, (int2)(x, y), (float4)(acum,0,0,1));
+
+}
