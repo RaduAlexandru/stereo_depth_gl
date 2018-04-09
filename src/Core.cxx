@@ -9,6 +9,7 @@
 #include "stereo_depth_cl/Profiler.h"
 #include "stereo_depth_cl/RosBagPlayer.h"
 #include "stereo_depth_cl/DepthEstimatorCL.h"
+#include "stereo_depth_cl/DepthEstimatorRenegade.h"
 #include "stereo_depth_cl/DataLoader.h"
 #include "stereo_depth_cl/SurfelSplatter.h"
 
@@ -37,6 +38,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
         m_viewer_initialized(false),
         m_player(new RosBagPlayer),
         m_depth_estimator(new DepthEstimatorCL),
+        m_depth_estimator_renegade(new DepthEstimatorRenegade),
         m_loader(new DataLoader),
         m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
@@ -47,6 +49,8 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
     m_profiler=profiler;
     m_depth_estimator->m_profiler=profiler;
     m_depth_estimator->m_view=m_view;
+    m_depth_estimator_renegade->m_profiler=profiler;
+    m_depth_estimator_renegade->m_view=m_view;
     m_splatter->m_view=m_view;
     m_loader->m_profiler=profiler;
     m_loader->m_player=m_player;
@@ -109,13 +113,19 @@ void Core::update() {
                 // m_scene.get_mesh_with_name("debug_mesh").m_visualization_should_change=true;
 
 
+                //cl depth
+                // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
+                // m_depth_estimator->compute_depth(frame);
+                // display_frame(frame);
+
+
+
+                //renegade depth
                 Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-                // m_depth_estimator->run_speed_test_img_4_sobel(frame);
-                // m_depth_estimator->run_speed_test_img_4_sobel_gray(frame);
-                // m_depth_estimator->run_speed_test_img_4_blur_gray(frame);
-                // m_depth_estimator->run_speed_test_img_4_blur_gray_safe(frame);
-                m_depth_estimator->compute_depth(frame);
+                Mesh depth_mesh=m_depth_estimator_renegade->compute_depth(frame);
+                m_scene.add_mesh(depth_mesh, "depth_mesh");
                 display_frame(frame);
+
 
 
                 nr_cams_processed++;

@@ -31,6 +31,7 @@ namespace cl{
         }
 
         ~Image2DSafe(){
+            std::cout << "freeing" << '\n';
             free(m_host_buf);
         }
 

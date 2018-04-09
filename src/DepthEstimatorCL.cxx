@@ -25,6 +25,7 @@
 #include <omp.h>
 
 
+
 // Compute c = a + b.
 static const char source[] =
     "kernel void add(\n"
@@ -65,10 +66,22 @@ void DepthEstimatorCL::init_opencl(){
 	    return;
 	}
 
-	// Get first available GPU device
+	// Get the first Intel GPU device
     std::vector<cl::Device> devices_available;
     platform[0].getDevices(CL_DEVICE_TYPE_GPU, &devices_available);
-    m_device=devices_available[0];
+    std::cout << "found nr of devices " << devices_available.size() << '\n';
+    bool found_intel_device=false;
+    for (size_t i = 0; i < devices_available.size(); i++) {
+        std::string name=devices_available[i].getInfo<CL_DEVICE_NAME>();
+        // std::cout << "name of device is " << name << '\n';
+        if(name.find("Intel")!=std::string::npos){
+            m_device=devices_available[i];
+            found_intel_device=true;
+        }
+    }
+    if(!found_intel_device){
+        LOG_F(FATAL, "No Intel device found");
+    }
 
     std::cout << m_device.getInfo<CL_DEVICE_NAME>() << std::endl;
 
@@ -420,12 +433,12 @@ void DepthEstimatorCL::run_speed_test_img2(Frame& frame){
 }
 
 float * createBlurMask(float sigma, int * maskSizePointer) {
-    int maskSize = (int)ceil(3.0f*sigma);
+    int maskSize = (int)std::ceil(3.0f*sigma);
     float * mask = new float[(maskSize*2+1)*(maskSize*2+1)];
     float sum = 0.0f;
     for(int a = -maskSize; a < maskSize+1; a++) {
         for(int b = -maskSize; b < maskSize+1; b++) {
-            float temp = exp(-((float)(a*a+b*b) / (2*sigma*sigma)));
+            float temp = std::exp(-((float)(a*a+b*b) / (2*sigma*sigma)));
             sum += temp;
             mask[a+maskSize+(b+maskSize)*(maskSize*2+1)] = temp;
         }
@@ -440,12 +453,12 @@ float * createBlurMask(float sigma, int * maskSizePointer) {
 }
 
 void DepthEstimatorCL::create_blur_mask(std::vector<float>& mask, const int sigma){
-    int mask_size = (int)ceil(3.0f*sigma);
+    int mask_size = (int)std::ceil(3.0f*sigma);
     mask.resize(mask_size);
     float sum=0.0;
     int half_way = mask_size/2;
     for (int i = -half_way; i < half_way+1; i++) {
-        float temp = exp(-((float)(i*i) / (2*sigma*sigma)));
+        float temp = std::exp(-((float)(i*i) / (2*sigma*sigma)));
         sum += temp;
         mask[i+half_way]=temp;
     }
@@ -460,11 +473,11 @@ void DepthEstimatorCL::create_blur_mask(std::vector<float>& mask, const int sigm
 }
 
 void DepthEstimatorCL::create_half_blur_mask(std::vector<float>& mask, const int sigma){
-    int mask_size = (int)ceil(3.0f*sigma)/2 +1;
+    int mask_size = (int)std::ceil(3.0f*sigma)/2 +1;
     mask.resize(mask_size);
     float sum=0.0;
     for (int i = 0; i < mask_size; i++) {
-        float temp = exp(-((float)(i*i) / (2*sigma*sigma)));
+        float temp = std::exp(-((float)(i*i) / (2*sigma*sigma)));
         sum += temp;
         if(i!=0) sum+=temp; //(the sum is not complete yet because the mask is only half) so we add another time to make up for the other side of the gaussian
         mask[i]=temp;
@@ -1064,10 +1077,15 @@ void DepthEstimatorCL::gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2
 
 void DepthEstimatorCL::compute_depth(Frame& frame){
 
+    TIME_START_CL("compute_depth");
+
+    TIME_START_CL("postprocess_img");
     cv::Mat img_gray;
     cv::cvtColor(frame.rgb, img_gray, CV_BGR2GRAY);
+    cv::resize(img_gray, img_gray, cv::Size(1280,760));
     int width=img_gray.cols;
     int height=img_gray.rows;
+    TIME_END_CL("postprocess_img");
 
     TIME_START_CL("create_cl_img");
     cl::ImageFormat cl_img_format(CL_R,CL_UNORM_INT8);
@@ -1076,17 +1094,32 @@ void DepthEstimatorCL::compute_depth(Frame& frame){
 
 
     TIME_START_CL("gaussian_blur");
-    gaussian_blur(cl_img,cl_img,5); //sigma 15 at around 60 ms
+    gaussian_blur(cl_img,cl_img,1); //sigma 15 at around 60 ms
     TIME_END_CL("gaussian_blur");
+
+    TIME_START_CL("sobel");
+    cl::Image2DSafe cl_sob=cl_img_like(cl_img);
+    // Set the kernel arguments
+    m_kernel_sobel.setArg(0, cl_img.get_img());
+    m_kernel_sobel.setArg(1, cl_sob.get_img());
+    m_queue.enqueueNDRangeKernel(m_kernel_sobel, cl::NullRange, cl::NDRange(width, height), cl::NullRange);
+    TIME_END_CL("sobel");
+
+
+
+
 
 
 
     //read the results back attempt 2
+    TIME_START_CL("map_image");
+    gaussian_blur(cl_img,cl_img,1); //si
     auto origin = cl::array<cl::size_type, 3U>{0, 0, 0};
     auto region = cl::array<cl::size_type, 3U>{width, height, 1};
     cl::size_type row_pitch, slice_pitch;
-    std::uint8_t* destination = (std::uint8_t*)m_queue.enqueueMapImage(cl_img.get_img(), CL_TRUE,CL_MAP_READ, origin, region, &row_pitch, &slice_pitch);
+    std::uint8_t* destination = (std::uint8_t*)m_queue.enqueueMapImage(cl_sob.get_img(), CL_TRUE,CL_MAP_READ, origin, region, &row_pitch, &slice_pitch);
     std::cout << "row_pitch is " << row_pitch << '\n';
+    TIME_END_CL("map_image");
 
     //put into a mat so as to view it
     TIME_START_CL("put_int_mat");
@@ -1101,8 +1134,10 @@ void DepthEstimatorCL::compute_depth(Frame& frame){
 
 
     //cleanup
+    TIME_START_CL("cleanup");
     std::cout << "33333" << '\n';
-    m_queue.enqueueUnmapMemObject(cl_img.get_img(),destination);
+    m_queue.enqueueUnmapMemObject(cl_sob.get_img(),destination);
+    TIME_END_CL("cleanup");
 
 
 
@@ -1112,7 +1147,7 @@ void DepthEstimatorCL::compute_depth(Frame& frame){
     // TIME_END("opencv_gaus")
 
 
-
+    TIME_END_CL("compute_depth");
 
 }
 

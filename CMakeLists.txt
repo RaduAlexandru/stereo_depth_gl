@@ -14,7 +14,8 @@ set(PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include
                         ${CMAKE_SOURCE_DIR}/deps/octree
                         ${CMAKE_SOURCE_DIR}/deps/dir_watcher
                         ${CMAKE_SOURCE_DIR}/deps/gl_lib
-                        ${CMAKE_SOURCE_DIR}/deps/cl_lib)		# Header folder
+                        ${CMAKE_SOURCE_DIR}/deps/cl_lib
+                        ${CMAKE_SOURCE_DIR}/src/renegade_module/ )		# Header folder
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w") #supress all warnings
@@ -35,6 +36,7 @@ find_package(nanoflann)
 find_package(Boost REQUIRED COMPONENTS system thread filesystem)
 find_package(kqueue REQUIRED)
 find_package(OpenCL REQUIRED)
+find_package(Ceres REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
@@ -127,6 +129,7 @@ add_definitions(${LIBIGL_DEFINITIONS})
 include_directories(${nanoflann_INCLUDE_DIRS})
 include_directories(${KQUEUE_INCLUDE_DIRS})
 include_directories(${OPENCL_INCLUDE})
+include_directories(${CERES_INCLUDE_DIR})
 #add_definitions(${GLM_DEFINITIONS})
 #include_directories("/media/alex/Data/Master/SHK/c_ws/src/laser_mesher/deps/libigl/external/nanogui/ext/glew/include/")
 
@@ -150,7 +153,8 @@ catkin_package(
 
 
 file(GLOB IMGUI_SRC ${CMAKE_SOURCE_DIR}/deps/imgui/*.c* ${CMAKE_SOURCE_DIR}/deps/imgui/examples/opengl3_example/imgui_impl_glfw_gl3.cpp)
-file(GLOB MY_SRC ${CMAKE_SOURCE_DIR}/src/*.c*)
+file(GLOB MY_SRC ${CMAKE_SOURCE_DIR}/src/*.c*
+     ${CMAKE_SOURCE_DIR}/src/renegade_module/*.c*)
 
 
 #TINY PROCESS LIBRARY
@@ -171,6 +175,7 @@ target_link_libraries(stereo_depth_cl ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${O
           ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
           ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
           ${OPENCL_LIBRARY}
+          ceres
 )
 #definitions for cmake variables that are necesarry during runtime
 target_compile_definitions(stereo_depth_cl PRIVATE AWESOMEFONT_DIR="${CMAKE_SOURCE_DIR}/deps/imgui_ext/fontawesome-webfont.ttf")
