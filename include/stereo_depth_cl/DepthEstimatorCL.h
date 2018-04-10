@@ -21,6 +21,27 @@
 #include "stereo_depth_cl/DataLoader.h"
 
 
+enum ImmaturePointStatus {
+	IPS_GOOD=0,					// traced well and good
+	IPS_OOB,					// OOB: end tracking & marginalize!
+	IPS_OUTLIER,				// energy too high: if happens again: outlier!
+	IPS_SKIPPED,				// traced well and good (but not actually traced).
+	IPS_BADCONDITION,			// not traced because of bad condition.
+    IPS_DELETED,                            // merged with other point or deleted
+	IPS_UNINITIALIZED};			// not even traced once.
+
+struct ImmaturePoint{
+    int idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
+    int u,v; //position in host frame of the point
+    float quality;
+    float idepth_min;
+    float idepth_max;
+	float depth;
+
+    ImmaturePointStatus lastTraceStatus;
+};
+
+
 //forward declarations
 class Profiler;
 namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
@@ -47,6 +68,12 @@ public:
     void gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2DSafe& src_img, const int sigma);
 
     void compute_depth(Frame& frame);
+
+    //start with everything
+    std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
+    Mesh compute_depth2(Frame& frame);
+	std::vector<ImmaturePoint> create_immature_points ( const Frame& frame );
+	Mesh create_mesh(const std::vector<ImmaturePoint>& immature_points, const std::vector<Frame>& frame);
 
 
     // Scene get_scene();

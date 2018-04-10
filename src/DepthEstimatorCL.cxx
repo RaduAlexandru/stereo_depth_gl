@@ -74,7 +74,7 @@ void DepthEstimatorCL::init_opencl(){
     for (size_t i = 0; i < devices_available.size(); i++) {
         std::string name=devices_available[i].getInfo<CL_DEVICE_NAME>();
         // std::cout << "name of device is " << name << '\n';
-        if(name.find("Intel")!=std::string::npos){
+        if(name.find("HD Graphics")!=std::string::npos){
             m_device=devices_available[i];
             found_intel_device=true;
         }
@@ -1151,6 +1151,145 @@ void DepthEstimatorCL::compute_depth(Frame& frame){
 
 }
 
+std::vector<Frame> DepthEstimatorCL::loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read)
+{
+   std::vector< Frame > frames;
+   std::string filename_img = dataset_path + "/associations.txt";
+   std::string filename_gt = dataset_path + "/livingRoom2.gt.freiburg";
+
+   std::ifstream imageFile ( filename_img, std::ifstream::in );
+   std::ifstream grtruFile ( filename_gt, std::ifstream::in );
+
+   int imagesRead = 0;
+   for ( imagesRead = 0; imageFile.good() && grtruFile.good() && imagesRead < num_images_to_read ; ++imagesRead ){
+      std::string depthFileName, colorFileName;
+      int idc, idd, idg;
+      double tsc, tx, ty, tz, qx, qy, qz, qw;
+      imageFile >> idd >> depthFileName >> idc >> colorFileName;
+
+      if ( idd == 0 )
+          continue;
+      grtruFile >> idg >> tx >> ty >> tz >> qx >> qy >> qz >> qw;
+
+      if ( idc != idd || idc != idg ){
+          std::cerr << "Error during reading... not correct anymore!" << std::endl;
+          break;
+      }
+
+      if ( ! depthFileName.empty() ){
+         Eigen::Affine3d pose_wc = Eigen::Affine3d::Identity();
+         pose_wc.translation() << tx,ty,tz;
+         pose_wc.linear() = Eigen::Quaterniond(qw,qx,qy,qz).toRotationMatrix();
+         Eigen::Affine3d pose_cw = pose_wc.inverse();
+
+         cv::Mat rgb_cv=cv::imread(dataset_path + "/" + colorFileName);
+         cv::Mat depth_cv=cv::imread(dataset_path + "/" + depthFileName, CV_LOAD_IMAGE_ANYDEPTH);
+
+         Frame cur_frame;
+         cur_frame.rgb=rgb_cv;
+         cv::cvtColor ( cur_frame.rgb, cur_frame.gray, CV_BGR2GRAY );
+         cur_frame.depth=depth_cv;
+         cur_frame.tf_cam_world=pose_cw;
+         cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
+         cur_frame.depth.convertTo ( cur_frame.depth, CV_32F );
+
+         //add also K (https://www.doc.ic.ac.uk/~ahanda/VaFRIC/codes.html)
+         cur_frame.K.setZero();
+         cur_frame.K(0,0)=481.2; //fx
+         cur_frame.K(1,1)=-480; //fy
+         cur_frame.K(0,2)=319.5; // cx
+         cur_frame.K(1,2)=239.5; //cy
+         cur_frame.K(2,2)=1.0;
+
+
+         frames.push_back(cur_frame);
+         VLOG(1) << "read img " << imagesRead << " " << colorFileName;
+      }
+   }
+   std::cout << "read " << imagesRead << " images. (" << frames.size() <<", " << ")" << std::endl;
+   return frames;
+}
+
+Mesh DepthEstimatorCL::compute_depth2(Frame& frame){
+    //read images from ICL_NUIM
+    //calculate pyramid and gradients
+    //grab the first frame and calculate inmature points for it
+
+    //for each new frame afterwards we grab pass it to open and update the inmature points depth
+
+    //----------------------------------------------------------------------------------------------------
+    std::string dataset_path="/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png";
+    int num_images_to_read=60;
+    bool use_modified=false;
+    std::vector<Frame> frames=loadDataFromICLNUIM(dataset_path, num_images_to_read);
+
+
+    //TODO undistort images
+
+    //create inmature points for the first frame
+    std::vector<ImmaturePoint> immature_points;
+    immature_points=create_immature_points(frames[0]);
+
+    //Scharr( src_gray, grad_x, ddepth, 1, 0, scale, delta, BORDER_DEFAULT );
+
+
+    Mesh mesh=create_mesh(immature_points,frames); //creates a mesh from the position of the points and their depth
+    return mesh;
+
+}
+
+std::vector<ImmaturePoint> DepthEstimatorCL::create_immature_points (const Frame& frame){
+    //make the sobel in x and y because we need to to calculate the hessian in order to select the immature point
+    // Scharr( src_gray, grad_x, ddepth, 1, 0, scale, delta, BORDER_DEFAULT );
+
+    std::vector<ImmaturePoint> immature_points;
+    for (size_t i = 0; i < frame.gray.rows; i++) {
+        for (size_t j = 0; j < frame.gray.cols; j++) {
+            ImmaturePoint point;
+            point.u=j;
+            point.v=i;
+            point.depth=frame.depth.at<float>(i,j);
+            immature_points.push_back(point);
+        }
+    }
+
+    return immature_points;
+}
+
+Mesh DepthEstimatorCL::create_mesh(const std::vector<ImmaturePoint>& immature_points, const std::vector<Frame>& frames){
+    Mesh mesh;
+    mesh.V.resize(immature_points.size(),3);
+    mesh.V.setZero();
+
+    for (size_t i = 0; i < immature_points.size(); i++) {
+        int u=immature_points[i].u;
+        int v=immature_points[i].v;
+        float depth=immature_points[i].depth;
+
+        //backproject the immature point
+        Eigen::Vector3d point_cam;
+        point_cam << u, v, 1.0;
+        Eigen::Vector3d point_backprojected= frames[0].K.inverse()*point_cam; //TODO get the K and also use the cam to world corresponding to the immature point
+        point_backprojected*= depth;
+        point_backprojected(2)=-point_backprojected(2); //the depth is flipped for some reason, probably du to negative Z axis in the K matrix (fy)
+        mesh.V.row(i)=point_backprojected;
+    }
+
+    //make also some colors
+    mesh.C.resize(immature_points.size(),3);
+    double min_z, max_z;
+    min_z = mesh.V.col(2).minCoeff();
+    max_z = mesh.V.col(2).maxCoeff();
+    for (size_t i = 0; i < mesh.C.rows(); i++) {
+         float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
+         mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+     }
+
+
+
+
+    return mesh;
+}
 
 
 //are we going to use the same windows approach as in dso which add frames and then margianzlies them afterwards? because that is tricky to do in opencl and would require some vector on the gpu which keeps track where the image are in a 3D image and then do like a rolling buffer
