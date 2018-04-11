@@ -76,6 +76,8 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
      depth_mesh.m_show_points=true;
      m_scene.add_mesh(depth_mesh, "depth_mesh");
 
+
+
 }
 
 
@@ -128,6 +130,13 @@ void Core::update() {
                 // //renegade depth
                 // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
                 // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth2(frame);
+                // m_scene.add_mesh(depth_mesh, "depth_mesh");
+                // display_frame(frame);
+
+                //----------the good one
+                // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
+                // Mesh depth_mesh=m_depth_estimator->compute_depth2(frame);
+                // depth_mesh.m_show_points=true;
                 // m_scene.add_mesh(depth_mesh, "depth_mesh");
                 // display_frame(frame);
 

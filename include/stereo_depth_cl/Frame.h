@@ -20,5 +20,6 @@ public:
     Eigen::Matrix3d K;
     Eigen::Affine3d tf_cam_world;
 
-    int cam_id;
+    int cam_id; //id of the camera depending on how many cameras we have (it gos from 0 to 1 in the case of stereo)
+    int frame_id;
 };

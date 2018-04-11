@@ -19,6 +19,7 @@
 #include "stereo_depth_cl/Mesh.h"
 #include "stereo_depth_cl/Scene.h"
 #include "stereo_depth_cl/DataLoader.h"
+#include "stereo_depth_cl/Pattern.h"
 
 
 enum ImmaturePointStatus {
@@ -32,13 +33,18 @@ enum ImmaturePointStatus {
 
 struct ImmaturePoint{
     int idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
-    int u,v; //position in host frame of the point
+    float u,v; //position in host frame of the point
     float quality;
     float idepth_min;
     float idepth_max;
 	float depth;
+	ImmaturePointStatus lastTraceStatus;
 
-    ImmaturePointStatus lastTraceStatus;
+	//debug stuff
+	float gradient_hessian_det;
+	int last_visible_frame;
+
+
 };
 
 
@@ -73,6 +79,7 @@ public:
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
     Mesh compute_depth2(Frame& frame);
 	std::vector<ImmaturePoint> create_immature_points ( const Frame& frame );
+	void update_immature_points(std::vector<ImmaturePoint>& immature_points, const Frame& frame, const Eigen::Affine3d& tf_cur_host, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr);
 	Mesh create_mesh(const std::vector<ImmaturePoint>& immature_points, const std::vector<Frame>& frame);
 
 
@@ -83,6 +90,7 @@ public:
     //objects
     std::shared_ptr<Profiler> m_profiler;
     std::shared_ptr<igl::opengl::glfw::Viewer> m_view;
+	Pattern m_pattern;
 
     //opencl global stuff
     cl::Context m_context;
