@@ -1185,6 +1185,47 @@ void DepthEstimatorCL::compute_depth(Frame& frame){
 
 
 
+Mesh DepthEstimatorCL::compute_depth2(Frame& frame){
+    //read images from ICL_NUIM
+    //calculate pyramid and gradients
+    //grab the first frame and calculate inmature points for it
+
+    //for each new frame afterwards we grab pass it to open and update the inmature points depth
+
+    //----------------------------------------------------------------------------------------------------
+    std::string dataset_path="/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png";
+    int num_images_to_read=60;
+    bool use_modified=false;
+    std::vector<Frame> frames=loadDataFromICLNUIM(dataset_path, num_images_to_read);
+    std::cout << "frames size is " << frames.size() << "\n";
+
+
+    //TODO undistort images
+
+    TIME_START_CL("compute_depth");
+    //create inmature points for the first frame
+    std::vector<ImmaturePoint> immature_points;
+    immature_points=create_immature_points(frames[0]);
+
+
+
+    for (size_t i = 1; i < frames.size(); i++) {
+        //compute the matrices between the two frames
+        Eigen::Affine3d tf_cur_host = frames[i].tf_cam_world * frames[0].tf_cam_world.inverse();
+        Eigen::Matrix3d KRKi_cr = frames[i].K * tf_cur_host.linear() * frames[0].K.inverse();
+        Eigen::Vector3d Kt_cr = frames[i].K * tf_cur_host.translation();
+        Eigen::Vector2d affine_cr = estimate_affine( immature_points, frames[i], KRKi_cr, Kt_cr);
+
+        update_immature_points(immature_points, frames[i], tf_cur_host, KRKi_cr, Kt_cr, affine_cr );
+    }
+
+    TIME_END_CL("compute_depth");
+
+
+    Mesh mesh=create_mesh(immature_points,frames); //creates a mesh from the position of the points and their depth
+    return mesh;
+
+}
 
 std::vector<Frame> DepthEstimatorCL::loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read){
    std::vector< Frame > frames;
@@ -1245,146 +1286,6 @@ std::vector<Frame> DepthEstimatorCL::loadDataFromICLNUIM ( const std::string & d
    }
    std::cout << "read " << imagesRead << " images. (" << frames.size() <<", " << ")" << std::endl;
    return frames;
-}
-
-Mesh DepthEstimatorCL::compute_depth2(Frame& frame){
-    //read images from ICL_NUIM
-    //calculate pyramid and gradients
-    //grab the first frame and calculate inmature points for it
-
-    //for each new frame afterwards we grab pass it to open and update the inmature points depth
-
-    //----------------------------------------------------------------------------------------------------
-    std::string dataset_path="/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png";
-    int num_images_to_read=60;
-    bool use_modified=false;
-    std::vector<Frame> frames=loadDataFromICLNUIM(dataset_path, num_images_to_read);
-    std::cout << "frames size is " << frames.size() << "\n";
-
-
-    //TODO undistort images
-
-    TIME_START_CL("compute_depth");
-    //create inmature points for the first frame
-    std::vector<ImmaturePoint> immature_points;
-    immature_points=create_immature_points(frames[0]);
-
-
-
-    for (size_t i = 1; i < frames.size(); i++) {
-        //compute the matrices between the two frames
-        Eigen::Affine3d tf_cur_host = frames[i].tf_cam_world * frames[0].tf_cam_world.inverse();
-        Eigen::Matrix3d KRKi_cr = frames[i].K * tf_cur_host.linear() * frames[0].K.inverse();
-        Eigen::Vector3d Kt_cr = frames[i].K * tf_cur_host.translation();
-        Eigen::Vector2d affine_cr = estimate_affine( immature_points, frames[i], KRKi_cr, Kt_cr);
-
-        update_immature_points(immature_points, frames[i], tf_cur_host, KRKi_cr, Kt_cr, affine_cr );
-    }
-
-    TIME_END_CL("compute_depth");
-
-
-    Mesh mesh=create_mesh(immature_points,frames); //creates a mesh from the position of the points and their depth
-    return mesh;
-
-}
-
-Eigen::Vector2d DepthEstimatorCL::estimate_affine(std::vector<ImmaturePoint>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr)
-{
-    ceres::Problem problem;
-    ceres::LossFunction * loss_function = new ceres::HuberLoss(1);
-    double scaleA = 1;
-    double offsetB = 0;
-
-    TIME_START("creating ceres problem");
-    for ( int i = 0; i < immature_points.size(); ++i )
-    {
-        ImmaturePoint& point = immature_points[i];
-        if ( i % 100 != 0 )
-            continue;
-
-//
-        //get colors at the current frame
-        float color_cur_frame[MAX_RES_PER_POINT];
-        float color_host_frame[MAX_RES_PER_POINT];
-
-
-        if ( 1.0/point.gt_depth > 0 ) {
-
-            const Eigen::Vector3d p = KRKi_cr * Eigen::Vector3d(point.u,point.v,1) + Kt_cr*  (1.0/point.gt_depth);
-            point.kp_GT = p.hnormalized();
-
-//            //debug
-//            if(point.u==258 && point.v==447){
-//                std::cout << "point u,v gt_idepth is " << point.u << " " << point.v << " " << (1.0/point.gt_depth) << "\n";
-//                std::cout << "kp_GT is " << point.kp_GT << '\n';
-//            }
-
-            if ( point.kp_GT(0) > 4 && point.kp_GT(0) < cur_frame.gray.cols-4 && point.kp_GT(1) > 3 && point.kp_GT(1) < cur_frame.gray.rows-4 ) {
-
-                Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
-
-                for(int idx=0;idx<m_pattern.get_nr_points();++idx) {
-                    Eigen::Vector2d offset=pattern_rot.get_offset(idx);
-
-                    color_cur_frame[idx]=texture_interpolate(cur_frame.gray, point.kp_GT(0)+offset(0), point.kp_GT(1)+offset(1) , InterpolationType::LINEAR);
-                    color_host_frame[idx]=point.color[idx];
-
-//                    //debug
-//                    if(point.u==258 && point.v==447){
-//                        std::cout << "offset pattern_rot is " << offset(0) << " " << offset(1) << "\n";
-//                        std::cout << "color_host_frame is " << point.color[idx] << "\n";
-//                        std::cout << "color_cur_frame is  " << color_cur_frame[idx] << "\n";
-//                    }
-                }
-            }
-        }
-
-
-        for ( int i = 0; i < m_pattern.get_nr_points(); ++i) {
-            if ( !std::isfinite(color_host_frame[i]) || ! std::isfinite(color_cur_frame[i]) )
-                continue;
-            if ( color_host_frame[i] <= 0 || color_host_frame[i] >= 255 || color_cur_frame[i] <= 0 || color_cur_frame[i] >= 255  )
-                continue;
-            ceres::CostFunction * cost_function = AffineAutoDiffCostFunctor::Create( color_cur_frame[i], color_host_frame[i] );
-            problem.AddResidualBlock( cost_function, loss_function, &scaleA, & offsetB );
-        }
-    }
-    TIME_END("creating ceres problem");
-    ceres::Solver::Options solver_options;
-    //solver_options.linear_solver_type = ceres::DENSE_QR;//DENSE_SCHUR;//QR;
-    solver_options.minimizer_progress_to_stdout = false;
-    solver_options.max_num_iterations = 1000;
-    solver_options.function_tolerance = 1e-6;
-    solver_options.num_threads = 8;
-    ceres::Solver::Summary summary;
-    ceres::Solve( solver_options, & problem, & summary );
-    //std::cout << summary.FullReport() << std::endl;
-    std::cout << "scale= " << scaleA << " offset= "<< offsetB << std::endl;
-    return Eigen::Vector2d ( scaleA, offsetB );
-}
-
-float DepthEstimatorCL::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolationType type){
-    //sample only from a cv mat that is of type float with 1 channel
-    if(type2string(img.type())!="32FC1"){
-        LOG(FATAL) << "trying to use texture inerpolate on an image that is not float valued with 1 channel. Image is of type " <<
-        type2string(img.type());
-    }
-
-    //Dumb nearest interpolation
-//    int clamped_y=clamp((int)y,0,img.rows);
-//    int clamped_x=clamp((int)x,0,img.cols);
-//    float val=img.at<float>(clamped_y,clamped_x);
-
-    //from oepncv https://github.com/opencv/opencv/blob/master/modules/cudawarping/test/interpolation.hpp
-    if(type==InterpolationType::NEAREST){
-        return NearestInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
-    }else if(type==InterpolationType::LINEAR){
-        return LinearInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
-    }else if(type==InterpolationType::CUBIC){
-        return CubicInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
-    }
-
 }
 
 std::vector<ImmaturePoint> DepthEstimatorCL::create_immature_points (const Frame& frame){
@@ -1458,6 +1359,13 @@ std::vector<ImmaturePoint> DepthEstimatorCL::create_immature_points (const Frame
                 point.a=10.0;
                 point.b=10.0;
 
+                //seed constructor deep_filter.h
+                point.converged=false;
+                point.is_outlier=true;
+
+
+                //immature point constructor (the idepth min and max are already set so don't worry about those)
+                point.lastTraceStatus=IPS_UNINITIALIZED;
 
                 //get data for the color of that point (depth_point->ImmaturePoint::ImmaturePoint)---------------------
                 for(int p_idx=0;p_idx<m_pattern.get_nr_points();p_idx++){
@@ -1503,6 +1411,91 @@ std::vector<ImmaturePoint> DepthEstimatorCL::create_immature_points (const Frame
     return immature_points;
 }
 
+Eigen::Vector2d DepthEstimatorCL::estimate_affine(std::vector<ImmaturePoint>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr){
+    ceres::Problem problem;
+    ceres::LossFunction * loss_function = new ceres::HuberLoss(1);
+    double scaleA = 1;
+    double offsetB = 0;
+
+    TIME_START("creating ceres problem");
+    for ( int i = 0; i < immature_points.size(); ++i )
+    {
+        ImmaturePoint& point = immature_points[i];
+        if ( i % 100 != 0 )
+            continue;
+
+        //get colors at the current frame
+        float color_cur_frame[MAX_RES_PER_POINT];
+        float color_host_frame[MAX_RES_PER_POINT];
+
+
+        if ( 1.0/point.gt_depth > 0 ) {
+
+            const Eigen::Vector3d p = KRKi_cr * Eigen::Vector3d(point.u,point.v,1) + Kt_cr*  (1.0/point.gt_depth);
+            point.kp_GT = p.hnormalized();
+
+
+            if ( point.kp_GT(0) > 4 && point.kp_GT(0) < cur_frame.gray.cols-4 && point.kp_GT(1) > 3 && point.kp_GT(1) < cur_frame.gray.rows-4 ) {
+
+                Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
+
+                for(int idx=0;idx<m_pattern.get_nr_points();++idx) {
+                    Eigen::Vector2d offset=pattern_rot.get_offset(idx);
+
+                    color_cur_frame[idx]=texture_interpolate(cur_frame.gray, point.kp_GT(0)+offset(0), point.kp_GT(1)+offset(1) , InterpolationType::LINEAR);
+                    color_host_frame[idx]=point.color[idx];
+
+                }
+            }
+        }
+
+
+        for ( int i = 0; i < m_pattern.get_nr_points(); ++i) {
+            if ( !std::isfinite(color_host_frame[i]) || ! std::isfinite(color_cur_frame[i]) )
+                continue;
+            if ( color_host_frame[i] <= 0 || color_host_frame[i] >= 255 || color_cur_frame[i] <= 0 || color_cur_frame[i] >= 255  )
+                continue;
+            ceres::CostFunction * cost_function = AffineAutoDiffCostFunctor::Create( color_cur_frame[i], color_host_frame[i] );
+            problem.AddResidualBlock( cost_function, loss_function, &scaleA, & offsetB );
+        }
+    }
+    TIME_END("creating ceres problem");
+    ceres::Solver::Options solver_options;
+    //solver_options.linear_solver_type = ceres::DENSE_QR;//DENSE_SCHUR;//QR;
+    solver_options.minimizer_progress_to_stdout = false;
+    solver_options.max_num_iterations = 1000;
+    solver_options.function_tolerance = 1e-6;
+    solver_options.num_threads = 8;
+    ceres::Solver::Summary summary;
+    ceres::Solve( solver_options, & problem, & summary );
+    //std::cout << summary.FullReport() << std::endl;
+    std::cout << "scale= " << scaleA << " offset= "<< offsetB << std::endl;
+    return Eigen::Vector2d ( scaleA, offsetB );
+}
+
+float DepthEstimatorCL::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolationType type){
+    //sample only from a cv mat that is of type float with 1 channel
+    if(type2string(img.type())!="32FC1"){
+        LOG(FATAL) << "trying to use texture inerpolate on an image that is not float valued with 1 channel. Image is of type " <<
+        type2string(img.type());
+    }
+
+    //Dumb nearest interpolation
+   // int clamped_y=clamp((int)y,0,img.rows);
+   // int clamped_x=clamp((int)x,0,img.cols);
+   // float val=img.at<float>(clamped_y,clamped_x);
+
+    //from oepncv https://github.com/opencv/opencv/blob/master/modules/cudawarping/test/interpolation.hpp
+    if(type==InterpolationType::NEAREST){
+        return NearestInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
+    }else if(type==InterpolationType::LINEAR){
+        return LinearInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
+    }else if(type==InterpolationType::CUBIC){
+        return CubicInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
+    }
+
+}
+
 void DepthEstimatorCL::update_immature_points(std::vector<ImmaturePoint>& immature_points, const Frame& frame, const Eigen::Affine3d& tf_cur_host, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr, const Eigen::Vector2d& affine_cr){
 
     TIME_START_CL("update_immature_points");
@@ -1514,26 +1507,6 @@ void DepthEstimatorCL::update_immature_points(std::vector<ImmaturePoint>& immatu
 
 
     for (auto &point : immature_points){
-//        Eigen::Vector3d point_host_screen;
-//        point_host_screen << point.u, point.v, 1.0;
-//
-//        Eigen::Vector3d point_host_cam; //point in the coordinate of the host frame
-//        point_host_cam=frame.K.inverse()*point_host_screen*point.gt_depth; //TODO should use the K of the host frame
-//
-//        Eigen::Vector3d point_cur_cam; //point in the coordinate of the cur frame
-//        point_cur_cam= tf_cur_host * point_host_cam;
-//
-//        Eigen::Vector2d point_cur_screen;
-//        point_cur_screen= (frame.K * point_cur_cam).hnormalized();
-//
-//        if(point_cur_cam.z() < 0.0)  {
-//            continue; // behind the camera
-//        }
-//
-//        if ( point_cur_screen(0) < 0 || point_cur_screen(0) >= frame.gray.cols || point_cur_screen(1) < 0 || point_cur_screen(1) >= frame.gray.rows ){
-//            continue; // point does not project in image
-//        }
-
 
         // check if point is visible in the current image
         const Eigen::Vector3d xyz_f( tf_cur_host*(1.0/point.mu * point.f) );
@@ -1552,10 +1525,9 @@ void DepthEstimatorCL::update_immature_points(std::vector<ImmaturePoint>& immatu
         //update inverse depth coordinates for min and max
         point.idepth_min = point.mu + sqrt(point.sigma2);
         point.idepth_max = std::max<float>(point.mu - sqrt(point.sigma2), 0.00000001f);
-//
+
         //search epiline----------------------
-        // std::cout << "search epi line for point " << i << "\n";
-//        search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
+       // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
         search_epiline_bca (point, frame, KRKi_cr, Kt_cr, affine_cr);
 
         double idepth = -1;
@@ -1564,7 +1536,7 @@ void DepthEstimatorCL::update_immature_points(std::vector<ImmaturePoint>& immatu
             idepth = std::max<double>(1e-5,.5*(point.idepth_min+point.idepth_max));
             z = 1./idepth;
         }
-        if ( point.lastTraceStatus == ImmaturePointStatus::IPS_OOB  || point.lastTraceStatus == ImmaturePointStatus::IPS_SKIPPED ) {
+        if ( point.lastTraceStatus == ImmaturePointStatus::IPS_OOB  || point.lastTraceStatus == ImmaturePointStatus::IPS_SKIPPED ){
             continue;
         }
         if ( !std::isfinite(idepth) || point.lastTraceStatus == ImmaturePointStatus::IPS_OUTLIER || point.lastTraceStatus == ImmaturePointStatus::IPS_BADCONDITION ) {
@@ -1578,20 +1550,6 @@ void DepthEstimatorCL::update_immature_points(std::vector<ImmaturePoint>& immatu
 
 
     }
-
-    // //-----------------------------
-    // const Eigen::Vector3d xyz_f( T_cur_ref*(1.0/it->mu * it->f) );
-    // if(xyz_f.z() < 0.0)  {
-    //     //++it; // behind the camera
-    //     continue;
-    // }
-    //
-    // const Eigen::Vector2d kp_c = (curImgPtr->K_c[0] * xyz_f).hnormalized();
-    // if ( kp_c(0) < 0 || kp_c(0) >= curImgPtr->grayImages[0].cols || kp_c(1) < 0 || kp_c(1) >= curImgPtr->grayImages[0].rows )
-    // {        //if(!frame->cam_->isInFrame(frame->f2c(xyz_f).cast<int>())) {
-    //     //++it; // point does not project in image
-    //     continue;
-    // }
 
     TIME_END_CL("update_immature_points");
 }
@@ -1634,7 +1592,7 @@ void DepthEstimatorCL::search_epiline_bca(ImmaturePoint& point, const Frame& fra
         {
             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
             Eigen::Vector2d offset=pattern_rot.get_offset(idx);
-            float hit_color=texture_interpolate(frame.gray, kp(0)+offset(0), kp(1)+offset(1) , InterpolationType::CUBIC);
+            float hit_color=texture_interpolate(frame.gray, kp(0)+offset(0), kp(1)+offset(1) , InterpolationType::LINEAR);
             if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
 
             const float residual = hit_color - (float)(affine_cr[0] * point.color[idx] + affine_cr[1]);
@@ -1675,90 +1633,90 @@ void DepthEstimatorCL::search_epiline_bca(ImmaturePoint& point, const Frame& fra
 
 void DepthEstimatorCL::search_epiline_ncc(ImmaturePoint& point, const Frame& frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr){
 
-//    Eigen::Vector3d pr = KRKi_cr * Eigen::Vector3d(point.u,point.v, 1);
-//    Eigen::Vector3d ptpMean = pr + Kt_cr*point.mu;
-//    Eigen::Vector3d ptpMin = pr + Kt_cr*point.idepth_min;
-//    Eigen::Vector3d ptpMax = pr + Kt_cr*point.idepth_max;
-//    Eigen::Vector2d uvMean = ptpMean.hnormalized();
-//    Eigen::Vector2d uvMin = ptpMin.hnormalized();
-//    Eigen::Vector2d uvMax = ptpMax.hnormalized();
-//
-//    Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
-//
-//    Eigen::Vector2d epi_line = uvMax - uvMin;
-//    float norm_epi = std::max<float>(1e-5f,epi_line.norm());
-//    Eigen::Vector2d epi_dir = epi_line / norm_epi;
-//    const float  half_length = 0.5f * norm_epi;
-//
-//    Eigen::Vector2d bestKp;
-//    float bestEnergy = -1.0f;
-//
-//     // Retrieve template statistics for NCC matching;
-//     const float sum_templ = point.ncc_sum_templ ;
-//     const float const_templ_denom = point.ncc_const_templ;
-//
-//     for(float l = -half_length; l <= half_length; l += 0.7f)
-//     {
-//         float energy = 0;
-//         float sum_img = 0.f;
-//         float sum_img_sq = 0.f;
-//         float sum_img_templ = 0.f;
-//
-//         Eigen::Vector2d kp = uvMean + l*epi_dir;
-//
-//         if( !kp.allFinite() || ( kp(0) >= (frame.gray.cols-7) )  || ( kp(1) >= (frame.gray.rows-7) ) || ( kp(0) < 7 ) || ( kp(1) < 7) ) {
-//           continue;
-//         }
-//
-//         for(int idx=0;idx<pattern_rot.get_nr_points(); ++idx)
-//         {
-//             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
-//
-//
-//             Eigen::Vector2d offset=pattern_rot.get_offset(idx);
-//             float hit_color=texture_interpolate(frame.gray, kp(0)+offset(0), kp(1)+offset(1) );
-//
-//
-//             const float templ = point.color[idx];
-//             const float img = hit_color;
-//             sum_img    += img;
-//             sum_img_sq += img*img;
-//             sum_img_templ += img*templ;
-//         }
-//         const float ncc_numerator = pattern_rot.get_nr_points()*sum_img_templ - sum_img*sum_templ;
-//         const float ncc_denominator = (pattern_rot.get_nr_points()*sum_img_sq - sum_img*sum_img)*const_templ_denom;
-//         energy += ncc_numerator * sqrt(ncc_denominator + 1e-10);
-//
-//         if( energy > bestEnergy )
-//         {
-//             bestKp = kp; bestEnergy = energy;
-//         }
-//     }
-//
-//     if( bestEnergy < .5f ) {
-//         point.lastTraceStatus = ImmaturePointStatus::IPS_OUTLIER;
-//     } else {
-//         //TODO WTF is this??
-////         float a = (Eigen::Vector2f(epi_dir(0),epi_dir(1)).transpose() * gradH * Eigen::Vector2f(epi_dir(0),epi_dir(1)));
-////         float b = (Eigen::Vector2f(epi_dir(1),-epi_dir(0)).transpose() * gradH * Eigen::Vector2f(epi_dir(1),-epi_dir(0)));
-////         float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
-//         float errorInPixel=0.0;
-//
-//         if( epi_dir(0)*epi_dir(0)>epi_dir(1)*epi_dir(1) )
-//         {
-//             point.idepth_min = (pr[2]*(bestKp(0)-errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr[0] - Kt_cr[2]*(bestKp(0)-errorInPixel*epi_dir(0)));
-//             point.idepth_max = (pr[2]*(bestKp(0)+errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr[0] - Kt_cr[2]*(bestKp(0)+errorInPixel*epi_dir(0)));
-//         }
-//         else
-//         {
-//             point.idepth_min = (pr[2]*(bestKp(1)-errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr[1] - Kt_cr[2]*(bestKp(1)-errorInPixel*epi_dir(1)));
-//             point.idepth_max = (pr[2]*(bestKp(1)+errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr[1] - Kt_cr[2]*(bestKp(1)+errorInPixel*epi_dir(1)));
-//         }
-//         if(point.idepth_min > point.idepth_max) std::swap<float>(point.idepth_min, point.idepth_max);
-//
-////         lastTraceUV = bestKp;
-//         point.lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
-//     }
+   // Eigen::Vector3d pr = KRKi_cr * Eigen::Vector3d(point.u,point.v, 1);
+   // Eigen::Vector3d ptpMean = pr + Kt_cr*point.mu;
+   // Eigen::Vector3d ptpMin = pr + Kt_cr*point.idepth_min;
+   // Eigen::Vector3d ptpMax = pr + Kt_cr*point.idepth_max;
+   // Eigen::Vector2d uvMean = ptpMean.hnormalized();
+   // Eigen::Vector2d uvMin = ptpMin.hnormalized();
+   // Eigen::Vector2d uvMax = ptpMax.hnormalized();
+   //
+   // Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
+   //
+   // Eigen::Vector2d epi_line = uvMax - uvMin;
+   // float norm_epi = std::max<float>(1e-5f,epi_line.norm());
+   // Eigen::Vector2d epi_dir = epi_line / norm_epi;
+   // const float  half_length = 0.5f * norm_epi;
+   //
+   // Eigen::Vector2d bestKp;
+   // float bestEnergy = -1.0f;
+   //
+   //  // Retrieve template statistics for NCC matching;
+   //  const float sum_templ = point.ncc_sum_templ ;
+   //  const float const_templ_denom = point.ncc_const_templ;
+   //
+   //  for(float l = -half_length; l <= half_length; l += 0.7f)
+   //  {
+   //      float energy = 0;
+   //      float sum_img = 0.f;
+   //      float sum_img_sq = 0.f;
+   //      float sum_img_templ = 0.f;
+   //
+   //      Eigen::Vector2d kp = uvMean + l*epi_dir;
+   //
+   //      if( !kp.allFinite() || ( kp(0) >= (frame.gray.cols-7) )  || ( kp(1) >= (frame.gray.rows-7) ) || ( kp(0) < 7 ) || ( kp(1) < 7) ) {
+   //        continue;
+   //      }
+   //
+   //      for(int idx=0;idx<pattern_rot.get_nr_points(); ++idx)
+   //      {
+   //          //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
+   //
+   //
+   //          Eigen::Vector2d offset=pattern_rot.get_offset(idx);
+   //          float hit_color=texture_interpolate(frame.gray, kp(0)+offset(0), kp(1)+offset(1) );
+   //
+   //
+   //          const float templ = point.color[idx];
+   //          const float img = hit_color;
+   //          sum_img    += img;
+   //          sum_img_sq += img*img;
+   //          sum_img_templ += img*templ;
+   //      }
+   //      const float ncc_numerator = pattern_rot.get_nr_points()*sum_img_templ - sum_img*sum_templ;
+   //      const float ncc_denominator = (pattern_rot.get_nr_points()*sum_img_sq - sum_img*sum_img)*const_templ_denom;
+   //      energy += ncc_numerator * sqrt(ncc_denominator + 1e-10);
+   //
+   //      if( energy > bestEnergy )
+   //      {
+   //          bestKp = kp; bestEnergy = energy;
+   //      }
+   //  }
+   //
+   //  if( bestEnergy < .5f ) {
+   //      point.lastTraceStatus = ImmaturePointStatus::IPS_OUTLIER;
+   //  } else {
+   //      //TODO WTF is this??
+   //      // float a = (Eigen::Vector2f(epi_dir(0),epi_dir(1)).transpose() * gradH * Eigen::Vector2f(epi_dir(0),epi_dir(1)));
+   //      // float b = (Eigen::Vector2f(epi_dir(1),-epi_dir(0)).transpose() * gradH * Eigen::Vector2f(epi_dir(1),-epi_dir(0)));
+   //      // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
+   //      float errorInPixel=0.0;
+   //
+   //      if( epi_dir(0)*epi_dir(0)>epi_dir(1)*epi_dir(1) )
+   //      {
+   //          point.idepth_min = (pr[2]*(bestKp(0)-errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr[0] - Kt_cr[2]*(bestKp(0)-errorInPixel*epi_dir(0)));
+   //          point.idepth_max = (pr[2]*(bestKp(0)+errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr[0] - Kt_cr[2]*(bestKp(0)+errorInPixel*epi_dir(0)));
+   //      }
+   //      else
+   //      {
+   //          point.idepth_min = (pr[2]*(bestKp(1)-errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr[1] - Kt_cr[2]*(bestKp(1)-errorInPixel*epi_dir(1)));
+   //          point.idepth_max = (pr[2]*(bestKp(1)+errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr[1] - Kt_cr[2]*(bestKp(1)+errorInPixel*epi_dir(1)));
+   //      }
+   //      if(point.idepth_min > point.idepth_max) std::swap<float>(point.idepth_min, point.idepth_max);
+   //
+   //      // lastTraceUV = bestKp;
+   //      point.lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
+   //  }
 }
 
 void DepthEstimatorCL::update_idepth(ImmaturePoint& point, const Eigen::Affine3d& tf_host_cur, const float z, const double px_error_angle){
@@ -1770,16 +1728,25 @@ void DepthEstimatorCL::update_idepth(ImmaturePoint& point, const Eigen::Affine3d
     // update the estimate
     updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
 
-//    const float eta_inlier = .6f;
-//    const float eta_outlier = .05f;
-//    // if E(inlier_ratio) > eta_inlier && sigma_sq < epsilon
-//    if( ((it->a / (it->a + it->b)) > eta_inlier) &&
-//        //(it->sigma2 < epsilon)
-//        (sqrt(it->sigma2) < it->z_range/options_.seed_convergence_sigma2_thresh)
-//            )
-//    {
-//        it->is_outlier = false;
-//    }
+
+    const float eta_inlier = .6f;
+    const float eta_outlier = .05f;
+    if( ((point.a / (point.a + point.b)) > eta_inlier) && (sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh)) {
+        point.is_outlier = false; // The seed converged
+    }else if((point.a-1) / (point.a + point.b - 2) < eta_outlier){ // The seed failed to converge
+        point.is_outlier = true;
+        // it->reinit();
+        //TODO do a better reinit inside a point class
+        point.a = 10;
+        point.b = 10;
+        point.mu = (1.0/4.0);
+        point.z_range = (1.0/0.1);
+        point.sigma2 = (point.z_range*point.z_range/36);
+    }
+    // if the seed has converged, we initialize a new candidate point and remove the seed
+    if(sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh){
+        point.converged = true;
+    }
 
 }
 
@@ -1846,26 +1813,6 @@ Mesh DepthEstimatorCL::create_mesh(const std::vector<ImmaturePoint>& immature_po
             mesh.V.row(i)=point_world;
         }
 
-//
-
-
-        //attempt 2 at doing it right
-//        Eigen::Vector3d point_screen;
-//        point_screen << u, v, 1.0;
-//        Eigen::Vector3d point_unprojected=frames[0].K.inverse()*point_screen; //TODO get the K and also use the cam to world corresponding to the immature point
-////        Eigen::Vector3d point_unprojected_hom=point_unprojected/point_unprojected(2);
-//        Eigen::Vector3d point_unprojected_hom=point_unprojected.normalized();
-//        Eigen::Vector3d point_world=point_unprojected_hom*depth;
-//        mesh.V.row(i)=point_world;
-
-
-
-//        //Attempt 3
-//        Eigen::Vector3d f = (frames[0].K.inverse()* Eigen::Vector3d(u,v,1));
-//        const Eigen::Vector3d xyz_f(depth * f);
-//        mesh.V.row(i)=xyz_f;
-
-
 
     }
 
@@ -1896,20 +1843,20 @@ Mesh DepthEstimatorCL::create_mesh(const std::vector<ImmaturePoint>& immature_po
     //  }
 
     //colors based on last frame seen
-//    float min=9999999999, max=-9999999999;
-//    for (size_t i = 0; i < immature_points.size(); i++) {
-//        if(immature_points[i].last_visible_frame<min){
-//            min=immature_points[i].last_visible_frame;
-//        }
-//        if(immature_points[i].last_visible_frame>max){
-//            max=immature_points[i].last_visible_frame;
-//        }
-//    }
-//    std::cout << "min max z is " << min << " " << max << '\n';
-//    for (size_t i = 0; i < mesh.C.rows(); i++) {
-//         float gray_val = lerp(immature_points[i].last_visible_frame, min, max, 0.0, 1.0 );
-//         mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
-//     }
+   // float min=9999999999, max=-9999999999;
+   // for (size_t i = 0; i < immature_points.size(); i++) {
+   //     if(immature_points[i].last_visible_frame<min){
+   //         min=immature_points[i].last_visible_frame;
+   //     }
+   //     if(immature_points[i].last_visible_frame>max){
+   //         max=immature_points[i].last_visible_frame;
+   //     }
+   // }
+   // std::cout << "min max z is " << min << " " << max << '\n';
+   // for (size_t i = 0; i < mesh.C.rows(); i++) {
+   //      float gray_val = lerp(immature_points[i].last_visible_frame, min, max, 0.0, 1.0 );
+   //      mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+   //  }
 
 
 

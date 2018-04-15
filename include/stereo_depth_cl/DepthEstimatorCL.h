@@ -33,6 +33,7 @@ const float setting_outlierTH = 12*12;					// higher -> less strict
 const float setting_overallEnergyTHWeight = 1;
 const float setting_outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
 const float setting_huberTH = 9; // Huber Threshold
+const double seed_convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
 
 
 
@@ -59,6 +60,8 @@ struct ImmaturePoint{
     float quality;
     Eigen::Vector3d f; // heading range = Ki * (u,v,1)
 	ImmaturePointStatus lastTraceStatus;
+	bool converged;
+	bool is_outlier;
 
 	float color[MAX_RES_PER_POINT]; 		// colors in host frame
 	float weights[MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
