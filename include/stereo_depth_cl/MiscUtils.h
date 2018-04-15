@@ -489,3 +489,9 @@ inline std::string file_to_string (const std::string &filename){
 inline int round_up_to_nearest_multiple(const int number, const int divisor){
  return number - number % divisor + divisor * !!(number % divisor);
 }
+
+//clamp a value between a min and a max
+template <class T>
+inline T clamp(const T val, const T min, const T max){
+    return std::min(std::max(val, min),max);
+}

@@ -15,7 +15,7 @@ set(PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include
                         ${CMAKE_SOURCE_DIR}/deps/dir_watcher
                         ${CMAKE_SOURCE_DIR}/deps/gl_lib
                         ${CMAKE_SOURCE_DIR}/deps/cl_lib
-                        ${CMAKE_SOURCE_DIR}/src/renegade_module/ )		# Header folder
+                        ${CMAKE_SOURCE_DIR}/deps/cv_lib)		# Header folder
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w") #supress all warnings
@@ -153,8 +153,7 @@ catkin_package(
 
 
 file(GLOB IMGUI_SRC ${CMAKE_SOURCE_DIR}/deps/imgui/*.c* ${CMAKE_SOURCE_DIR}/deps/imgui/examples/opengl3_example/imgui_impl_glfw_gl3.cpp)
-file(GLOB MY_SRC ${CMAKE_SOURCE_DIR}/src/*.c*
-     ${CMAKE_SOURCE_DIR}/src/renegade_module/*.c*)
+file(GLOB MY_SRC ${CMAKE_SOURCE_DIR}/src/*.c* )
 
 
 #TINY PROCESS LIBRARY
