@@ -26,6 +26,10 @@
 #include "ceres/cubic_interpolation.h"
 #include "ceres/rotation.h"
 
+//boost compute
+#include <boost/compute.hpp>
+#include <boost/compute/types/struct.hpp>
+
 //TODO settings that should be refactored into a config file
 const int cl_MAX_RES_PER_POINT = 10;
 const float cl_setting_outlierTH = 12*12;					// higher -> less strict
@@ -45,41 +49,48 @@ enum class PointStatus {
     UNINITIALIZED};			// not even traced once.
 
 struct Point{
-    int idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
-    float u,v; //position in host frame of the point
-    float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
-    float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
-    float mu;                    //!< Mean of normal distribution.
-    float z_range;               //!< Max range of the possible depth.
-    float sigma2;                //!< Variance of normal distribution.
-    float idepth_min;
-    float idepth_max;
-    float energyTH;
-    float quality;
-    Eigen::Vector3d f; // heading range = Ki * (u,v,1)
-    PointStatus lastTraceStatus;
-    bool converged;
-    bool is_outlier;
+    cl_int idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
+    cl_float u,v; //position in host frame of the point
 
-    float color[cl_MAX_RES_PER_POINT]; 		// colors in host frame
-    float weights[cl_MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
+    // cl_float test_array[16];
+    // cl_int test_bool_array[16]; //--break it
+    // // cl_bool bool_1; //--also breaks it
+    // // cl_bool bool_2;
+    //  cl_int test_int_array[16];
+
+    cl_float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
+    cl_float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
+    cl_float mu;                    //!< Mean of normal distribution.
+    cl_float z_range;               //!< Max range of the possible depth.
+    cl_float sigma2;                //!< Variance of normal distribution.
+    cl_float idepth_min;
+    cl_float idepth_max;
+    cl_float energyTH;
+    cl_float quality;
+    cl_float3 f; // heading range = Ki * (u,v,1)
+    // PointStatus lastTraceStatus;
+    // cl_bool converged;
+    // cl_bool is_outlier;
+
+    cl_float color[cl_MAX_RES_PER_POINT]; 		// colors in host frame
+    cl_float weights[cl_MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
     // Vec2f colorD[MAX_RES_PER_POINT];
     // Vec2f colorGrad[MAX_RES_PER_POINT];
     // Vec2f rotatetPattern[MAX_RES_PER_POINT];
-    bool skipZero [cl_MAX_RES_PER_POINT];
+    // cl_bool skipZero [cl_MAX_RES_PER_POINT];
 
-    float ncc_sum_templ;
-    float ncc_const_templ;
+    cl_float ncc_sum_templ;
+    cl_float ncc_const_templ;
 
     //Stuff that may be to be removed
-    Eigen::Matrix2d gradH; //it may need to go because opencl doesn't like eigen
-    Eigen::Vector2d kp_GT;
-
-
+    cl_float2 kp_GT;
+    // cl_float kp_GT[2];
+    //
+    //
     //debug stuff
-    float gradient_hessian_det;
-    int last_visible_frame;
-    float gt_depth;
+    cl_float gradient_hessian_det;
+    cl_int last_visible_frame;
+    cl_float gt_depth;
 
 };
 
@@ -89,6 +100,13 @@ enum class InterpolType {
     CUBIC
 };			// not even traced once.
 
+// BOOST_COMPUTE_ADAPT_STRUCT(Point, Point, (idx_host_frame, u, v, a, b, mu, z_range, sigma2, idepth_min, idepth_max,
+//                                           energyTH, quality, converged, is_outlier, color, weights, skipZero,
+//                                           ncc_sum_templ, ncc_const_templ, gradient_hessian_det, last_visible_frame,
+//                                           gt_depth));
+
+// BOOST_COMPUTE_ADAPT_STRUCT(Point, Point, (idx_host_frame, u, v,
+//                                           gradient_hessian_det, last_visible_frame, gt_depth));
 
 
 struct  AffineAutoDiffCostFunctorCL
@@ -133,8 +151,11 @@ public:
     //start with everything
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
     Mesh compute_depth(Frame& frame);
-    float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
     std::vector<Point> create_immature_points (const Frame& frame);
+    Eigen::Vector2d estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr);
+    float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
+    Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames);
+
 	// Eigen::Vector2d estimate_affine( std::vector<ImmaturePoint>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr);
 	// float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolationType type=InterpolationType::NEAREST);
 	// std::vector<ImmaturePoint> create_immature_points ( const Frame& frame );
@@ -169,6 +190,9 @@ public:
     cl::Kernel m_kernel_blury;
     cl::Kernel m_kernel_blurx_fast;
     cl::Kernel m_kernel_blury_fast;
+
+    //opencl things for depth estimation
+    cl::Kernel m_kernel_struct_test;
 
 
     //databasse
@@ -207,3 +231,68 @@ private:
 #define TIME_END_CL(name)\
     if (m_cl_profiling_enabled){ m_queue.finish();}\
     TIME_END_2(name,m_profiler);
+
+
+
+// // This is for not packed structs but _NOT_ for cl_typeN structs
+// #define BOOST_COMPUTE_ADAPT_STRUCT_NOT_PACKED(type, name, members) \
+//     BOOST_COMPUTE_TYPE_NAME(type, name) \
+//     namespace boost { namespace compute { \
+//     template<> \
+//     inline std::string type_definition<type>() \
+//     { \
+//         std::stringstream declaration; \
+//         declaration << "typedef struct {\n" \
+//                     BOOST_PP_SEQ_FOR_EACH( \
+//                         BOOST_COMPUTE_DETAIL_ADAPT_STRUCT_INSERT_MEMBER, \
+//                         type, \
+//                         BOOST_COMPUTE_PP_TUPLE_TO_SEQ(members) \
+//                     ) \
+//                     << "} " << type_name<type>() << ";\n"; \
+//         return declaration.str(); \
+//     } \
+//     namespace detail { \
+//     template<> \
+//     struct inject_type_impl<type> \
+//     { \
+//         void operator()(meta_kernel &kernel) \
+//         { \
+//             kernel.add_type_declaration<type>(type_definition<type>()); \
+//         } \
+//     }; \
+//     inline meta_kernel& operator<<(meta_kernel &k, type s) \
+//     { \
+//         return k << "(" << #name << "){" \
+//                BOOST_PP_SEQ_FOR_EACH_I( \
+//                    BOOST_COMPUTE_DETAIL_ADAPT_STRUCT_STREAM_MEMBER, \
+//                    s, \
+//                    BOOST_COMPUTE_PP_TUPLE_TO_SEQ(members) \
+//                ) \
+//                << "}"; \
+//     } \
+//     }}}
+//
+// // Internal (This is for cl_typeN structs)
+// #define BOOST_COMPUTE_ADAPT_CL_VECTOR_STRUCT_NAME(type, n, name) \
+//     BOOST_COMPUTE_TYPE_NAME(type, name) \
+//     namespace boost { namespace compute { \
+//     namespace detail { \
+//     inline meta_kernel& operator<<(meta_kernel &k, type x) \
+//     { \
+//         k << "(" << type_name<type>() << ")"; \
+//         k << "("; \
+//         for(size_t i = 0; i < n; i++){ \
+//             k << k.lit(x.s[i]); \
+//             \
+//             if(i != n - 1){ \
+//                 k << ","; \
+//             } \
+//         } \
+//         k << ")"; \
+//         return k; \
+//     } \
+//     }}}
+//
+// // This is for cl_typeN structs
+// #define BOOST_COMPUTE_ADAPT_CL_VECTOR_STRUCT(type, n) \
+//     BOOST_COMPUTE_ADAPT_CL_VECTOR_STRUCT_NAME(BOOST_PP_CAT(cl_, BOOST_PP_CAT(type, n)), n, BOOST_PP_CAT(type, n))

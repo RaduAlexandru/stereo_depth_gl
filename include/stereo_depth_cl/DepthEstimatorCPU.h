@@ -52,11 +52,11 @@ struct ImmaturePoint{
     float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
     float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
     float mu;                    //!< Mean of normal distribution.
-    float z_range;               //!< Max range of the possible depth.
+    float z_range;               //!< Max range of the possible depth. //TODO only read
     float sigma2;                //!< Variance of normal distribution.
-    float idepth_min;
+    float idepth_min; //not necesary
     float idepth_max;
-	float energyTH;
+	float energyTH; //outside
     float quality;
     Eigen::Vector3d f; // heading range = Ki * (u,v,1)
 	ImmaturePointStatus lastTraceStatus;
@@ -68,7 +68,7 @@ struct ImmaturePoint{
 	// Vec2f colorD[MAX_RES_PER_POINT];
 	// Vec2f colorGrad[MAX_RES_PER_POINT];
 	// Vec2f rotatetPattern[MAX_RES_PER_POINT];
-	bool skipZero [MAX_RES_PER_POINT];
+	bool skipZero [MAX_RES_PER_POINT]; //not really used
 
 	float ncc_sum_templ;
 	float ncc_const_templ;

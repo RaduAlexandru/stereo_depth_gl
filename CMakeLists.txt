@@ -33,7 +33,7 @@ find_package(GLFW REQUIRED)
 find_package(GLM REQUIRED)
 find_package(LIBIGL REQUIRED)
 find_package(nanoflann)
-find_package(Boost REQUIRED COMPONENTS system thread filesystem)
+# find_package(Boost 1.64 REQUIRED COMPONENTS system thread filesystem)
 find_package(kqueue REQUIRED)
 find_package(OpenCL REQUIRED)
 find_package(Ceres REQUIRED)
@@ -120,7 +120,7 @@ message("libigl definitions: ${LIBIGL_DEFINITIONS}")
 include_directories(${PROJECT_INCLUDE_DIR} ${catkin_INCLUDE_DIRS})
 include_directories(${EIGEN3_INCLUDE_DIR})
 include_directories(${OpenCV_INCLUDE_DIRS})
-include_directories(${Boost_INCLUDE_DIR})
+include_directories("/media/alex/Data/Programs_linux/boost/boost_1_64_0")
 include_directories(${GLFW_INCLUDE_DIR})
 #include_directories(${OPENGL_INCLUDE_DIR})
 include_directories(${GLM_INCLUDE_DIRS})
@@ -164,9 +164,12 @@ target_link_libraries(TINY_PROCESS_LIB ${CMAKE_THREAD_LIBS_INIT})
 set_target_properties(TINY_PROCESS_LIB PROPERTIES LINKER_LANGUAGE C)
 
 
+#Boost 1.64 libraries
+file(GLOB Boost_libs_164 /media/alex/Data/Programs_linux/boost/boost_1_64_0/*.so /media/alex/Data/Programs_linux/boost/boost_1_64_0/*.a)
+
 
 add_executable(stereo_depth_cl ${MY_SRC}  deps/GL/glad.c deps/dir_watcher/dir_watcher.cpp  ${IMGUI_SRC}  ${LIBIGL_EXTRA_SOURCES}  )
-target_link_libraries(stereo_depth_cl ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${OpenCV_LIBS}    ${GLFW_LIBRARIES} TINY_PROCESS_LIB
+target_link_libraries(stereo_depth_cl ${catkin_LIBRARIES} ${Boost_libs_164} ${OpenCV_LIBS}    ${GLFW_LIBRARIES} TINY_PROCESS_LIB
           ${KQUEUE_LIBRARIES}
           ${LIBIGL_LIBRARIES}
           ${LIBIGL_EXTRA_LIBRARIES}
