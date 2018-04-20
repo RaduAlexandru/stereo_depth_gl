@@ -26,7 +26,7 @@
 #define NUM_CLASSES 66
 
 //forward declarations
-class DepthEstimatorCPU;
+// class DepthEstimatorCPU;
 class DepthEstimatorRenegade;
 class DepthEstimatorGL;
 class Profiler;

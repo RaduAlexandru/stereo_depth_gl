@@ -8,7 +8,7 @@
 #include "stereo_depth_cl/MiscUtils.h"
 #include "stereo_depth_cl/Profiler.h"
 #include "stereo_depth_cl/RosBagPlayer.h"
-#include "stereo_depth_cl/DepthEstimatorCPU.h"
+// #include "stereo_depth_cl/DepthEstimatorCPU.h"
 #include "stereo_depth_cl/DepthEstimatorRenegade.h"
 #include "stereo_depth_cl/DepthEstimatorGL.h"
 #include "stereo_depth_cl/DataLoader.h"
@@ -467,7 +467,7 @@ void Core::write_obj(){
 void Core::compute_camera_frustum_mesh(Mesh& frustum_mesh, const Frame& frame){
     // https://gamedev.stackexchange.com/questions/29999/how-do-i-create-a-bounding-frustum-from-a-view-projection-matrix
 
-    Eigen::Matrix4f proj=intrinsics_to_opengl_proj(frame.K, frame.rgb.cols, frame.rgb.rows, 0.5, 2.5);
+    Eigen::Matrix4f proj=intrinsics_to_opengl_proj(frame.K.cast<double>(), frame.rgb.cols, frame.rgb.rows, 0.5, 2.5);
     Eigen::Matrix4f view= frame.tf_cam_world.matrix().cast<float>();
     Eigen::Matrix4f view_projection= proj*view;
     Eigen::Matrix4f view_projection_inv=view_projection.inverse();

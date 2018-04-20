@@ -97,44 +97,67 @@ Mesh DepthEstimatorGL::compute_depth(){
 
 
     //upload to gpu the inmature points
+    TIME_START_GL("upload_immature_points");
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
     glBufferData(GL_SHADER_STORAGE_BUFFER, immature_points.size() * sizeof(Point), immature_points.data(), GL_DYNAMIC_COPY);
+    TIME_END_GL("upload_immature_points");
 
 
-    for (size_t i = 1; i < 2; i++) {
-        const Eigen::Affine3d tf_cur_host = frames[i].tf_cam_world * frames[0].tf_cam_world.inverse();
-        const Eigen::Affine3d tf_host_cur = tf_cur_host.inverse();
-        const Eigen::Matrix3d KRKi_cr = frames[i].K * tf_cur_host.linear() * frames[0].K.inverse();
-        const Eigen::Vector3d Kt_cr = frames[i].K * tf_cur_host.translation();
-        const Eigen::Vector2d affine_cr = estimate_affine( immature_points, frames[i], KRKi_cr, Kt_cr);
+    for (size_t i = 1; i < frames.size(); i++) {
+        TIME_START_GL("update_depth");
+
+        TIME_START_GL("calculate_matrices");
+        const Eigen::Affine3f tf_cur_host = frames[i].tf_cam_world * frames[0].tf_cam_world.inverse();
+        const Eigen::Affine3f tf_host_cur = tf_cur_host.inverse();
+        const Eigen::Matrix3f KRKi_cr = frames[i].K * tf_cur_host.linear() * frames[0].K.inverse();
+        const Eigen::Vector3f Kt_cr = frames[i].K * tf_cur_host.translation();
+        const Eigen::Vector2f affine_cr = estimate_affine( immature_points, frames[i], KRKi_cr, Kt_cr);
         const double focal_length = abs(frames[i].K(0,0));
         double px_noise = 1.0;
         double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
+        Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
+
+        std::cout << "pattern_rot has nr of points " << pattern_rot.get_nr_points() << '\n';
+        for (size_t i = 0; i < pattern_rot.get_nr_points(); i++) {
+            std::cout << "offset for i " << i << " is " << pattern_rot.get_offset(i).transpose() << '\n';
+        }
+
+        TIME_END_GL("calculate_matrices");
 
         //upload the image
-        //TODO
+        TIME_START_GL("upload_gray_img");
         int size_bytes=frames[i].gray.step[0] * frames[i].gray.rows;
-        std::cout << "size byts is " << size_bytes << '\n';
-        std::cout << "type of img gray is " << type2string(frames[i].gray.type()) << '\n';
         m_cur_frame.upload_data(GL_R32F, frames[i].gray.cols, frames[i].gray.rows, GL_RED, GL_FLOAT, frames[i].gray.ptr(), size_bytes);
+        TIME_END_GL("upload_gray_img");
 
 
 
         //upload the matrices
-        //TODO
+        TIME_START_GL("upload_matrices");
+        Eigen::Vector2f frame_size;
+        frame_size<< frames[i].gray.cols, frames[i].gray.rows;
+        glUniform2fv(glGetUniformLocation(m_update_depth_prog_id,"frame_size"), 1, frame_size.data());
+        glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_cur_host"), 1, GL_FALSE, tf_cur_host.data());
+        glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_host_cur"), 1, GL_FALSE, tf_host_cur.data());
+        glUniformMatrix3fv(glGetUniformLocation(m_update_depth_prog_id,"K"), 1, GL_FALSE, frames[i].K.data());
+        glUniformMatrix3fv(glGetUniformLocation(m_update_depth_prog_id,"KRKi_cr"), 1, GL_FALSE, KRKi_cr.data());
+        glUniform3fv(glGetUniformLocation(m_update_depth_prog_id,"Kt_cr"), 1, Kt_cr.data());
+        glUniform2fv(glGetUniformLocation(m_update_depth_prog_id,"affine_cr"), 1, affine_cr.data());
+        glUniform1f(glGetUniformLocation(m_update_depth_prog_id,"px_error_angle"), px_error_angle);
+        glUniform2fv(glGetUniformLocation(m_update_depth_prog_id,"pattern_rot_offsets"), m_pattern.get_nr_points(), m_pattern.get_offset_matrix().data()); //upload all the offses as an array of vec2 offsets
+        glUniform1i(glGetUniformLocation(m_update_depth_prog_id,"pattern_rot_nr_points"), m_pattern.get_nr_points());
+        TIME_END_GL("upload_matrices");
 
 
         // tf_cur_host, tf_host_cur, KRKi_cr, Kt_cr, affine_cr, px_error_angle
-        std::cout << "exeuting kernel" << '\n';
         TIME_START_GL("depth_update_kernel");
         glUseProgram(m_update_depth_prog_id);
-
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_points_gl_buf);
         bind_for_sampling(m_cur_frame, 1, glGetUniformLocation(m_update_depth_prog_id,"gray_img_sampler") );
-
-        glDispatchCompute(immature_points.size()/32, 1, 1);
-
+        glDispatchCompute(immature_points.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
         TIME_END_GL("depth_update_kernel");
+
+        TIME_END_GL("update_depth");
     }
 
 
@@ -163,7 +186,7 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
    std::string filename_gt = dataset_path + "/livingRoom2.gt.freiburg";
 
    //K is from here https://www.doc.ic.ac.uk/~ahanda/VaFRIC/codes.html
-   Eigen::Matrix3d K;
+   Eigen::Matrix3f K;
    K.setZero();
    K(0,0)=481.2; //fx
    K(1,1)=-480; //fy
@@ -191,10 +214,10 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
       }
 
       if ( ! depthFileName.empty() ){
-         Eigen::Affine3d pose_wc = Eigen::Affine3d::Identity();
+         Eigen::Affine3f pose_wc = Eigen::Affine3f::Identity();
          pose_wc.translation() << tx,ty,tz;
-         pose_wc.linear() = Eigen::Quaterniond(qw,qx,qy,qz).toRotationMatrix();
-         Eigen::Affine3d pose_cw = pose_wc.inverse();
+         pose_wc.linear() = Eigen::Quaternionf(qw,qx,qy,qz).toRotationMatrix();
+         Eigen::Affine3f pose_cw = pose_wc.inverse();
 
          cv::Mat rgb_cv=cv::imread(dataset_path + "/" + colorFileName);
          cv::Mat depth_cv=cv::imread(dataset_path + "/" + depthFileName, CV_LOAD_IMAGE_UNCHANGED);
@@ -247,7 +270,7 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
         for (size_t j = 10; j < frame.gray.cols-10; j++) {
 
             //check if this point has enough determinant in the hessian
-            Eigen::Matrix2d gradient_hessian;
+            Eigen::Matrix2f gradient_hessian;
             gradient_hessian.setZero();
             for (size_t p = 0; p < m_pattern.get_nr_points(); p++) {
                 int dx = m_pattern.get_offset_x(p);
@@ -256,7 +279,7 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                 float gradient_x=grad_x.at<float>(i+dy,j+dx); //TODO should be interpolated
                 float gradient_y=grad_y.at<float>(i+dy,j+dx);
 
-                Eigen::Vector2d grad;
+                Eigen::Vector2f grad;
                 grad << gradient_x, gradient_y;
                 // std::cout << "gradients are " << gradient_x << " " << gradient_y << '\n';
 
@@ -272,7 +295,7 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                 // point.gradH=gradient_hessian;
 
                 //Seed::Seed
-                Eigen::Vector3d f_eigen = (frame.K.inverse() * Eigen::Vector3d(point.u,point.v,1)).normalized();
+                Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.u,point.v,1)).normalized();
                 point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
 
                 //start at an initial value for depth at around 4 meters (depth_filter->Seed::reinit)
@@ -286,6 +309,7 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                 float z_inv_max = std::max<float>(point.mu- sqrt(point.sigma2), 0.00000001f);
                 point.idepth_min = z_inv_min;
                 point.idepth_max = z_inv_max;
+                // std::cout << "point ideph min and max is " << point.idepth_min << " " << point.idepth_max << '\n';
 
                 point.a=10.0;
                 point.b=10.0;
@@ -300,7 +324,7 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
 
                 //get data for the color of that point (depth_point->ImmaturePoint::ImmaturePoint)---------------------
                 for(int p_idx=0;p_idx<m_pattern.get_nr_points();p_idx++){
-                    Eigen::Vector2d offset = m_pattern.get_offset(p_idx);
+                    Eigen::Vector2f offset = m_pattern.get_offset(p_idx);
 
                     point.color[p_idx]=texture_interpolate(frame.gray, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
 
@@ -343,7 +367,7 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
     return immature_points;
 }
 
-Eigen::Vector2d DepthEstimatorGL::estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr){
+Eigen::Vector2f DepthEstimatorGL::estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr){
     ceres::Problem problem;
     ceres::LossFunction * loss_function = new ceres::HuberLoss(1);
     double scaleA = 1;
@@ -363,8 +387,8 @@ Eigen::Vector2d DepthEstimatorGL::estimate_affine(std::vector<Point>& immature_p
 
         if ( 1.0/point.gt_depth > 0 ) {
 
-            const Eigen::Vector3d p = KRKi_cr * Eigen::Vector3d(point.u,point.v,1) + Kt_cr*  (1.0/point.gt_depth);
-            Eigen::Vector2d kp_GT = p.hnormalized();
+            const Eigen::Vector3f p = KRKi_cr * Eigen::Vector3f(point.u,point.v,1) + Kt_cr*  (1.0/point.gt_depth);
+            Eigen::Vector2f kp_GT = p.hnormalized();
 
 
             if ( kp_GT(0) > 4 && kp_GT(0) < cur_frame.gray.cols-4 && kp_GT(1) > 3 && kp_GT(1) < cur_frame.gray.rows-4 ) {
@@ -372,7 +396,7 @@ Eigen::Vector2d DepthEstimatorGL::estimate_affine(std::vector<Point>& immature_p
                 Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
 
                 for(int idx=0;idx<m_pattern.get_nr_points();++idx) {
-                    Eigen::Vector2d offset=pattern_rot.get_offset(idx);
+                    Eigen::Vector2f offset=pattern_rot.get_offset(idx);
 
                     color_cur_frame[idx]=texture_interpolate(cur_frame.gray, kp_GT(0)+offset(0), kp_GT(1)+offset(1) , InterpolType::LINEAR);
                     color_host_frame[idx]=point.color[idx];
@@ -402,7 +426,7 @@ Eigen::Vector2d DepthEstimatorGL::estimate_affine(std::vector<Point>& immature_p
     ceres::Solve( solver_options, & problem, & summary );
     //std::cout << summary.FullReport() << std::endl;
     std::cout << "scale= " << scaleA << " offset= "<< offsetB << std::endl;
-    return Eigen::Vector2d ( scaleA, offsetB );
+    return Eigen::Vector2f ( scaleA, offsetB );
 }
 
 float DepthEstimatorGL::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type){
@@ -441,16 +465,16 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
 
         // if(std::isfinite(immature_points[i].mu) && immature_points[i].mu>=0.1){
             //backproject the immature point
-            Eigen::Vector3d point_screen;
+            Eigen::Vector3f point_screen;
             point_screen << u, v, 1.0;
-            Eigen::Vector3d point_dir=frames[0].K.inverse()*point_screen; //TODO get the K and also use the cam to world corresponding to the immature point
+            Eigen::Vector3f point_dir=frames[0].K.inverse()*point_screen; //TODO get the K and also use the cam to world corresponding to the immature point
             // point_dir.normalize(); //this is just the direction (in cam coordinates) of that pixel
-            Eigen::Vector3d point_cam = point_dir*depth;
+            Eigen::Vector3f point_cam = point_dir*depth;
             point_cam(2)=-point_cam(2); //flip the depth because opengl has a camera which looks at the negative z axis (therefore, more depth means a more negative number)
 
-            Eigen::Vector3d point_world=frames[0].tf_cam_world.inverse()*point_cam;
+            Eigen::Vector3f point_world=frames[0].tf_cam_world.inverse()*point_cam;
 
-            mesh.V.row(i)=point_world;
+            mesh.V.row(i)=point_world.cast<double>();
         // }
 
 
@@ -458,10 +482,10 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
 
     //make also some colors based on depth
     mesh.C.resize(immature_points.size(),3);
-    // double min_z, max_z;
-    // min_z = mesh.V.col(2).minCoeff();
-    // max_z = mesh.V.col(2).maxCoeff();
-    // std::cout << "min max z is " << min_z << " " << max_z << '\n';
+    double min_z, max_z;
+    min_z = mesh.V.col(2).minCoeff();
+    max_z = mesh.V.col(2).maxCoeff();
+    std::cout << "min max z is " << min_z << " " << max_z << '\n';
     // for (size_t i = 0; i < mesh.C.rows(); i++) {
     //     float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
     //     mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;

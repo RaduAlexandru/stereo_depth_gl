@@ -117,7 +117,7 @@ void Texturer::texture_scene(const int object_id, const Frame& frame){
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_shadow);
     glClear(GL_DEPTH_BUFFER_BIT);
     glViewport(0,0,width,height);
-    Eigen::Matrix4f proj=intrinsics_to_opengl_proj(frame.K, width, height);
+    Eigen::Matrix4f proj=intrinsics_to_opengl_proj(frame.K.cast<double>(), width, height);
     Eigen::Matrix4f view= frame.tf_cam_world.matrix().cast<float>();
     Eigen::Matrix4f model= Eigen::Matrix4f::Identity();
     Eigen::Matrix4f mvp= proj*view*model;

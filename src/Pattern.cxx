@@ -36,37 +36,41 @@ void Pattern::init_pattern(const std::string& pattern_filepath){
         }
     }
 
-    m_offsets.resize(offsets_x.size(), 2);
+    m_offsets.resize(2, offsets_x.size());
     for (int i = 0; i < offsets_x.size(); ++i) {
-        m_offsets.row(i) << offsets_x[i] , offsets_y[i];
+        m_offsets.col(i) << offsets_x[i] , offsets_y[i];
     }
 
 }
 
 int Pattern::get_nr_points(){
 //    return m_offsets_x.size();
-    return m_offsets.rows();
+    return m_offsets.cols();
 }
 
-Eigen::Vector2d Pattern::get_offset(const int point_idx){
+Eigen::Vector2f Pattern::get_offset(const int point_idx){
 //    Eigen::Vector2d offsets;
 //    offsets << m_offsets_x[point_idx], m_offsets_y[point_idx];
 //    return offsets;
-    return m_offsets.row(point_idx);
+    return m_offsets.col(point_idx);
 }
 
 
 int Pattern::get_offset_x(const int point_idx){
 //    return m_offsets_x[point_idx];
-    return m_offsets(point_idx,0);
+    return m_offsets(0,point_idx);
 }
 
 int Pattern::get_offset_y(const int point_idx){
 //    return m_offsets_y[point_idx];
-    return m_offsets(point_idx,1);
+    return m_offsets(1,point_idx);
 }
 
-Pattern Pattern::get_rotated_pattern(const Eigen::Matrix2d& rotation){
+Eigen::MatrixXf Pattern::get_offset_matrix(){
+    return m_offsets;
+}
+
+Pattern Pattern::get_rotated_pattern(const Eigen::Matrix2f& rotation){
 //    Pattern rotated_pattern;
 //    rotated_pattern.m_offsets_x=m_offsets_x;
 //    rotated_pattern.m_offsets_y=m_offsets_y;
@@ -82,11 +86,10 @@ Pattern Pattern::get_rotated_pattern(const Eigen::Matrix2d& rotation){
 
     Pattern rotated_pattern;
     rotated_pattern.m_offsets=m_offsets;
-    for (int i = 0; i < m_offsets.rows(); ++i) {
-        rotated_pattern.m_offsets.row(i)=rotation*m_offsets.row(i).transpose();
+    for (int i = 0; i < m_offsets.cols(); ++i) {
+        rotated_pattern.m_offsets.col(i)=rotation*m_offsets.col(i);
     }
 //    rotated_pattern.m_offsets=rotation*m_offsets.transpose();
     return rotated_pattern;
 
 }
-

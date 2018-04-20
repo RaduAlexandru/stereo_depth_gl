@@ -16,10 +16,12 @@ public:
     ~Pattern();
     void init_pattern(const std::string& pattern_filepath);
     int get_nr_points(); //nr of active points in the pattern (black pixels of the image)
-    Eigen::Vector2d get_offset(const int point_idx); //offset in x,y
+    Eigen::Vector2f get_offset(const int point_idx); //offset in x,y
     int get_offset_x(const int point_idx);
     int get_offset_y(const int point_idx);
-    Pattern get_rotated_pattern(const Eigen::Matrix2d& rotation);
+    Eigen::MatrixXf get_offset_matrix();
+    Pattern get_rotated_pattern(const Eigen::Matrix2f& rotation);
+
 
 
 private:
@@ -28,7 +30,7 @@ private:
 //    std::vector<int> m_offsets_x; //ofsets of the pattern points with repect to the central pixel
 //    std::vector<int> m_offsets_y;
 
-    Eigen::MatrixXd m_offsets; //Nx2 ofsets of the pattern points with repect to the central pixel (x,y)
+    Eigen::MatrixXf m_offsets; //2xN ofsets of the pattern points with repect to the central pixel (x,y)
 
 
 };

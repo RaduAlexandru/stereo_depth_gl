@@ -49,10 +49,10 @@ public:
     std::shared_ptr<RosBagPlayer> m_player;
 
     //transforms
-    Eigen::Affine3d m_tf_alg_vel; //transformation from velodyne frame to the algorithm frame
-    Eigen::Affine3d m_tf_baselink_vel;
-    Eigen::Affine3d m_tf_worldGL_worldROS;
-    std::unordered_map<uint64_t, Eigen::Affine3d> m_worldROS_baselink_map;
+    Eigen::Affine3f m_tf_alg_vel; //transformation from velodyne frame to the algorithm frame
+    Eigen::Affine3f m_tf_baselink_vel;
+    Eigen::Affine3f m_tf_worldGL_worldROS;
+    std::unordered_map<uint64_t, Eigen::Affine3f> m_worldROS_baselink_map;
 
 private:
 
@@ -82,9 +82,9 @@ private:
 
     void init_params();
     void callback(const sensor_msgs::CompressedImageConstPtr &img_msg, const int cam_id);
-    bool get_tf(Eigen::Affine3d& tf, const std::string& origin_frame, const std::string& dest_frame, const ros::Time query_time );
+    bool get_tf(Eigen::Affine3f& tf, const std::string& origin_frame, const std::string& dest_frame, const ros::Time query_time );
     void read_pose_file();
-    bool get_pose_at_timestamp(Eigen::Affine3d& pose, uint64_t timestamp);
+    bool get_pose_at_timestamp(Eigen::Affine3f& pose, uint64_t timestamp);
     void create_transformation_matrices();
 
 

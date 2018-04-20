@@ -179,7 +179,7 @@ void DataLoader::callback(const sensor_msgs::CompressedImageConstPtr &img_msg, c
 
 
     //POSE---
-    Eigen::Affine3d sensor_pose;  //maps from baselink to world ros
+    Eigen::Affine3f sensor_pose;  //maps from baselink to world ros
     uint64_t rounded_timestamp= (uint64_t)std::round(img_msg->header.stamp.toNSec()/100000000.0);
     if (!get_pose_at_timestamp(sensor_pose, rounded_timestamp)){
         LOG(WARNING) << "Not found any pose at timestamp " << rounded_timestamp << " Discarding";
@@ -187,14 +187,14 @@ void DataLoader::callback(const sensor_msgs::CompressedImageConstPtr &img_msg, c
     }
     sensor_pose=m_tf_worldGL_worldROS*sensor_pose; // from baselink to world ros and from world ros to worlf_gl (now sensor pose maps from baselink to world_gl)
     //TODO read K from the cam info
-    Eigen::Matrix3d K;
+    Eigen::Matrix3f K;
     K << 2404.76891592, 0, 1245.04813256,
             0, 2400.9170077, 1003.61646891,
             0, 0, 1;
-    Eigen::Affine3d tf_cam_baselink;
+    Eigen::Affine3f tf_cam_baselink;
     // VLOG(2) << "get tf";
     get_tf(tf_cam_baselink, "base_link", m_cam_frames[cam_id], ros::Time(0) ); // ros::Time(0) means we get the latest known transform
-    Eigen::Affine3d tf_cam_world= tf_cam_baselink *sensor_pose.inverse(); //from world_gl to baselink and from baselink to cam
+    Eigen::Affine3f tf_cam_world= tf_cam_baselink *sensor_pose.inverse(); //from world_gl to baselink and from baselink to cam
 
     frame.K=K;
     frame.tf_cam_world=tf_cam_world;
@@ -218,7 +218,7 @@ void DataLoader::set_mask_for_cam(const std::string mask_filename, const int cam
     m_masks[cam_id]=mask;
 }
 
-bool DataLoader::get_tf(Eigen::Affine3d& tf, const std::string& origin_frame, const std::string& dest_frame, const ros::Time query_time ) {
+bool DataLoader::get_tf(Eigen::Affine3f& tf, const std::string& origin_frame, const std::string& dest_frame, const ros::Time query_time ) {
     tf::StampedTransform tf_transform;
     try {
         m_tf_listener.lookupTransform( dest_frame, origin_frame, query_time, tf_transform );
@@ -226,7 +226,9 @@ bool DataLoader::get_tf(Eigen::Affine3d& tf, const std::string& origin_frame, co
                 LOG(WARNING) << "exc.what()";
         return false;
     }
-    transformTFToEigen( tf_transform, tf );
+    Eigen::Affine3d tf_double;
+    transformTFToEigen( tf_transform, tf_double );
+    tf=tf_double.cast<float>();
     return true;
 }
 
@@ -234,8 +236,8 @@ void DataLoader::read_pose_file(){
     std::ifstream infile( "/media/alex/Data/Master/SHK/c_ws/src/laser_mesher/data/graph_viewer_scan_poses_00.txt" );
     uint64_t scan_nr;
     uint64_t timestamp;
-    Eigen::Vector3d position;
-    Eigen::Quaterniond quat;
+    Eigen::Vector3f position;
+    Eigen::Quaternionf quat;
 
 
     std::string line;
@@ -245,7 +247,7 @@ void DataLoader::read_pose_file(){
             >> position(0) >> position(1) >> position(2)
             >> quat.w() >> quat.x() >> quat.y() >> quat.z();
 //        std::cout << "input is \n" << scan_nr << " " << timestamp << " " << position << " " << quat.matrix()  << "\n";
-        Eigen::Affine3d pose;
+        Eigen::Affine3f pose;
         pose.matrix().block<3,3>(0,0)=quat.toRotationMatrix();
         pose.matrix().block<3,1>(0,3)=position;
         timestamp=(uint64_t)std::round(timestamp/100000.0); ////TODO this is a dirty hack to reduce the discretization of time because the timestamps don't exactly match
@@ -256,7 +258,7 @@ void DataLoader::read_pose_file(){
 
 }
 
-bool DataLoader::get_pose_at_timestamp(Eigen::Affine3d& pose, uint64_t timestamp){
+bool DataLoader::get_pose_at_timestamp(Eigen::Affine3f& pose, uint64_t timestamp){
 
     auto got = m_worldROS_baselink_map.find (timestamp);
 
@@ -312,26 +314,26 @@ void DataLoader::create_transformation_matrices(){
      * */
 
     m_tf_alg_vel.setIdentity();
-    Eigen::Matrix3d alg_vel_rot;
+    Eigen::Matrix3f alg_vel_rot;
     // rot = Eigen::AngleAxisd(-0.5*M_PI, Eigen::Vector3d::UnitZ())  //this rotation is done second and rotates around the Z axis of the velodyne frame but after it was rotated by the first rotation.
     //   * Eigen::AngleAxisd(0.5*M_PI, Eigen::Vector3d::UnitY());   //this rotation is done first. Performed on the Y axis of the velodyne frame (after this the y is pointing left, x is up and z is towards the camera)
     // // m_tf_alg_vel.matrix().block<3,3>(0,0)=rot.transpose();
 
-    alg_vel_rot = Eigen::AngleAxisd(-0.5*M_PI+M_PI, Eigen::Vector3d::UnitY())  //this rotation is done second and rotates around the Y axis of alg frame
-                  * Eigen::AngleAxisd(0.5*M_PI, Eigen::Vector3d::UnitX());   //this rotation is done first. Performed on the X axis of alg frame (after this the y is pointing towards camera, x is right and z is down)
+    alg_vel_rot = Eigen::AngleAxisf(-0.5*M_PI+M_PI, Eigen::Vector3f::UnitY())  //this rotation is done second and rotates around the Y axis of alg frame
+                  * Eigen::AngleAxisf(0.5*M_PI, Eigen::Vector3f::UnitX());   //this rotation is done first. Performed on the X axis of alg frame (after this the y is pointing towards camera, x is right and z is down)
     m_tf_alg_vel.matrix().block<3,3>(0,0)=alg_vel_rot;
 
 
 
     m_tf_baselink_vel.setIdentity();
-    Eigen::Vector3d baselink_vel_t(-0.000, -0.000, -0.177);
+    Eigen::Vector3f baselink_vel_t(-0.000, -0.000, -0.177);
     // Eigen::Quaterniond baselink_vel_quat(-0.692, 0.722, -0.000, -0.000);
 
     //TODO the quaternion didn't quite work here
-    Eigen::AngleAxisd rollAngle(-3.142, Eigen::Vector3d::UnitX());
-    Eigen::AngleAxisd yawAngle(0.0, Eigen::Vector3d::UnitY());
-    Eigen::AngleAxisd pitchAngle(-1.614, Eigen::Vector3d::UnitZ());
-    Eigen::Quaternion<double> baselink_vel_quat = pitchAngle * yawAngle * rollAngle;
+    Eigen::AngleAxisf rollAngle(-3.142, Eigen::Vector3f::UnitX());
+    Eigen::AngleAxisf yawAngle(0.0, Eigen::Vector3f::UnitY());
+    Eigen::AngleAxisf pitchAngle(-1.614, Eigen::Vector3f::UnitZ());
+    Eigen::Quaternion<float> baselink_vel_quat = pitchAngle * yawAngle * rollAngle;
 
     m_tf_baselink_vel.matrix().block<3,3>(0,0)=baselink_vel_quat.toRotationMatrix();
     m_tf_baselink_vel.matrix().block<3,1>(0,3)=baselink_vel_t;
@@ -357,8 +359,8 @@ void DataLoader::create_transformation_matrices(){
 
 
     m_tf_worldGL_worldROS.setIdentity();
-    Eigen::Matrix3d worldGL_worldROS_rot;
-    worldGL_worldROS_rot = Eigen::AngleAxisd(-0.5*M_PI, Eigen::Vector3d::UnitX());
+    Eigen::Matrix3f worldGL_worldROS_rot;
+    worldGL_worldROS_rot = Eigen::AngleAxisf(-0.5*M_PI, Eigen::Vector3f::UnitX());
     m_tf_worldGL_worldROS.matrix().block<3,3>(0,0)=worldGL_worldROS_rot;
 
 

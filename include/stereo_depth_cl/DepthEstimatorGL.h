@@ -153,7 +153,7 @@ public:
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
     Mesh compute_depth();
     std::vector<Point> create_immature_points (const Frame& frame);
-    Eigen::Vector2d estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr);
+    Eigen::Vector2f estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
     Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames);
 
