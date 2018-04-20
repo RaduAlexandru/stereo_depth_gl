@@ -7,31 +7,27 @@
 //OpenCV
 #include <opencv2/highgui/highgui.hpp>
 
-//opencl
-#define CL_HPP_ENABLE_EXCEPTIONS
-#define CL_HPP_TARGET_OPENCL_VERSION 200
-#include "CL/cl2.hpp"
-#include <CL/cl.h>
-// #include "CL/cl.hpp"
-#include "Image2DSafe.h"
 
 //My stuff
 #include "stereo_depth_cl/Mesh.h"
 #include "stereo_depth_cl/Scene.h"
 #include "stereo_depth_cl/DataLoader.h"
 #include "stereo_depth_cl/Pattern.h"
+#include "Texture2D.h"
 
 //ceres
 #include "ceres/ceres.h"
 #include "ceres/cubic_interpolation.h"
 #include "ceres/rotation.h"
 
-//boost compute
-#include <boost/compute.hpp>
-#include <boost/compute/types/struct.hpp>
+//GL
+#include <GL/glad.h>
+#include <glm/glm.hpp>
+#include <glm/glm.hpp>
+
 
 //TODO settings that should be refactored into a config file
-const int cl_MAX_RES_PER_POINT = 10;
+const int cl_MAX_RES_PER_POINT = 16;
 const float cl_setting_outlierTH = 12*12;					// higher -> less strict
 const float cl_setting_overallEnergyTHWeight = 1;
 const float cl_setting_outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
@@ -48,9 +44,10 @@ enum class PointStatus {
     DELETED,                            // merged with other point or deleted
     UNINITIALIZED};			// not even traced once.
 
+//needs to be 16 bytes aligned as explained by john conor here https://www.opengl.org/discussion_boards/showthread.php/199303-How-to-get-Uniform-Block-Buffers-to-work-correctly
 struct Point{
-    cl_int idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
-    cl_float u,v; //position in host frame of the point
+    int idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
+    float u,v; //position in host frame of the point
 
     // cl_float test_array[16];
     // cl_int test_bool_array[16]; //--break it
@@ -58,39 +55,43 @@ struct Point{
     // // cl_bool bool_2;
     //  cl_int test_int_array[16];
 
-    cl_float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
-    cl_float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
-    cl_float mu;                    //!< Mean of normal distribution.
-    cl_float z_range;               //!< Max range of the possible depth.
-    cl_float sigma2;                //!< Variance of normal distribution.
-    cl_float idepth_min;
-    cl_float idepth_max;
-    cl_float energyTH;
-    cl_float quality;
-    cl_float3 f; // heading range = Ki * (u,v,1)
-    // PointStatus lastTraceStatus;
-    // cl_bool converged;
-    // cl_bool is_outlier;
-
-    cl_float color[cl_MAX_RES_PER_POINT]; 		// colors in host frame
-    cl_float weights[cl_MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
+    float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
+    float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
+    float mu;                    //!< Mean of normal distribution.
+    float z_range;               //!< Max range of the possible depth.
+    float sigma2;                //!< Variance of normal distribution.
+    float idepth_min;
+    float idepth_max;
+    float energyTH;
+    float quality;
+    glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
+    // float f[4]; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
+    // // PointStatus lastTraceStatus;
+    // // cl_bool converged;
+    // // cl_bool is_outlier;
+    //
+    float color[cl_MAX_RES_PER_POINT]; 		// colors in host frame
+    float weights[cl_MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
     // Vec2f colorD[MAX_RES_PER_POINT];
     // Vec2f colorGrad[MAX_RES_PER_POINT];
     // Vec2f rotatetPattern[MAX_RES_PER_POINT];
     // cl_bool skipZero [cl_MAX_RES_PER_POINT];
-
-    cl_float ncc_sum_templ;
-    cl_float ncc_const_templ;
+    //
+    float ncc_sum_templ;
+    float ncc_const_templ;
 
     //Stuff that may be to be removed
-    cl_float2 kp_GT;
-    // cl_float kp_GT[2];
+    glm::vec2 kp_GT;
+    // // cl_float kp_GT[2];
     //
     //
     //debug stuff
-    cl_float gradient_hessian_det;
-    cl_int last_visible_frame;
-    cl_float gt_depth;
+    float gradient_hessian_det;
+    float gt_depth;
+    int last_visible_frame;
+
+    float debug; //serves as both debug and padding to 16 bytes
+    // float padding_1; //to gt the struc to be aligned to 16 bytes
 
 };
 
@@ -109,9 +110,9 @@ enum class InterpolType {
 //                                           gradient_hessian_det, last_visible_frame, gt_depth));
 
 
-struct  AffineAutoDiffCostFunctorCL
+struct  AffineAutoDiffCostFunctorGL
 {
-    explicit AffineAutoDiffCostFunctorCL( const double & refColor, const double & newColor )
+    explicit AffineAutoDiffCostFunctorGL( const double & refColor, const double & newColor )
             :  m_refColor( refColor ), m_newColor( newColor ){ }
 
     template<typename T>
@@ -121,7 +122,7 @@ struct  AffineAutoDiffCostFunctorCL
     }
     static ceres::CostFunction * Create ( const double & refColor, const double & newColor )
     {
-        return new ceres::AutoDiffCostFunction<AffineAutoDiffCostFunctorCL,1,1,1>( new AffineAutoDiffCostFunctorCL( refColor, newColor ) );
+        return new ceres::AutoDiffCostFunction<AffineAutoDiffCostFunctorGL,1,1,1>( new AffineAutoDiffCostFunctorGL( refColor, newColor ) );
     }
 
 private:
@@ -138,34 +139,24 @@ class Profiler;
 namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
 
 
-class DepthEstimatorCL{
+class DepthEstimatorGL{
 public:
 
 
 
 
-    DepthEstimatorCL();
-    ~DepthEstimatorCL(); //needed so that forward declarations work
-    void init_opencl();
+    DepthEstimatorGL();
+    ~DepthEstimatorGL(); //needed so that forward declarations work
+    void init_opengl();
 
     //start with everything
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
-    Mesh compute_depth(Frame& frame);
+    Mesh compute_depth();
     std::vector<Point> create_immature_points (const Frame& frame);
     Eigen::Vector2d estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr);
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
     Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames);
 
-	// Eigen::Vector2d estimate_affine( std::vector<ImmaturePoint>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr);
-	// float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolationType type=InterpolationType::NEAREST);
-	// std::vector<ImmaturePoint> create_immature_points ( const Frame& frame );
-	// void update_immature_points(std::vector<ImmaturePoint>& immature_points, const Frame& frame, const Eigen::Affine3d& tf_cur_host, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr, const Eigen::Vector2d& affine_cr);
-	// void search_epiline_bca(ImmaturePoint& point, const Frame& frame, const Eigen::Matrix3d& hostToFrame_KRKi, const Eigen::Vector3d& Kt_cr, const Eigen::Vector2d& affine_cr);
-	// void search_epiline_ncc(ImmaturePoint& point, const Frame& frame, const Eigen::Matrix3d& hostToFrame_KRKi, const Eigen::Vector3d& Kt_cr);
-    // void update_idepth(ImmaturePoint& point, const Eigen::Affine3d& tf_host_cur, const float z, const double px_error_angle);
-    // double compute_tau(const Eigen::Affine3d & tf_host_cur, const Eigen::Vector3d& f, const double z, const double px_error_angle);
-    // void updateSeed(ImmaturePoint& point, const float x, const float tau2);
-	// Mesh create_mesh(const std::vector<ImmaturePoint>& immature_points, const std::vector<Frame>& frame);
 
 
     // Scene get_scene();
@@ -177,36 +168,26 @@ public:
     std::shared_ptr<igl::opengl::glfw::Viewer> m_view;
 	Pattern m_pattern;
 
-    //opencl global stuff
-    cl::Context m_context;
-    cl::Device m_device;
-    cl::CommandQueue m_queue;
+    //gl stuff
+    GLuint m_points_gl_buf;
+    gl::Texture2D m_cur_frame;
 
-    //opencl things for processing the images
-    cl::Kernel m_kernel_simple_copy;
-    cl::Kernel m_kernel_blur;
-    cl::Kernel m_kernel_sobel;
-    cl::Kernel m_kernel_blurx;
-    cl::Kernel m_kernel_blury;
-    cl::Kernel m_kernel_blurx_fast;
-    cl::Kernel m_kernel_blury_fast;
-
-    //opencl things for depth estimation
-    cl::Kernel m_kernel_struct_test;
+    //gl shaders
+    GLuint m_update_depth_prog_id;
 
 
     //databasse
     std::atomic<bool> m_scene_is_modified;
 
     //params
-    bool m_cl_profiling_enabled;
+    bool m_gl_profiling_enabled;
     bool m_show_images;
 
 
 
 
 private:
-    void compile_kernels();
+    void compile_shaders();
 
 };
 
@@ -224,12 +205,12 @@ private:
 #define TIME_END(name)\
     TIME_END_2(name,m_profiler);
 
-#define TIME_START_CL(name)\
-    if (m_cl_profiling_enabled){ m_queue.finish();}\
+#define TIME_START_GL(name)\
+    if (m_gl_profiling_enabled) glFinish();\
     TIME_START_2(name,m_profiler);
 
-#define TIME_END_CL(name)\
-    if (m_cl_profiling_enabled){ m_queue.finish();}\
+#define TIME_END_GL(name)\
+    if (m_gl_profiling_enabled) glFinish();\
     TIME_END_2(name,m_profiler);
 
 

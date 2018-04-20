@@ -1,4 +1,4 @@
-#include "stereo_depth_cl/DepthEstimatorCL.h"
+#include "stereo_depth_cl/DepthEstimatorGL.h"
 
 //c++
 #include <cmath>
@@ -10,8 +10,9 @@
 //My stuff
 #include "stereo_depth_cl/Profiler.h"
 #include "stereo_depth_cl/MiscUtils.h"
-#include "UtilsCL.h"
 #include "cv_interpolation.h"
+#include "UtilsGL.h"
+#include "Shader.h"
 
 //Libigl
 #include <igl/opengl/glfw/Viewer.h>
@@ -24,16 +25,13 @@
 
 
 
-namespace compute = boost::compute;
-
-
-DepthEstimatorCL::DepthEstimatorCL():
+DepthEstimatorGL::DepthEstimatorGL():
         m_scene_is_modified(false),
-        m_cl_profiling_enabled(true),
+        m_gl_profiling_enabled(true),
         m_show_images(false)
         {
 
-    init_opencl();
+    init_opengl();
     std::string pattern_filepath="/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/pattern_1.png";
     m_pattern.init_pattern(pattern_filepath);
 
@@ -45,132 +43,29 @@ DepthEstimatorCL::DepthEstimatorCL():
 }
 
 //needed so that forward declarations work
-DepthEstimatorCL::~DepthEstimatorCL(){
+DepthEstimatorGL::~DepthEstimatorGL(){
 }
 
-void DepthEstimatorCL::init_opencl(){
-    VLOG(1) << "init opencl";
-    std::cout << "init opencl" << '\n';
+void DepthEstimatorGL::init_opengl(){
+    std::cout << "init opengl" << '\n';
 
+    glGenBuffers(1, &m_points_gl_buf);
 
-	// Get list of OpenCL platforms.
-	std::vector<cl::Platform> platforms;
-	cl::Platform::get(&platforms);
-	if (platforms.empty()) {
-	    std::cerr << "No platforms found." << std::endl;
-	    return;
-	}
+    m_cur_frame.set_wrap_mode(GL_CLAMP_TO_BORDER);
+    m_cur_frame.set_filter_mode(GL_LINEAR);
 
-    //get the platform that has opencl (in order to avoid getting the one with CUDA)
-    int idx_platform_chosen=-1;
-    for (size_t i = 0; i < platforms.size(); i++) {
-        std::string name=platforms[i].getInfo<CL_PLATFORM_NAME>();
-        // std::cout << "name of device is " << name << '\n';
-        if(name.find("OpenCL")!=std::string::npos){
-            idx_platform_chosen=i;
-        }
-    }
-    if (idx_platform_chosen==-1) {
-	    std::cerr << "OpenCL platforms not found." << std::endl;
-	    return;
-	}
+    compile_shaders();
 
-
-
-	// Get the first Intel GPU device
-    std::vector<cl::Device> devices_available;
-    platforms[idx_platform_chosen].getDevices(CL_DEVICE_TYPE_GPU, &devices_available);
-    std::cout << "found nr of devices " << devices_available.size() << '\n';
-    bool found_intel_device=false;
-    for (size_t i = 0; i < devices_available.size(); i++) {
-        std::string name=devices_available[i].getInfo<CL_DEVICE_NAME>();
-        // std::cout << "name of device is " << name << '\n';
-        if(name.find("HD Graphics")!=std::string::npos){
-            m_device=devices_available[i];
-            found_intel_device=true;
-        }
-    }
-    if(!found_intel_device){
-        LOG_F(FATAL, "No Intel device found");
-    }
-
-    std::cout << m_device.getInfo<CL_DEVICE_NAME>() << std::endl;
-
-    m_context = cl::Context(m_device);
-
-	// // Create command queue.
-	m_queue = cl::CommandQueue(m_context,m_device);
-
-
-    //check some stats about the devie
-    std::cout << "device: max_constant_args: " << m_device.getInfo<CL_DEVICE_MAX_CONSTANT_ARGS>()  << '\n';
-
-
-
-    //check svm capabilities
-    cl_device_svm_capabilities caps;
-    std::cout << "checking SVM capabilities of device id " << m_device() << '\n';
-    cl_int err = clGetDeviceInfo( m_device(), CL_DEVICE_SVM_CAPABILITIES, sizeof(cl_device_svm_capabilities), &caps, 0);
-    if(err == CL_INVALID_VALUE){
-        std::cout << "No SVM support" << '\n';
-    }
-    if(err == CL_SUCCESS && (caps & CL_DEVICE_SVM_COARSE_GRAIN_BUFFER)){
-        std::cout << "Coarse-grained buffer" << '\n';
-    }
-    if(err == CL_SUCCESS && (caps & CL_DEVICE_SVM_FINE_GRAIN_BUFFER)){
-        std::cout << "Fine-grained buffer" << '\n';
-    }
-    if(err == CL_SUCCESS && (caps & CL_DEVICE_SVM_FINE_GRAIN_BUFFER) && (caps & CL_DEVICE_SVM_ATOMICS)){
-        std::cout << "Fine-grained buffer with atomics" << '\n';
-    }
-    if(err == CL_SUCCESS && (caps & CL_DEVICE_SVM_FINE_GRAIN_SYSTEM)){
-        std::cout << "Fine-grained system" << '\n';
-    }
-    if(err == CL_SUCCESS && (caps & CL_DEVICE_SVM_FINE_GRAIN_SYSTEM) && (caps & CL_DEVICE_SVM_ATOMICS)){
-        std::cout << "Fine-grained system with atomics" << '\n';
-    }
-
-
-    compile_kernels();
 }
 
-void DepthEstimatorCL::compile_kernels(){
-    cl::Program program(m_context,
-         file_to_string("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/kernels_cl/img_proc_test.cl"));
-    program.build({m_device},"-cl-std=CL2.0");
-	m_kernel_simple_copy=cl::Kernel (program, "simple_copy");
-    m_kernel_blur=cl::Kernel (program, "gaussian_blur");
-    m_kernel_sobel=cl::Kernel (program, "sobel");
-    m_kernel_blurx=cl::Kernel (program, "blurx");
-    m_kernel_blury=cl::Kernel (program, "blury");
+void DepthEstimatorGL::compile_shaders(){
 
-    m_kernel_blurx_fast=cl::Kernel (program, "blurx_fast");
-    m_kernel_blury_fast=cl::Kernel (program, "blury_fast");
-
-    //depth estimation
-    cl::Program program_depth(m_context,
-         file_to_string("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/kernels_cl/depth_estimation.cl"));
-
-     try{ // https://stackoverflow.com/questions/34662333/opencl-how-to-check-for-build-errors-using-the-c-wrapper
-         program_depth.build({m_device},"-cl-std=CL2.0");
-     }catch (cl::Error& e){
-         if (e.err() == CL_BUILD_PROGRAM_FAILURE){
-             // Get the build log
-             std::string name     = m_device.getInfo<CL_DEVICE_NAME>();
-             std::string buildlog = program_depth.getBuildInfo<CL_PROGRAM_BUILD_LOG>(m_device);
-             std::cerr << "Build log for " << name << ":" << std::endl << buildlog << std::endl;
-        }else{
-            throw e;
-        }
-    }
-    // program_depth.build({m_device},"-cl-std=CL2.0");
-
-    m_kernel_struct_test=cl::Kernel (program_depth, "struct_test");
+    m_update_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_update_depth.glsl");
 
 }
 
 
-Mesh DepthEstimatorCL::compute_depth(Frame& frame){
+Mesh DepthEstimatorGL::compute_depth(){
     //read images from ICL_NUIM
     //calculate pyramid and gradients
     //grab the first frame and calculate inmature points for it
@@ -187,7 +82,7 @@ Mesh DepthEstimatorCL::compute_depth(Frame& frame){
 
     //TODO undistort images
 
-    TIME_START_CL("compute_depth");
+    TIME_START_GL("compute_depth");
 
     //calculate the gradients of it (cpu)
     //calculate immature points (cpu)
@@ -201,8 +96,10 @@ Mesh DepthEstimatorCL::compute_depth(Frame& frame){
 
 
 
-    //upload to gpu
-    cl::Buffer immature_points_cl_buf(m_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, immature_points.size() * sizeof(Point), immature_points.data());
+    //upload to gpu the inmature points
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, immature_points.size() * sizeof(Point), immature_points.data(), GL_DYNAMIC_COPY);
+
 
     for (size_t i = 1; i < 2; i++) {
         const Eigen::Affine3d tf_cur_host = frames[i].tf_cam_world * frames[0].tf_cam_world.inverse();
@@ -215,62 +112,44 @@ Mesh DepthEstimatorCL::compute_depth(Frame& frame){
         double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
 
         //upload the image
-        std::cout << "img has type " << type2string(frames[i].gray.type()) << '\n';
-        std::cout << "img has size " << frames[i].gray.rows << " " << frames[i].gray.cols << '\n';
+        //TODO
         int size_bytes=frames[i].gray.step[0] * frames[i].gray.rows;
-        cl::ImageFormat cl_img_format(CL_R,CL_FLOAT);
-        std::cout << "makign img buffer fo size bytes " << size_bytes << '\n';
-        cl::Buffer cl_img_buffer(m_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, size_bytes, frames[i].gray.data);
-        cl::Image2D cl_img(m_context, cl_img_format, cl_img_buffer, frames[i].gray.cols, frames[i].gray.rows );
+        std::cout << "size byts is " << size_bytes << '\n';
+        std::cout << "type of img gray is " << type2string(frames[i].gray.type()) << '\n';
+        m_cur_frame.upload_data(GL_R32F, frames[i].gray.cols, frames[i].gray.rows, GL_RED, GL_FLOAT, frames[i].gray.ptr(), size_bytes);
 
 
-        // tf_cur_host, tf_cur_host, KRKi_cr, Kt_cr, affine_cr, px_error_angle
+
+        //upload the matrices
+        //TODO
+
+
+        // tf_cur_host, tf_host_cur, KRKi_cr, Kt_cr, affine_cr, px_error_angle
         std::cout << "exeuting kernel" << '\n';
-        TIME_START_CL("depth_update_kernel");
-        m_kernel_struct_test.setArg(0, immature_points_cl_buf);
-        m_kernel_struct_test.setArg(1, cl_img);
-        // m_kernel_struct_test.setArg(1, tf_cur_host.data());
-        // m_kernel_struct_test.setArg(1, tf_cur_host.data());
-        m_queue.enqueueNDRangeKernel(m_kernel_struct_test, cl::NullRange, cl::NDRange(immature_points.size()), cl::NullRange);
-        TIME_END_CL("depth_update_kernel");
+        TIME_START_GL("depth_update_kernel");
+        glUseProgram(m_update_depth_prog_id);
+
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_points_gl_buf);
+        bind_for_sampling(m_cur_frame, 1, glGetUniformLocation(m_update_depth_prog_id,"gray_img_sampler") );
+
+        glDispatchCompute(immature_points.size()/32, 1, 1);
+
+        TIME_END_GL("depth_update_kernel");
     }
 
 
 
     //read the points back to cpu
-    Point* points_ptr = (Point*)m_queue.enqueueMapBuffer(immature_points_cl_buf, CL_TRUE, CL_MAP_READ, 0, immature_points.size() * sizeof(Point));
+    //TODO
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    Point* ptr = (Point*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
     for (size_t i = 0; i < immature_points.size(); i++) {
-        immature_points[i]=points_ptr[i];
+        immature_points[i]=ptr[i];
     }
 
-    // // copy data back to the host
-    // std::vector<Point> host_vector(100000);
-    // compute::command_queue boost_queue (m_queue());
-    // compute::copy(point_cl.begin(), point_cl.end(), host_vector.begin(), boost_queue);
-    // for (size_t i = 0; i < immature_points.size(); i++) {
-    //     immature_points[i].last_visible_frame=host_vector[i].last_visible_frame;
-    // }
 
 
-
-    // // //use boost
-    // compute::command_queue boost_queue (m_queue());
-    // compute::context context = boost_queue.get_context();
-    // boost::compute::vector<Point> point_cl(immature_points.size(),context);
-    // // copy data to the device
-    // compute::copy(immature_points.begin(), immature_points.end(), point_cl.begin(), boost_queue);
-    // compute::kernel struct_test_boost = compute::kernel::create_with_source(
-    //     file_to_string("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/kernels_cl/depth_estimation.cl"), "struct_test", context);
-    // struct_test_boost.set_arg(0,point_cl.get_buffer());
-    // boost_queue.enqueue_1d_range_kernel(struct_test_boost, 0, immature_points.size(), 0);
-    // // // copy data back to the host
-    // std::vector<Point> host_vector(100000);
-    // compute::copy(point_cl.begin(), point_cl.end(), host_vector.begin(), boost_queue);
-    // for (size_t i = 0; i < immature_points.size(); i++) {
-    //     immature_points[i]=host_vector[i];
-    // }
-
-    TIME_END_CL("compute_depth");
+    TIME_END_GL("compute_depth");
 
 
     Mesh mesh=create_mesh(immature_points, frames);
@@ -278,7 +157,7 @@ Mesh DepthEstimatorCL::compute_depth(Frame& frame){
 
 }
 
-std::vector<Frame> DepthEstimatorCL::loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read){
+std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read){
    std::vector< Frame > frames;
    std::string filename_img = dataset_path + "/associations.txt";
    std::string filename_gt = dataset_path + "/livingRoom2.gt.freiburg";
@@ -339,7 +218,7 @@ std::vector<Frame> DepthEstimatorCL::loadDataFromICLNUIM ( const std::string & d
    return frames;
 }
 
-std::vector<Point> DepthEstimatorCL::create_immature_points (const Frame& frame){
+std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame){
 
 
     //create all of the pixels as inmature points
@@ -355,13 +234,13 @@ std::vector<Point> DepthEstimatorCL::create_immature_points (const Frame& frame)
     // }
 
     //make the sobel in x and y because we need to to calculate the hessian in order to select the immature point
-    TIME_START_CL("sobel_host_frame");
+    TIME_START_GL("sobel_host_frame");
     cv::Mat grad_x, grad_y;
     cv::Scharr( frame.gray, grad_x, CV_32F, 1, 0);
     cv::Scharr( frame.gray, grad_y, CV_32F, 0, 1);
-    TIME_END_CL("sobel_host_frame");
+    TIME_END_GL("sobel_host_frame");
 
-    TIME_START_CL("hessian_host_frame");
+    TIME_START_GL("hessian_host_frame");
     std::vector<Point> immature_points;
     immature_points.reserve(200000);
     for (size_t i = 10; i < frame.gray.rows-10; i++) {  //--------Do not look around the borders to avoid pattern accesing outside img
@@ -394,7 +273,7 @@ std::vector<Point> DepthEstimatorCL::create_immature_points (const Frame& frame)
 
                 //Seed::Seed
                 Eigen::Vector3d f_eigen = (frame.K.inverse() * Eigen::Vector3d(point.u,point.v,1)).normalized();
-                point.f = cl_float3{f_eigen(0),f_eigen(1),f_eigen(2)};
+                point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
 
                 //start at an initial value for depth at around 4 meters (depth_filter->Seed::reinit)
                 float mean_starting_depth=4.0;
@@ -449,13 +328,14 @@ std::vector<Point> DepthEstimatorCL::create_immature_points (const Frame& frame)
                 point.gradient_hessian_det=hessian_det;
                 point.last_visible_frame=0;
                 point.gt_depth=frame.depth.at<float>(i,j); //add also the gt depth just for visualization purposes
+                point.debug=0.0;
 
                 immature_points.push_back(point);
             }
 
         }
     }
-    TIME_END_CL("hessian_host_frame");
+    TIME_END_GL("hessian_host_frame");
 
 
 
@@ -463,7 +343,7 @@ std::vector<Point> DepthEstimatorCL::create_immature_points (const Frame& frame)
     return immature_points;
 }
 
-Eigen::Vector2d DepthEstimatorCL::estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr){
+Eigen::Vector2d DepthEstimatorGL::estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr){
     ceres::Problem problem;
     ceres::LossFunction * loss_function = new ceres::HuberLoss(1);
     double scaleA = 1;
@@ -507,7 +387,7 @@ Eigen::Vector2d DepthEstimatorCL::estimate_affine(std::vector<Point>& immature_p
                 continue;
             if ( color_host_frame[i] <= 0 || color_host_frame[i] >= 255 || color_cur_frame[i] <= 0 || color_cur_frame[i] >= 255  )
                 continue;
-            ceres::CostFunction * cost_function = AffineAutoDiffCostFunctorCL::Create( color_cur_frame[i], color_host_frame[i] );
+            ceres::CostFunction * cost_function = AffineAutoDiffCostFunctorGL::Create( color_cur_frame[i], color_host_frame[i] );
             problem.AddResidualBlock( cost_function, loss_function, &scaleA, & offsetB );
         }
     }
@@ -525,7 +405,7 @@ Eigen::Vector2d DepthEstimatorCL::estimate_affine(std::vector<Point>& immature_p
     return Eigen::Vector2d ( scaleA, offsetB );
 }
 
-float DepthEstimatorCL::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type){
+float DepthEstimatorGL::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type){
     //sample only from a cv mat that is of type float with 1 channel
     if(type2string(img.type())!="32FC1"){
         LOG(FATAL) << "trying to use texture inerpolate on an image that is not float valued with 1 channel. Image is of type " <<
@@ -548,7 +428,7 @@ float DepthEstimatorCL::texture_interpolate ( const cv::Mat& img, const float x,
 
 }
 
-Mesh DepthEstimatorCL::create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames){
+Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames){
     Mesh mesh;
     mesh.V.resize(immature_points.size(),3);
     mesh.V.setZero();
@@ -603,21 +483,38 @@ Mesh DepthEstimatorCL::create_mesh(const std::vector<Point>& immature_points, co
     //  }
 
     //colors based on last frame seen
-   float min=9999999999, max=-9999999999;
-   for (size_t i = 0; i < immature_points.size(); i++) {
-       // std::cout << "last_visible_frame is " << immature_points[i].last_visible_frame << '\n';
-       if(immature_points[i].last_visible_frame<min){
-           min=immature_points[i].last_visible_frame;
-       }
-       if(immature_points[i].last_visible_frame>max){
-           max=immature_points[i].last_visible_frame;
-       }
+   // float min=9999999999, max=-9999999999;
+   // for (size_t i = 0; i < immature_points.size(); i++) {
+   //     // std::cout << "last_visible_frame is " << immature_points[i].last_visible_frame << '\n';
+   //     if(immature_points[i].last_visible_frame<min){
+   //         min=immature_points[i].last_visible_frame;
+   //     }
+   //     if(immature_points[i].last_visible_frame>max){
+   //         max=immature_points[i].last_visible_frame;
+   //     }
+   // }
+   // std::cout << "min max last_visible_frame is " << min << " " << max << '\n';
+   // for (size_t i = 0; i < mesh.C.rows(); i++) {
+   //      float gray_val = lerp(immature_points[i].last_visible_frame, min, max, 0.0, 1.0 );
+   //      mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+   //  }
+
+   //colors based on debug colors
+  float min=9999999999, max=-9999999999;
+  for (size_t i = 0; i < immature_points.size(); i++) {
+      // std::cout << "last_visible_frame is " << immature_points[i].last_visible_frame << '\n';
+      if(immature_points[i].debug<min){
+          min=immature_points[i].debug;
+      }
+      if(immature_points[i].debug>max){
+          max=immature_points[i].debug;
+      }
+  }
+  std::cout << "min max debug is " << min << " " << max << '\n';
+  for (size_t i = 0; i < mesh.C.rows(); i++) {
+       float gray_val = lerp(immature_points[i].debug, min, max, 0.0, 1.0 );
+       mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
    }
-   std::cout << "min max last_visible_frame is " << min << " " << max << '\n';
-   for (size_t i = 0; i < mesh.C.rows(); i++) {
-        float gray_val = lerp(immature_points[i].last_visible_frame, min, max, 0.0, 1.0 );
-        mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
-    }
 
 
 
