@@ -72,6 +72,7 @@ uniform float px_error_angle;
 uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
 uniform int pattern_rot_nr_points;
 
+
 uniform sampler2D gray_img_sampler;
 
 //https://www.boost.org/doc/libs/1_47_0/libs/math/doc/sf_and_dist/html/math_toolkit/dist/dist_ref/dists/normal_dist.html
@@ -84,9 +85,17 @@ void main(void) {
     int id = int(gl_GlobalInvocationID.x);
 
 
-    p[id].debug=int(p[id].u);
-    float color=texture(gray_img_sampler, vec2(p[id].u/640, p[id].v/480)).x;
-    p[id].debug=float(color);
+    //debug if pattern_rot is corectly passed
+    // if(id < 8){
+    //     vec2 offset=pattern_rot_offsets[id];
+    //     p[id].u=offset.x;
+    //     p[id].v=offset.y;
+    // }
+
+
+    // p[id].debug=int(p[id].u);
+    // float color=texture(gray_img_sampler, vec2(p[id].u/640, p[id].v/480)).x;
+    // p[id].debug=float(color);
 
 
     // check if point is visible in the current image
@@ -95,13 +104,13 @@ void main(void) {
     const vec4 xyz_f_xyzw = tf_cur_host*  p_backproj_xyzw ;
     const vec3 xyz_f=xyz_f_xyzw.xyz/xyz_f_xyzw.w;
     if(xyz_f.z < 0.0)  {
-        p[id].debug=1.0;
+        // p[id].debug=1.0;
         return;
     }
     const vec3 kp_c = K * xyz_f;
     const vec2 kp_c_h=kp_c.xy/kp_c.z;
     if ( kp_c_h.x < 0 || kp_c_h.x >= frame_size.x || kp_c_h.y < 0 || kp_c_h.y >= frame_size.y ) {
-        p[id].debug=1.0;
+        // p[id].debug=1.0;
         return;
     }
 
@@ -133,10 +142,15 @@ void main(void) {
     const float  half_length = 0.5f * norm_epi;
 
     vec2 bestKp;
-    float bestEnergy = 1e10;
+    float bestEnergy = 1e15;
+
+    //debug stuff
+    float residual_debug=0;
+    int nr_time_switched_best=0;
 
     for(float l = -half_length; l <= half_length; l += 0.7f){
         float energy = 0;
+        residual_debug=0;
         vec2 kp = uvMean + l*epi_dir;
 
         if( ( kp.x >= (frame_size.x-10) )  || ( kp.y >= (frame_size.y-10) ) || ( kp.x < 10 ) || ( kp.y < 10) ){
@@ -147,18 +161,30 @@ void main(void) {
 
             vec2 offset=pattern_rot_offsets[idx];
             float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/640, (kp.y + offset.y)/480)).x;
+            // nr_times_textured_fetched++;
             // float hit_color=texture_interpolate(frame.gray, kp(0)+offset(0), kp(1)+offset(1) , InterpolationType::LINEAR);
             // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
             //
             const float residual = hit_color - float(affine_cr.x * p[id].color[idx] + affine_cr.y);
+            residual_debug+=residual;
 
             float hw = abs(residual) < setting_huberTH ? 1 : setting_huberTH / abs(residual);
             energy += hw *residual*residual*(2-hw);
         }
+
+        // p[id].debug=energy;
         if ( energy < bestEnergy ){
             bestKp = kp; bestEnergy = energy;
+            nr_time_switched_best++;
         }
     }
+
+    if(bestEnergy<1e10 ){
+        p[id].debug=bestEnergy;
+    }
+
+    // p[id].debug=nr_time_switched_best;
+
 
     // if ( bestEnergy > p[id].energyTH * 1.2f ) {
     //     point.lastTraceStatus = ImmaturePointStatus::IPS_OUTLIER;
@@ -185,10 +211,10 @@ void main(void) {
 
         // point.lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
     // }
-
-
-
-
+    //
+    //
+    //
+    //
     // double idepth = -1;
     // double z = 0;
     // if( point.lastTraceStatus == ImmaturePointStatus::IPS_GOOD ) {
@@ -259,7 +285,13 @@ void main(void) {
     p[id].a = (e-f)/(f-e/f);
     p[id].b = p[id].a*(1.0f-f)/f;
 
+    // p[id].debug=p[id].mu;
 
+
+
+
+
+    //NOT YET implemented
     // const float eta_inlier = .6f;
     // const float eta_outlier = .05f;
     // if( ((point.a / (point.a + point.b)) > eta_inlier) && (sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh)) {

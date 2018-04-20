@@ -49,6 +49,11 @@ DepthEstimatorGL::~DepthEstimatorGL(){
 void DepthEstimatorGL::init_opengl(){
     std::cout << "init opengl" << '\n';
 
+    if(GL_ARB_debug_output){
+    	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
+    	glDebugMessageCallbackARB(debug_func, (void*)15);
+	}
+
     glGenBuffers(1, &m_points_gl_buf);
 
     m_cur_frame.set_wrap_mode(GL_CLAMP_TO_BORDER);
@@ -105,6 +110,7 @@ Mesh DepthEstimatorGL::compute_depth(){
 
     for (size_t i = 1; i < frames.size(); i++) {
         TIME_START_GL("update_depth");
+        glUseProgram(m_update_depth_prog_id);
 
         TIME_START_GL("calculate_matrices");
         const Eigen::Affine3f tf_cur_host = frames[i].tf_cam_world * frames[0].tf_cam_world.inverse();
@@ -117,10 +123,10 @@ Mesh DepthEstimatorGL::compute_depth(){
         double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
         Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
 
-        std::cout << "pattern_rot has nr of points " << pattern_rot.get_nr_points() << '\n';
-        for (size_t i = 0; i < pattern_rot.get_nr_points(); i++) {
-            std::cout << "offset for i " << i << " is " << pattern_rot.get_offset(i).transpose() << '\n';
-        }
+        // std::cout << "pattern_rot has nr of points " << pattern_rot.get_nr_points() << '\n';
+        // for (size_t i = 0; i < pattern_rot.get_nr_points(); i++) {
+        //     std::cout << "offset for i " << i << " is " << pattern_rot.get_offset(i).transpose() << '\n';
+        // }
 
         TIME_END_GL("calculate_matrices");
 
@@ -144,14 +150,15 @@ Mesh DepthEstimatorGL::compute_depth(){
         glUniform3fv(glGetUniformLocation(m_update_depth_prog_id,"Kt_cr"), 1, Kt_cr.data());
         glUniform2fv(glGetUniformLocation(m_update_depth_prog_id,"affine_cr"), 1, affine_cr.data());
         glUniform1f(glGetUniformLocation(m_update_depth_prog_id,"px_error_angle"), px_error_angle);
-        glUniform2fv(glGetUniformLocation(m_update_depth_prog_id,"pattern_rot_offsets"), m_pattern.get_nr_points(), m_pattern.get_offset_matrix().data()); //upload all the offses as an array of vec2 offsets
-        glUniform1i(glGetUniformLocation(m_update_depth_prog_id,"pattern_rot_nr_points"), m_pattern.get_nr_points());
+        glUniform2fv(glGetUniformLocation(m_update_depth_prog_id,"pattern_rot_offsets"), pattern_rot.get_nr_points(), pattern_rot.get_offset_matrix().data()); //upload all the offses as an array of vec2 offsets
+        // std::cout << "setting nr of points to " <<  pattern_rot.get_nr_points() << '\n';
+        // std::cout << "the uniform location is " << glGetUniformLocation(m_update_depth_prog_id,"pattern_rot_nr_points") << '\n';
+        glUniform1i(glGetUniformLocation(m_update_depth_prog_id,"pattern_rot_nr_points"), pattern_rot.get_nr_points());
         TIME_END_GL("upload_matrices");
 
 
         // tf_cur_host, tf_host_cur, KRKi_cr, Kt_cr, affine_cr, px_error_angle
         TIME_START_GL("depth_update_kernel");
-        glUseProgram(m_update_depth_prog_id);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_points_gl_buf);
         bind_for_sampling(m_cur_frame, 1, glGetUniformLocation(m_update_depth_prog_id,"gray_img_sampler") );
         glDispatchCompute(immature_points.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
@@ -457,9 +464,14 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
     mesh.V.resize(immature_points.size(),3);
     mesh.V.setZero();
 
+    //debug check the first few vrices
+    for (size_t i = 0; i < 10; i++) {
+        std::cout << "point " << i << " at uv " << immature_points[i].u << " " << immature_points[i].v  << '\n';
+    }
+
     for (size_t i = 0; i < immature_points.size(); i++) {
-        int u=(int)immature_points[i].u;
-        int v=(int)immature_points[i].v;
+        float u=immature_points[i].u;
+        float v=immature_points[i].v;
         // float depth=immature_points[i].gt_depth;
         float depth=1.0;
 
