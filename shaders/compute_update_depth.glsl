@@ -120,6 +120,8 @@ void main(void) {
     //update inverse depth coordinates for min and max
     p[id].idepth_min = p[id].mu + sqrt(p[id].sigma2);
     p[id].idepth_max = max(p[id].mu - sqrt(p[id].sigma2), 0.00000001f);
+    memoryBarrier();
+    barrier();
 
     //search epiline---------------------------------------------------------------
     // search_epiline_bca (point, frame, KRKi_cr, Kt_cr, affine_cr);
@@ -202,12 +204,16 @@ void main(void) {
             p[id].idepth_min = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
             p[id].idepth_max = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
         }
+        memoryBarrier();
+        barrier();
         if(p[id].idepth_min > p[id].idepth_max) {
             // std::swap<float>(point.idepth_min, point.idepth_max);
             float tmp=p[id].idepth_min;
             p[id].idepth_min=p[id].idepth_max;
             p[id].idepth_max=tmp;
         }
+        memoryBarrier();
+        barrier();
 
         // point.lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
     // }
@@ -284,6 +290,8 @@ void main(void) {
     p[id].mu = mu_new;
     p[id].a = (e-f)/(f-e/f);
     p[id].b = p[id].a*(1.0f-f)/f;
+    memoryBarrier();
+    barrier();
 
     // p[id].debug=p[id].mu;
 

@@ -118,7 +118,7 @@ Mesh DepthEstimatorGL::compute_depth(){
         const Eigen::Matrix3f KRKi_cr = frames[i].K * tf_cur_host.linear() * frames[0].K.inverse();
         const Eigen::Vector3f Kt_cr = frames[i].K * tf_cur_host.translation();
         const Eigen::Vector2f affine_cr = estimate_affine( immature_points, frames[i], KRKi_cr, Kt_cr);
-        const double focal_length = abs(frames[i].K(0,0));
+        const double focal_length = fabs(frames[i].K(0,0));
         double px_noise = 1.0;
         double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
         Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
@@ -143,8 +143,8 @@ Mesh DepthEstimatorGL::compute_depth(){
         Eigen::Vector2f frame_size;
         frame_size<< frames[i].gray.cols, frames[i].gray.rows;
         glUniform2fv(glGetUniformLocation(m_update_depth_prog_id,"frame_size"), 1, frame_size.data());
-        glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_cur_host"), 1, GL_FALSE, tf_cur_host.data());
-        glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_host_cur"), 1, GL_FALSE, tf_host_cur.data());
+        glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_cur_host"), 1, GL_FALSE, tf_cur_host.matrix().data());
+        glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_host_cur"), 1, GL_FALSE, tf_host_cur.matrix().data());
         glUniformMatrix3fv(glGetUniformLocation(m_update_depth_prog_id,"K"), 1, GL_FALSE, frames[i].K.data());
         glUniformMatrix3fv(glGetUniformLocation(m_update_depth_prog_id,"KRKi_cr"), 1, GL_FALSE, KRKi_cr.data());
         glUniform3fv(glGetUniformLocation(m_update_depth_prog_id,"Kt_cr"), 1, Kt_cr.data());
@@ -163,6 +163,8 @@ Mesh DepthEstimatorGL::compute_depth(){
         bind_for_sampling(m_cur_frame, 1, glGetUniformLocation(m_update_depth_prog_id,"gray_img_sampler") );
         glDispatchCompute(immature_points.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
         TIME_END_GL("depth_update_kernel");
+
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
         TIME_END_GL("update_depth");
     }

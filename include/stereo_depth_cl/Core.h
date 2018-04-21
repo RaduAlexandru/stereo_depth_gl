@@ -26,7 +26,7 @@
 #define NUM_CLASSES 66
 
 //forward declarations
-// class DepthEstimatorCPU;
+class DepthEstimatorCPU;
 class DepthEstimatorRenegade;
 class DepthEstimatorGL;
 class Profiler;
@@ -69,8 +69,8 @@ public:
     //objects dependencies
     std::shared_ptr<igl::opengl::glfw::Viewer> m_view;
     std::shared_ptr<Profiler> m_profiler;
-    // std::shared_ptr<DepthEstimatorCPU> m_depth_estimator;
-    std::shared_ptr<DepthEstimatorRenegade> m_depth_estimator_renegade;
+    std::shared_ptr<DepthEstimatorCPU> m_depth_estimator;
+    // std::shared_ptr<DepthEstimatorRenegade> m_depth_estimator_renegade;
     std::shared_ptr<DepthEstimatorGL> m_depth_estimator_cl;
     std::shared_ptr<DataLoader> m_loader;
     std::shared_ptr<RosBagPlayer> m_player;

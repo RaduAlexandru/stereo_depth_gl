@@ -58,7 +58,8 @@ struct ImmaturePoint{
     float idepth_max;
 	float energyTH; //outside
     float quality;
-    Eigen::Vector3d f; // heading range = Ki * (u,v,1)
+    // Eigen::Vector3f f; // heading range = Ki * (u,v,1)
+	Eigen::Vector4f f; //make it vec 4 to be more close to the opengl implementation
 	ImmaturePointStatus lastTraceStatus;
 	bool converged;
 	bool is_outlier;
@@ -74,8 +75,8 @@ struct ImmaturePoint{
 	float ncc_const_templ;
 
 	//Stuff that may be to be removed
-	Eigen::Matrix2d gradH; //it may need to go because opencl doesn't like eigen
-	Eigen::Vector2d kp_GT;
+	Eigen::Matrix2f gradH; //it may need to go because opencl doesn't like eigen
+	Eigen::Vector2f kp_GT;
 
 
 	//debug stuff
@@ -143,14 +144,15 @@ public:
     //start with everything
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
     Mesh compute_depth2(Frame& frame);
-	Eigen::Vector2d estimate_affine( std::vector<ImmaturePoint>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr);
+	Mesh compute_depth_simplified();
+	Eigen::Vector2f estimate_affine( std::vector<ImmaturePoint>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
 	float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolationType type=InterpolationType::NEAREST);
 	std::vector<ImmaturePoint> create_immature_points ( const Frame& frame );
-	void update_immature_points(std::vector<ImmaturePoint>& immature_points, const Frame& frame, const Eigen::Affine3d& tf_cur_host, const Eigen::Matrix3d& KRKi_cr, const Eigen::Vector3d& Kt_cr, const Eigen::Vector2d& affine_cr);
-	void search_epiline_bca(ImmaturePoint& point, const Frame& frame, const Eigen::Matrix3d& hostToFrame_KRKi, const Eigen::Vector3d& Kt_cr, const Eigen::Vector2d& affine_cr);
-	void search_epiline_ncc(ImmaturePoint& point, const Frame& frame, const Eigen::Matrix3d& hostToFrame_KRKi, const Eigen::Vector3d& Kt_cr);
-    void update_idepth(ImmaturePoint& point, const Eigen::Affine3d& tf_host_cur, const float z, const double px_error_angle);
-    double compute_tau(const Eigen::Affine3d & tf_host_cur, const Eigen::Vector3d& f, const double z, const double px_error_angle);
+	void update_immature_points(std::vector<ImmaturePoint>& immature_points, const Frame& frame, const Eigen::Affine3f& tf_cur_host, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr, const Eigen::Vector2f& affine_cr);
+	void search_epiline_bca(ImmaturePoint& point, const Frame& frame, const Eigen::Matrix3f& hostToFrame_KRKi, const Eigen::Vector3f& Kt_cr, const Eigen::Vector2f& affine_cr);
+	void search_epiline_ncc(ImmaturePoint& point, const Frame& frame, const Eigen::Matrix3f& hostToFrame_KRKi, const Eigen::Vector3f& Kt_cr);
+    void update_idepth(ImmaturePoint& point, const Eigen::Affine3f& tf_host_cur, const float z, const double px_error_angle);
+    double compute_tau(const Eigen::Affine3f & tf_host_cur, const Eigen::Vector3f& f, const double z, const double px_error_angle);
     void updateSeed(ImmaturePoint& point, const float x, const float tau2);
 	Mesh create_mesh(const std::vector<ImmaturePoint>& immature_points, const std::vector<Frame>& frame);
 
