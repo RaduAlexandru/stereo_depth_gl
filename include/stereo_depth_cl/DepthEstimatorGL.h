@@ -35,26 +35,19 @@ const float cl_setting_huberTH = 9; // Huber Threshold
 const double cl_seed_convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
 
 
-enum class PointStatus {
-    GOOD=0,					// traced well and good
-    OOB,					// OOB: end tracking & marginalize!
-    OUTLIER,				// energy too high: if happens again: outlier!
-    SKIPPED,				// traced well and good (but not actually traced).
-    BADCONDITION,			// not traced because of bad condition.
-    DELETED,                            // merged with other point or deleted
-    UNINITIALIZED};			// not even traced once.
+enum PointStatus {
+    STATUS_GOOD=0,					// traced well and good
+    STATUS_OOB,					// OOB: end tracking & marginalize!
+    STATUS_OUTLIER,				// energy too high: if happens again: outlier!
+    STATUS_SKIPPED,				// traced well and good (but not actually traced).
+    STATUS_BADCONDITION,			// not traced because of bad condition.
+    STATUS_DELETED,                            // merged with other point or deleted
+    STATUS_UNINITIALIZED};			// not even traced once.
 
 //needs to be 16 bytes aligned as explained by john conor here https://www.opengl.org/discussion_boards/showthread.php/199303-How-to-get-Uniform-Block-Buffers-to-work-correctly
 struct Point{
-    int idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
+    int32_t idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
     float u,v; //position in host frame of the point
-
-    // cl_float test_array[16];
-    // cl_int test_bool_array[16]; //--break it
-    // // cl_bool bool_1; //--also breaks it
-    // // cl_bool bool_2;
-    //  cl_int test_int_array[16];
-
     float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
     float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
     float mu;                    //!< Mean of normal distribution.
@@ -64,33 +57,33 @@ struct Point{
     float idepth_max;
     float energyTH;
     float quality;
-    Eigen::Vector4f f;
-    // glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
-    // float f[4]; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
-    // // PointStatus lastTraceStatus;
-    // // cl_bool converged;
-    // // cl_bool is_outlier;
+    //-----------------up until here we have 48 bytes so it's padded correctly to 16 bytes
+
+    glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
+    PointStatus lastTraceStatus;
+    int32_t converged;
+    int32_t is_outlier;
+    int32_t pad_1;
     //
     float color[cl_MAX_RES_PER_POINT]; 		// colors in host frame
     float weights[cl_MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
-    // Vec2f colorD[MAX_RES_PER_POINT];
-    // Vec2f colorGrad[MAX_RES_PER_POINT];
-    // Vec2f rotatetPattern[MAX_RES_PER_POINT];
-    // cl_bool skipZero [cl_MAX_RES_PER_POINT];
-    //
+
     float ncc_sum_templ;
     float ncc_const_templ;
+    float pad_2;
+    float pad_3;
 
     //Stuff that may be to be removed
-    Eigen::Vector2f kp_GT;
-    // glm::vec2 kp_GT;
-    // // cl_float kp_GT[2];
-    //
-    //
+    glm::mat2 gradH;
+    glm::vec2 kp_GT;
+    float pad_4;
+    float pad_5;
+
+
     //debug stuff
     float gradient_hessian_det;
     float gt_depth;
-    int last_visible_frame;
+    int32_t last_visible_frame;
 
     float debug; //serves as both debug and padding to 16 bytes
     // float padding_1; //to gt the struc to be aligned to 16 bytes

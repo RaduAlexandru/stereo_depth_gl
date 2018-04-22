@@ -48,11 +48,11 @@ static const char source[] =
 
 DepthEstimatorCPU::DepthEstimatorCPU():
         m_scene_is_modified(false),
-        m_cl_profiling_enabled(true),
+        m_cl_profiling_enabled(false),
         m_show_images(false)
         {
 
-    init_opencl();
+    // init_opencl();
     std::string pattern_filepath="/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/pattern_1.png";
     m_pattern.init_pattern(pattern_filepath);
 

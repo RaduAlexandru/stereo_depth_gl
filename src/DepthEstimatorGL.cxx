@@ -43,6 +43,11 @@ DepthEstimatorGL::DepthEstimatorGL():
     for (size_t i = 0; i < m_pattern.get_nr_points(); i++) {
         std::cout << "offset for i " << i << " is " << m_pattern.get_offset(i).transpose() << '\n';
     }
+
+
+    //more sanity checks that ensure that however I pad the Point struct it will be correct
+    assert(sizeof(float) == 4);
+    assert(sizeof(int32_t) == 4);
 }
 
 //needed so that forward declarations work
@@ -666,7 +671,7 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
          pose_wc.linear() = Eigen::Quaternionf(qw,qx,qy,qz).toRotationMatrix();
          Eigen::Affine3f pose_cw = pose_wc.inverse();
 
-         cv::Mat rgb_cv=cv::imread(dataset_path + "/" + colorFileName);
+         cv::Mat rgb_cv=cv::imread(dataset_path + "/" + colorFileName, CV_LOAD_IMAGE_UNCHANGED);
          cv::Mat depth_cv=cv::imread(dataset_path + "/" + depthFileName, CV_LOAD_IMAGE_UNCHANGED);
          depth_cv.convertTo ( depth_cv, CV_32F, 1./5000. ); //ICLNUIM stores theis weird units so we transform to meters
 
@@ -739,12 +744,12 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                 Point point;
                 point.u=j;
                 point.v=i;
-                // point.gradH=gradient_hessian;
+                point.gradH=glm::make_mat2x2(gradient_hessian.data());
 
                 //Seed::Seed
                 Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.u,point.v,1)).normalized();
-                point.f = Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
-                // point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+                // point.f = Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+                point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
 
                 //start at an initial value for depth at around 4 meters (depth_filter->Seed::reinit)
                 float mean_starting_depth=4.0;
@@ -763,12 +768,12 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                 point.b=10.0;
 
                 //seed constructor deep_filter.h
-                // point.converged=false; //TODO don't use bools, it breaks opencl struct padding
-                // point.is_outlier=true;
+                point.converged=0;
+                point.is_outlier=1;
 
 
                 //immature point constructor (the idepth min and max are already set so don't worry about those)
-                // point.lastTraceStatus=PointStatus::UNINITIALIZED;
+                point.lastTraceStatus=STATUS_UNINITIALIZED;
 
                 //get data for the color of that point (depth_point->ImmaturePoint::ImmaturePoint)---------------------
                 for(int p_idx=0;p_idx<m_pattern.get_nr_points();p_idx++){

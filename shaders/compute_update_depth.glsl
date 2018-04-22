@@ -7,16 +7,18 @@ layout (local_size_x = 256) in;
 const int MAX_RES_PER_POINT=16;
 const float setting_huberTH = 9; // Huber Threshold
 
+
+const uint STATUS_GOOD    = 0x00000001u;
+const uint STATUS_OOB       = 0x00000002u;
+const uint STATUS_OUTLIER  = 0x00000004u;
+const uint STATUS_SKIPPED  = 0x00000006u;
+const uint STATUS_BADCONDITION  = 0x00000008u;
+const uint STATUS_DELETED  = 0x00000010u;
+const uint STATUS_UNINITIALIZED  = 0x00000012u;
+
 struct Point{
     int idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
     float u,v; //position in host frame of the point
-
-    // cl_float test_array[16];
-    // cl_int test_bool_array[16]; //--break it
-    // // cl_bool bool_1; //--also breaks it
-    // // cl_bool bool_2;
-    //  cl_int test_int_array[16];
-
     float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
     float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
     float mu;                    //!< Mean of normal distribution.
@@ -26,31 +28,36 @@ struct Point{
     float idepth_max;
     float energyTH;
     float quality;
+    //-----------------up until here we have 48 bytes so it's padded correctly to 16 bytes
+
     vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
-    // // PointStatus lastTraceStatus;
-    // // cl_bool converged;
-    // // cl_bool is_outlier;
+    int lastTraceStatus;
+    int converged;
+    int is_outlier;
+    int pad_1;
     //
     float color[MAX_RES_PER_POINT]; 		// colors in host frame
     float weights[MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
-    // Vec2f colorD[MAX_RES_PER_POINT];
-    // Vec2f colorGrad[MAX_RES_PER_POINT];
-    // Vec2f rotatetPattern[MAX_RES_PER_POINT];
-    // cl_bool skipZero [cl_MAX_RES_PER_POINT];
-    //
+
     float ncc_sum_templ;
     float ncc_const_templ;
+    float pad_2;
+    float pad_3;
 
     //Stuff that may be to be removed
+    mat2 gradH;
     vec2 kp_GT;
-    // // cl_float kp_GT[2];
-    //
-    //
+    float pad_4;
+    float pad_5;
+
+
     //debug stuff
     float gradient_hessian_det;
     float gt_depth;
     int last_visible_frame;
-    float debug;
+
+    float debug; //serves as both debug and padding to 16 bytes
+    // float padding_1; //to gt the struc to be aligned to 16 bytes
 
     float debug2[16];
 

@@ -96,7 +96,8 @@ Mesh DepthEstimatorRenegade::compute_depth(Frame& frame){
 
 
         // std::cout << "readl values " << x << " " << y << " " << idepth_val << " " << seed_converged << " " << seed_is_outlier << " " << denoised_idepth_val << '\n';
-        if(std::isfinite(denoised_idepth_val) && idepth_val>=0.1 && seed_converged==1 && seed_is_outlier==0){
+        // if(std::isfinite(idepth_val) && idepth_val>=0.1 && seed_converged==1 && seed_is_outlier==0){
+        if(std::isfinite(idepth_val) && idepth_val>=0.1){
         // if(std::isfinite(denoised_idepth_val) && denoised_idepth_val>=0.001){
 
 
@@ -106,14 +107,14 @@ Mesh DepthEstimatorRenegade::compute_depth(Frame& frame){
             //     continue;
             // }
 
-            float outlier_measure=a/(a+b);
-            if(outlier_measure<0.7){
-                continue;
-            }
-
-            if(sigma2>0.01){
-                continue;
-            }
+            // float outlier_measure=a/(a+b);
+            // if(outlier_measure<0.7){
+            //     continue;
+            // }
+            //
+            // if(sigma2>0.01){
+            //     continue;
+            // }
 
             // std::cout << "putting into " << idx_linear  <<  " values " << x << " " << y << " " << 1/denoised_idepth_val << '\n';
             Eigen::Vector3d point_cam_coords=unproject(y,x, 1/idepth_val,K);

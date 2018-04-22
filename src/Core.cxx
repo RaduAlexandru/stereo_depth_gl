@@ -8,8 +8,8 @@
 #include "stereo_depth_cl/MiscUtils.h"
 #include "stereo_depth_cl/Profiler.h"
 #include "stereo_depth_cl/RosBagPlayer.h"
-// #include "stereo_depth_cl/DepthEstimatorCPU.h"
-// #include "stereo_depth_cl/DepthEstimatorRenegade.h"
+#include "stereo_depth_cl/DepthEstimatorCPU.h"
+#include "stereo_depth_cl/DepthEstimatorRenegade.h"
 #include "stereo_depth_cl/DepthEstimatorGL.h"
 // #include "stereo_depth_cl/DepthEstimatorGL2.h"
 #include "stereo_depth_cl/DataLoader.h"
@@ -39,8 +39,8 @@ namespace fs = boost::filesystem;
 Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Profiler> profiler) :
         m_viewer_initialized(false),
         m_player(new RosBagPlayer),
-        // m_depth_estimator(new DepthEstimatorCPU),
-        // m_depth_estimator_renegade(new DepthEstimatorRenegade),
+        m_depth_estimator(new DepthEstimatorCPU),
+        m_depth_estimator_renegade(new DepthEstimatorRenegade),
         m_depth_estimator_cl(new DepthEstimatorGL),
         // m_depth_estimator_gl2(new DepthEstimatorGL2),
         m_loader(new DataLoader),
@@ -51,10 +51,10 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
 
     m_view = view;
     m_profiler=profiler;
-    // m_depth_estimator->m_profiler=profiler;
-    // m_depth_estimator->m_view=m_view;
-    // m_depth_estimator_renegade->m_profiler=profiler;
-    // m_depth_estimator_renegade->m_view=m_view;
+    m_depth_estimator->m_profiler=profiler;
+    m_depth_estimator->m_view=m_view;
+    m_depth_estimator_renegade->m_profiler=profiler;
+    m_depth_estimator_renegade->m_view=m_view;
     m_depth_estimator_cl->m_profiler=profiler;
     m_depth_estimator_cl->m_view=m_view;
     // m_depth_estimator_gl2->m_profiler=profiler;
@@ -81,8 +81,8 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
 
      Frame dummy_frame;
      // Mesh depth_mesh=m_depth_estimator->compute_depth2(dummy_frame);
-     // Mesh depth_mesh=m_depth_estimator->compute_depth_simplified();  // works
-     // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth(dummy_frame);
+     // Mesh depth_mesh=m_depth_estimator->compute_depth_simplified();  // works on cpu
+     // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth(dummy_frame);  //just reads the things that were written from RENEGADE
      Mesh depth_mesh=m_depth_estimator_cl->compute_depth();
      // Mesh depth_mesh=m_depth_estimator_gl2->compute_depth_simplified();  // works
      depth_mesh.m_show_points=true;
