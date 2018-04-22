@@ -157,3 +157,14 @@ inline void CheckOpenGLError(const char* stmt, const char* fname, int line)
 	stmt;						\
 	CheckOpenGLError(#stmt, __FILE__, __LINE__);	\
 } while (0)
+
+
+//https://stackoverflow.com/a/20545775
+#include <glm/gtx/string_cast.hpp>
+#include <type_traits>
+#include <utility>
+template <typename GLMType, typename = decltype(glm::to_string(std::declval<GLMType>()))>
+inline std::ostream& operator<<(std::ostream& out, const GLMType& g)
+{
+    return out << glm::to_string(g);
+}

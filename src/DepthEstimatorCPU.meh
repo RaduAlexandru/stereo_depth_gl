@@ -1228,7 +1228,7 @@ Mesh DepthEstimatorCPU::compute_depth2(Frame& frame){
 }
 
 //https://www.boost.org/doc/libs/1_47_0/libs/math/doc/sf_and_dist/html/math_toolkit/dist/dist_ref/dists/normal_dist.html
-float gaus_pdf(float mean, float sd, float x){
+float DepthEstimatorCPU::gaus_pdf(float mean, float sd, float x){
     return exp(- (x-mean)*(x-mean)/(2*sd)*(2*sd)  )  / (sd*sqrt(2*M_PI));
 }
 
@@ -1421,7 +1421,7 @@ Mesh DepthEstimatorCPU::compute_depth_simplified(){
             // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
             float norm_scale = sqrt(point.sigma2 + tau2);
             if(std::isnan(norm_scale))
-                return mesh;
+                continue;
             float s2 = 1./(1./point.sigma2 + 1./tau2);
             float m = s2*(point.mu/point.sigma2 + x/tau2);
             float C1 = point.a/(point.a+point.b) * gaus_pdf(point.mu, norm_scale, x);

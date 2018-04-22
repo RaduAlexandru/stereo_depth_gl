@@ -21,8 +21,8 @@
 #include "ceres/rotation.h"
 
 //GL
+#define GLM_SWIZZLE // https://stackoverflow.com/questions/14657303/convert-glmvec4-to-glmvec3
 #include <GL/glad.h>
-#include <glm/glm.hpp>
 #include <glm/glm.hpp>
 
 
@@ -64,7 +64,8 @@ struct Point{
     float idepth_max;
     float energyTH;
     float quality;
-    glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
+    Eigen::Vector4f f;
+    // glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
     // float f[4]; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
     // // PointStatus lastTraceStatus;
     // // cl_bool converged;
@@ -81,7 +82,8 @@ struct Point{
     float ncc_const_templ;
 
     //Stuff that may be to be removed
-    glm::vec2 kp_GT;
+    Eigen::Vector2f kp_GT;
+    // glm::vec2 kp_GT;
     // // cl_float kp_GT[2];
     //
     //
@@ -152,6 +154,7 @@ public:
     //start with everything
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
     Mesh compute_depth();
+    float gaus_pdf(float mean, float sd, float x);
     std::vector<Point> create_immature_points (const Frame& frame);
     Eigen::Vector2f estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);

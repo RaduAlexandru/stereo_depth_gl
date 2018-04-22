@@ -7,13 +7,6 @@
 //OpenCV
 #include <opencv2/highgui/highgui.hpp>
 
-//opencl
-#define CL_HPP_ENABLE_EXCEPTIONS
-#define CL_HPP_TARGET_OPENCL_VERSION 200
-#include "CL/cl2.hpp"
-#include <CL/cl.h>
-// #include "CL/cl.hpp"
-#include "Image2DSafe.h"
 
 //My stuff
 #include "stereo_depth_cl/Mesh.h"
@@ -26,9 +19,14 @@
 #include "ceres/cubic_interpolation.h"
 #include "ceres/rotation.h"
 
+//GL
+#define GLM_SWIZZLE // https://stackoverflow.com/questions/14657303/convert-glmvec4-to-glmvec3
+#include <GL/glad.h>
+#include <glm/glm.hpp>
+
 
 //TODO settings that should be refactored into a config file
-const int MAX_RES_PER_POINT = 10;
+const int MAX_RES_PER_POINT = 16;
 const float setting_outlierTH = 12*12;					// higher -> less strict
 const float setting_overallEnergyTHWeight = 1;
 const float setting_outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
@@ -37,7 +35,7 @@ const double seed_convergence_sigma2_thresh=200;      //!< threshold on depth un
 
 
 
-enum ImmaturePointStatus {
+enum PointStatus {
 	IPS_GOOD=0,					// traced well and good
 	IPS_OOB,					// OOB: end tracking & marginalize!
 	IPS_OUTLIER,				// energy too high: if happens again: outlier!
@@ -46,7 +44,7 @@ enum ImmaturePointStatus {
     IPS_DELETED,                            // merged with other point or deleted
 	IPS_UNINITIALIZED};			// not even traced once.
 
-struct ImmaturePoint{
+struct Point{
     int idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
     float u,v; //position in host frame of the point
     float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
@@ -59,8 +57,9 @@ struct ImmaturePoint{
 	float energyTH; //outside
     float quality;
     // Eigen::Vector3f f; // heading range = Ki * (u,v,1)
-	Eigen::Vector4f f; //make it vec 4 to be more close to the opengl implementation
-	ImmaturePointStatus lastTraceStatus;
+	Eigen::Vector4f f_eigen; //make it vec 4 to be more close to the opengl implementation
+	glm::vec4 f;
+	PointStatus lastTraceStatus;
 	bool converged;
 	bool is_outlier;
 
@@ -76,7 +75,8 @@ struct ImmaturePoint{
 
 	//Stuff that may be to be removed
 	Eigen::Matrix2f gradH; //it may need to go because opencl doesn't like eigen
-	Eigen::Vector2f kp_GT;
+	// Eigen::Vector2f kp_GT;
+	glm::vec2 kp_GT;
 
 
 	//debug stuff
@@ -119,43 +119,21 @@ class Profiler;
 namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
 
 
-class DepthEstimatorCPU{
+class DepthEstimatorGL2{
 public:
-    DepthEstimatorCPU();
-    ~DepthEstimatorCPU(); //needed so that forward declarations work
-    void init_opencl();
-
-    void run_speed_test();
-    void run_speed_test_img(Frame& frame);
-    void run_speed_test_img2(Frame& frame);
-    void run_speed_test_img_3_blur(Frame& frame);
-    void run_speed_test_img_4_sobel(Frame& frame);
-    void run_speed_test_img_4_sobel_gray(Frame& frame);
-    void run_speed_test_img_4_blur_gray(Frame& frame);
-    void run_speed_test_img_4_blur_gray_safe(Frame& frame);
-
-    void create_blur_mask(std::vector<float>& mask, const int sigma); //create a 1d mask for gaussian blurring (doesn't matter if it's used in x or y)
-    void create_half_blur_mask(std::vector<float>& mask, const int sigma); //creates only half of gaussian because it's symetric
-    void optimize_blur_for_gpu_sampling(std::vector<float>&gaus_mask, std::vector<float>& gaus_offsets);
-    void gaussian_blur(cl::Image2DSafe& dest_img, const cl::Image2DSafe& src_img, const int sigma);
-
-    void compute_depth(Frame& frame);
+    DepthEstimatorGL2();
+    ~DepthEstimatorGL2(); //needed so that forward declarations work
+	void init_opengl();
+	void compile_shaders();
 
     //start with everything
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
-    Mesh compute_depth2(Frame& frame);
 	Mesh compute_depth_simplified();
 	float gaus_pdf(float mean, float sd, float x);
-	Eigen::Vector2f estimate_affine( std::vector<ImmaturePoint>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
+	Eigen::Vector2f estimate_affine( std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
 	float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolationType type=InterpolationType::NEAREST);
-	std::vector<ImmaturePoint> create_immature_points ( const Frame& frame );
-	void update_immature_points(std::vector<ImmaturePoint>& immature_points, const Frame& frame, const Eigen::Affine3f& tf_cur_host, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr, const Eigen::Vector2f& affine_cr);
-	void search_epiline_bca(ImmaturePoint& point, const Frame& frame, const Eigen::Matrix3f& hostToFrame_KRKi, const Eigen::Vector3f& Kt_cr, const Eigen::Vector2f& affine_cr);
-	void search_epiline_ncc(ImmaturePoint& point, const Frame& frame, const Eigen::Matrix3f& hostToFrame_KRKi, const Eigen::Vector3f& Kt_cr);
-    void update_idepth(ImmaturePoint& point, const Eigen::Affine3f& tf_host_cur, const float z, const double px_error_angle);
-    double compute_tau(const Eigen::Affine3f & tf_host_cur, const Eigen::Vector3f& f, const double z, const double px_error_angle);
-    void updateSeed(ImmaturePoint& point, const float x, const float tau2);
-	Mesh create_mesh(const std::vector<ImmaturePoint>& immature_points, const std::vector<Frame>& frame);
+	std::vector<Point> create_immature_points ( const Frame& frame );
+	Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frame);
 
 
     // Scene get_scene();
@@ -167,26 +145,11 @@ public:
     std::shared_ptr<igl::opengl::glfw::Viewer> m_view;
 	Pattern m_pattern;
 
-    //opencl global stuff
-    cl::Context m_context;
-    cl::Device m_device;
-    cl::CommandQueue m_queue;
-
-    //opencl things for processing the images
-    cl::Kernel m_kernel_simple_copy;
-    cl::Kernel m_kernel_blur;
-    cl::Kernel m_kernel_sobel;
-    cl::Kernel m_kernel_blurx;
-    cl::Kernel m_kernel_blury;
-    cl::Kernel m_kernel_blurx_fast;
-    cl::Kernel m_kernel_blury_fast;
-
-
     //databasse
     std::atomic<bool> m_scene_is_modified;
 
     //params
-    bool m_cl_profiling_enabled;
+    bool m_gl_profiling_enabled;
     bool m_show_images;
 
     //stuff for speed test
@@ -209,10 +172,10 @@ private:
 #define TIME_END(name)\
     TIME_END_2(name,m_profiler);
 
-#define TIME_START_CL(name)\
-    if (m_cl_profiling_enabled){ m_queue.finish();}\
+#define TIME_START_GL(name)\
+    if (m_gl_profiling_enabled) glFinish();\
     TIME_START_2(name,m_profiler);
 
-#define TIME_END_CL(name)\
-    if (m_cl_profiling_enabled){ m_queue.finish();}\
+#define TIME_END_GL(name)\
+    if (m_gl_profiling_enabled) glFinish();\
     TIME_END_2(name,m_profiler);

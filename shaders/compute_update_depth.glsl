@@ -188,9 +188,9 @@ void main(void) {
     // p[id].debug=nr_time_switched_best;
 
 
-    // if ( bestEnergy > p[id].energyTH * 1.2f ) {
-    //     point.lastTraceStatus = ImmaturePointStatus::IPS_OUTLIER;
-    // }else{
+    if ( bestEnergy > p[id].energyTH * 1.2f ) {
+        // point.lastTraceStatus = ImmaturePointStatus::IPS_OUTLIER;
+    }else{
         // float a = (Eigen::Vector2d(epi_dir(0),epi_dir(1)).transpose() * point.gradH * Eigen::Vector2d(epi_dir(0),epi_dir(1)));
         // float b = (Eigen::Vector2d(epi_dir(1),-epi_dir(0)).transpose() * point.gradH * Eigen::Vector2d(epi_dir(1),-epi_dir(0)));
         // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
@@ -216,7 +216,7 @@ void main(void) {
         barrier();
 
         // point.lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
-    // }
+    }
     //
     //
     //

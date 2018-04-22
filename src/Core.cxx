@@ -8,9 +8,10 @@
 #include "stereo_depth_cl/MiscUtils.h"
 #include "stereo_depth_cl/Profiler.h"
 #include "stereo_depth_cl/RosBagPlayer.h"
-#include "stereo_depth_cl/DepthEstimatorCPU.h"
+// #include "stereo_depth_cl/DepthEstimatorCPU.h"
 // #include "stereo_depth_cl/DepthEstimatorRenegade.h"
-#include "stereo_depth_cl/DepthEstimatorGL.h"
+// #include "stereo_depth_cl/DepthEstimatorGL.h"
+#include "stereo_depth_cl/DepthEstimatorGL2.h"
 #include "stereo_depth_cl/DataLoader.h"
 #include "stereo_depth_cl/SurfelSplatter.h"
 
@@ -38,9 +39,10 @@ namespace fs = boost::filesystem;
 Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Profiler> profiler) :
         m_viewer_initialized(false),
         m_player(new RosBagPlayer),
-        m_depth_estimator(new DepthEstimatorCPU),
+        // m_depth_estimator(new DepthEstimatorCPU),
         // m_depth_estimator_renegade(new DepthEstimatorRenegade),
-        m_depth_estimator_cl(new DepthEstimatorGL),
+        // m_depth_estimator_cl(new DepthEstimatorGL),
+        m_depth_estimator_gl2(new DepthEstimatorGL2),
         m_loader(new DataLoader),
         m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
@@ -49,12 +51,14 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
 
     m_view = view;
     m_profiler=profiler;
-    m_depth_estimator->m_profiler=profiler;
-    m_depth_estimator->m_view=m_view;
+    // m_depth_estimator->m_profiler=profiler;
+    // m_depth_estimator->m_view=m_view;
     // m_depth_estimator_renegade->m_profiler=profiler;
     // m_depth_estimator_renegade->m_view=m_view;
-    m_depth_estimator_cl->m_profiler=profiler;
-    m_depth_estimator_cl->m_view=m_view;
+    // m_depth_estimator_cl->m_profiler=profiler;
+    // m_depth_estimator_cl->m_view=m_view;
+    m_depth_estimator_gl2->m_profiler=profiler;
+    m_depth_estimator_gl2->m_view=m_view;
     m_splatter->m_view=m_view;
     m_loader->m_profiler=profiler;
     m_loader->m_player=m_player;
@@ -77,9 +81,10 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
 
      Frame dummy_frame;
      // Mesh depth_mesh=m_depth_estimator->compute_depth2(dummy_frame);
-     Mesh depth_mesh=m_depth_estimator->compute_depth_simplified();
+     // Mesh depth_mesh=m_depth_estimator->compute_depth_simplified();  // works
      // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth(dummy_frame);
      // Mesh depth_mesh=m_depth_estimator_cl->compute_depth();
+     Mesh depth_mesh=m_depth_estimator_gl2->compute_depth_simplified();  // works
      depth_mesh.m_show_points=true;
      m_scene.add_mesh(depth_mesh, "depth_mesh");
 
@@ -182,7 +187,7 @@ void Core::update() {
     TIME_END("set_mesh");
 
 
-    if(m_depth_estimator_cl->is_modified() && m_player->is_paused() &&  m_player->m_player_should_continue_after_step){
+    if(m_player->is_paused() &&  m_player->m_player_should_continue_after_step){
         m_player->m_player_should_do_one_step=true; //so that when it starts the callback it puts the bag back into pause
         m_player->pause(); //starts the bag
     }
