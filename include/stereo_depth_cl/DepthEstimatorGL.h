@@ -95,6 +95,8 @@ struct Point{
     float debug; //serves as both debug and padding to 16 bytes
     // float padding_1; //to gt the struc to be aligned to 16 bytes
 
+    float debug2[16];
+
 };
 
 enum class InterpolType {
