@@ -138,8 +138,8 @@ Mesh DepthEstimatorGL2::compute_depth_simplified(){
         //matrices need to be transposed here because of make_mat4x4 but in the case of glsl we don't need to transpose
         const Eigen::Matrix4f tf_cur_host_eigen_trans = tf_cur_host_eigen.matrix().transpose();
         const Eigen::Matrix4f tf_host_cur_eigen_trans = tf_host_cur_eigen.matrix().transpose();
-        const Eigen::Matrix3f KRKi_cr_eigen_trans = KRKi_cr_eigen.matrix().transpose();
-        const Eigen::Matrix3f K_trans = frames[i].K.transpose();
+        const Eigen::Matrix3f KRKi_cr_eigen_trans = KRKi_cr_eigen.matrix();
+        const Eigen::Matrix3f K_trans = frames[i].K;
         glm::mat4 tf_cur_host=glm::make_mat4x4(tf_cur_host_eigen_trans.data());
         glm::mat4 tf_host_cur=glm::make_mat4x4(tf_host_cur_eigen_trans.data());
         glm::mat3 K=glm::make_mat3x3(K_trans.data());
@@ -173,45 +173,45 @@ Mesh DepthEstimatorGL2::compute_depth_simplified(){
 
 
         //fucking sanity check everything!!!
-        for (size_t row = 0; row < 4; row++) {
-            for (size_t col = 0; col < 4; col++) {
-                // std::cout << tf_cur_host_eigen.matrix()(row,col)<< " ";
-                if(tf_cur_host_eigen.matrix()(row,col)!=tf_cur_host[row][col]){
-                    LOG(FATAL) << 1;
-                }
-                if(tf_host_cur_eigen.matrix()(row,col)!=tf_host_cur[row][col]){
-                    LOG(FATAL) << 2;
-                }
-            }
-        }
-        for (size_t row = 0; row < 3; row++) {
-            for (size_t col = 0; col < 3; col++) {
-                // std::cout << tf_cur_host_eigen.matrix()(row,col)<< " ";
-                if(KRKi_cr_eigen.matrix()(row,col)!=KRKi_cr[row][col]){
-                    LOG(FATAL) << 3;
-                }
-                if(frames[i].K.matrix()(row,col)!=K[row][col]){
-                    LOG(FATAL) << 4;
-                }
-            }
-        }
-        for (size_t c = 0; c < 3; c++) {
-            if(Kt_cr_eigen(c)!=Kt_cr[c]){
-                LOG(FATAL) << 5;
-            }
-        }
-        for (size_t c = 0; c < 2; c++) {
-            if(affine_cr_eigen(c)!=affine_cr[c]){
-                LOG(FATAL) << 6;
-            }
-        }
-        for (size_t p_idx = 0; p_idx < pattern_rot.get_nr_points(); p_idx++) {
-            for (size_t c = 0; c < 2; c++) {
-                if(pattern_rot.get_offset(p_idx)(c)!=pattern_rot_offsets[p_idx][c]){
-                    LOG(FATAL) << 7;
-                }
-            }
-        }
+        // for (size_t row = 0; row < 4; row++) {
+        //     for (size_t col = 0; col < 4; col++) {
+        //         // std::cout << tf_cur_host_eigen.matrix()(row,col)<< " ";
+        //         if(tf_cur_host_eigen.matrix()(row,col)!=tf_cur_host[row][col]){
+        //             LOG(FATAL) << 1;
+        //         }
+        //         if(tf_host_cur_eigen.matrix()(row,col)!=tf_host_cur[row][col]){
+        //             LOG(FATAL) << 2;
+        //         }
+        //     }
+        // }
+        // for (size_t row = 0; row < 3; row++) {
+        //     for (size_t col = 0; col < 3; col++) {
+        //         // std::cout << tf_cur_host_eigen.matrix()(row,col)<< " ";
+        //         if(KRKi_cr_eigen.matrix()(row,col)!=KRKi_cr[row][col]){
+        //             LOG(FATAL) << 3;
+        //         }
+        //         if(frames[i].K.matrix()(row,col)!=K[row][col]){
+        //             LOG(FATAL) << 4;
+        //         }
+        //     }
+        // }
+        // for (size_t c = 0; c < 3; c++) {
+        //     if(Kt_cr_eigen(c)!=Kt_cr[c]){
+        //         LOG(FATAL) << 5;
+        //     }
+        // }
+        // for (size_t c = 0; c < 2; c++) {
+        //     if(affine_cr_eigen(c)!=affine_cr[c]){
+        //         LOG(FATAL) << 6;
+        //     }
+        // }
+        // for (size_t p_idx = 0; p_idx < pattern_rot.get_nr_points(); p_idx++) {
+        //     for (size_t c = 0; c < 2; c++) {
+        //         if(pattern_rot.get_offset(p_idx)(c)!=pattern_rot_offsets[p_idx][c]){
+        //             LOG(FATAL) << 7;
+        //         }
+        //     }
+        // }
 
 
 
@@ -221,76 +221,347 @@ Mesh DepthEstimatorGL2::compute_depth_simplified(){
 
         // update_immature_points(immature_points, frames[i], tf_cur_host, KRKi_cr, Kt_cr, affine_cr );
 
-        //done in paralel for all points in the case of opengl
-        for (auto &point : immature_points){
+        // //done in paralel for all points in the case of opengl
+        // int id=0;
+        // for (auto &point : immature_points){
+        //     bool debug=false;
+        //     if(id==100){
+        //         debug=true;
+        //     }
+        //     if(debug){
+        //         std::cout << "begin" << '\n';
+        //         print_point(point);
+        //     }
+        //
+        //     // // check if point is visible in the current image
+        //     const Eigen::Vector3f p_backproj_xyz= point.f_eigen.head<3>() * 1.0/point.mu;
+        //     const Eigen::Vector4f p_backproj_xyzw=Eigen::Vector4f(p_backproj_xyz(0),p_backproj_xyz(1),p_backproj_xyz(2),1.0);
+        //     const Eigen::Vector4f xyz_f_xyzw = tf_cur_host_4x4*  p_backproj_xyzw ;
+        //     const Eigen::Vector3f xyz_f=xyz_f_xyzw.head<3>()/xyz_f_xyzw.w();
+        //     if(xyz_f.z() < 0.0)  {
+        //         continue; // TODO in gl this is a return
+        //     }
+        //
+        //
+        //
+        //
+        //     // const Eigen::Vector3f xyz_f( tf_cur_host_4x4*(1.0/point.mu * point.f.head<3>()) );
+        //     // if(xyz_f.z() < 0.0)  {
+        //     //     continue;
+        //     // }
+        //     const Eigen::Vector2f kp_c = (frames[i].K * xyz_f).hnormalized();
+        //     if ( kp_c(0) < 0 || kp_c(0) >= frames[i].gray.cols || kp_c(1) < 0 || kp_c(1) >= frames[i].gray.rows ) {
+        //         continue;
+        //     }
+        //
+        //     if(debug){
+        //         std::cout << "pint is visible" << '\n';
+        //         std::cout << "xyz_f is " << xyz_f << '\n';
+        //         std::cout << "K is "<< frames[i].K  << '\n';
+        //         std::cout << "not hnormalized kp_c is " << (frames[i].K * xyz_f) << '\n';
+        //         std::cout << "kp_c is " << kp_c << '\n';
+        //     }
+        //
+        //
+        //     //point is visible
+        //     // point.last_visible_frame=frames[i].frame_id;
+        //
+        //     //update inverse depth coordinates for min and max
+        //     point.idepth_min = point.mu + sqrt(point.sigma2);
+        //     point.idepth_max = std::max<float>(point.mu - sqrt(point.sigma2), 0.00000001f);
+        //
+        //     if(debug){
+        //         std::cout << "after updating min max" << '\n';
+        //         print_point(point);
+        //     }
+        //
+        //     //search epiline-----------------------------------------------------------------------
+        //    // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
+        //     // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
+        //     float idepth_mean = (point.idepth_min + point.idepth_max)*0.5;
+        //     Eigen::Vector3f pr = KRKi_cr_eigen * Eigen::Vector3f(point.u,point.v, 1);
+        //     Eigen::Vector3f ptpMean = pr + Kt_cr_eigen*idepth_mean;
+        //     Eigen::Vector3f ptpMin = pr + Kt_cr_eigen*point.idepth_min;
+        //     Eigen::Vector3f ptpMax = pr + Kt_cr_eigen*point.idepth_max;
+        //     Eigen::Vector2f uvMean = ptpMean.hnormalized();
+        //     Eigen::Vector2f uvMin = ptpMin.hnormalized();
+        //     Eigen::Vector2f uvMax = ptpMax.hnormalized();
+        //
+        //     if(debug){
+        //         std::cout << "idepth_mean is " << idepth_mean << '\n';
+        //         std::cout << "uvMin " << uvMin << '\n';
+        //         std::cout << "uvMax " << uvMax << '\n';
+        //     }
+        //
+        //     // Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
+        //
+        //     Eigen::Vector2f epi_line = uvMax - uvMin;
+        //     float norm_epi = std::max<float>(1e-5f,epi_line.norm());
+        //     Eigen::Vector2f epi_dir = epi_line / norm_epi;
+        //     const float  half_length = 0.5f * norm_epi;
+        //
+        //     Eigen::Vector2f bestKp;
+        //     float bestEnergy = 1e10;
+        //
+        //     if(debug){
+        //         std::cout << "epi_dir is " << epi_dir << '\n';
+        //     }
+        //
+        //     for(float l = -half_length; l <= half_length; l += 0.7f)
+        //     {
+        //         float energy = 0;
+        //         Eigen::Vector2f kp = uvMean + l*epi_dir;
+        //
+        //         if( !kp.allFinite() || ( kp(0) >= (frames[i].gray.cols-10) )  || ( kp(1) >= (frames[i].gray.rows-10) ) || ( kp(0) < 10 ) || ( kp(1) < 10) )
+        //         {
+        //             continue;
+        //         }
+        //
+        //         for(int idx=0;idx<pattern_rot.get_nr_points(); ++idx)
+        //         {
+        //             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
+        //             Eigen::Vector2f offset=pattern_rot.get_offset(idx);
+        //             float hit_color=texture_interpolate(frames[i].gray, kp(0)+offset(0), kp(1)+offset(1) , InterpolationType::LINEAR);
+        //             if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
+        //
+        //             const float residual = hit_color - (float)(affine_cr_eigen[0] * point.color[idx] + affine_cr_eigen[1]);
+        //
+        //             float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
+        //             energy += hw *residual*residual*(2-hw);
+        //         }
+        //         if ( energy < bestEnergy )
+        //         {
+        //             bestKp = kp; bestEnergy = energy;
+        //         }
+        //     }
+        //
+        //     if(debug){
+        //         std::cout << "bestEnergy is " << bestEnergy << '\n';
+        //     }
+        //
+        //     if ( bestEnergy > point.energyTH * 1.2f ) {
+        //         // point.lastTraceStatus = PointStatus::IPS_OUTLIER;
+        //     }
+        //     else
+        //     {
+        //         float a = (Eigen::Vector2f(epi_dir(0),epi_dir(1)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(0),epi_dir(1)));
+        //         float b = (Eigen::Vector2f(epi_dir(1),-epi_dir(0)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(1),-epi_dir(0)));
+        //         float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
+        //
+        //         if( epi_dir(0)*epi_dir(0)>epi_dir(1)*epi_dir(1) )
+        //         {
+        //             point.idepth_min = (pr[2]*(bestKp(0)-errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr_eigen[0] - Kt_cr_eigen[2]*(bestKp(0)-errorInPixel*epi_dir(0)));
+        //             point.idepth_max = (pr[2]*(bestKp(0)+errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr_eigen[0] - Kt_cr_eigen[2]*(bestKp(0)+errorInPixel*epi_dir(0)));
+        //         }
+        //         else
+        //         {
+        //             point.idepth_min = (pr[2]*(bestKp(1)-errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr_eigen[1] - Kt_cr_eigen[2]*(bestKp(1)-errorInPixel*epi_dir(1)));
+        //             point.idepth_max = (pr[2]*(bestKp(1)+errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr_eigen[1] - Kt_cr_eigen[2]*(bestKp(1)+errorInPixel*epi_dir(1)));
+        //         }
+        //         if(point.idepth_min > point.idepth_max) std::swap<float>(point.idepth_min, point.idepth_max);
+        //
+        //         // point.lastTraceStatus = PointStatus::IPS_GOOD;
+        //     }
+        //
+        //     if(debug){
+        //         std::cout << "after updating again min max " << '\n';
+        //         print_point(point);
+        //     }
+        //
+        //
+        //
+        //
+        //
+        //
+        //     double idepth = -1;
+        //     double z = 0;
+        //     // if( point.lastTraceStatus == PointStatus::IPS_GOOD ) {
+        //         idepth = std::max<double>(1e-5,.5*(point.idepth_min+point.idepth_max));
+        //         z = 1./idepth;
+        //     // }
+        //     // if ( point.lastTraceStatus == PointStatus::IPS_OOB  || point.lastTraceStatus == PointStatus::IPS_SKIPPED ){
+        //     //     continue;
+        //     // }
+        //     // if ( !std::isfinite(idepth) || point.lastTraceStatus == PointStatus::IPS_OUTLIER || point.lastTraceStatus == PointStatus::IPS_BADCONDITION ) {
+        //     //     point.b++; // increase outlier probability when no match was found
+        //     //     continue;
+        //     // }
+        //
+        //
+        //     // update_idepth(point,tf_host_cur, z, px_error_angle);
+        //
+        //     // compute tau----------------------------------------------------------------------------
+        //     // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
+        //     Eigen::Vector3f t=  Eigen::Vector3f(tf_host_cur_4x4(0,3), tf_host_cur_4x4(1,3), tf_host_cur_4x4(2,3));
+        //     // Eigen::Vector3f t(tf_host_cur.translation());
+        //     Eigen::Vector3f a = point.f_eigen.head<3>()*z-t;
+        //     double t_norm = t.norm();
+        //     double a_norm = a.norm();
+        //     double alpha = acos(point.f_eigen.head<3>().dot(t)/t_norm); // dot product
+        //     double beta = acos(a.dot(-t)/(t_norm*a_norm)); // dot product
+        //     double beta_plus = beta + px_error_angle;
+        //     double gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
+        //     double z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
+        //     double tau= (z_plus - z); // tau
+        //     double tau_inverse = 0.5 * (1.0/std::max<double>(0.0000001, z-tau) - 1.0/(z+tau));
+        //
+        //     if(debug){
+        //         std::cout << "tau is " << tau << '\n';
+        //         std::cout << "tau inverse is " << tau_inverse << '\n';
+        //     }
+        //
+        //     // update the estimate--------------------------------------------------
+        //     float x=1.0/z;
+        //     float tau2=tau_inverse*tau_inverse;
+        //     // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
+        //     float norm_scale = sqrt(point.sigma2 + tau2);
+        //     if(std::isnan(norm_scale))
+        //         continue;
+        //     float s2 = 1./(1./point.sigma2 + 1./tau2);
+        //     float m = s2*(point.mu/point.sigma2 + x/tau2);
+        //     float C1 = point.a/(point.a+point.b) * gaus_pdf(point.mu, norm_scale, x);
+        //     float C2 = point.b/(point.a+point.b) * 1./point.z_range;
+        //     float normalization_constant = C1 + C2;
+        //     C1 /= normalization_constant;
+        //     C2 /= normalization_constant;
+        //     float f = C1*(point.a+1.)/(point.a+point.b+1.) + C2*point.a/(point.a+point.b+1.);
+        //     float e = C1*(point.a+1.)*(point.a+2.)/((point.a+point.b+1.)*(point.a+point.b+2.))
+        //               + C2*point.a*(point.a+1.0f)/((point.a+point.b+1.0f)*(point.a+point.b+2.0f));
+        //     // update parameters
+        //     float mu_new = C1*m+C2*point.mu;
+        //     point.sigma2 = C1*(s2 + m*m) + C2*(point.sigma2 + point.mu*point.mu) - mu_new*mu_new;
+        //     point.mu = mu_new;
+        //     point.a = (e-f)/(f-e/f);
+        //     point.b = point.a*(1.0f-f)/f;
+        //
+        //     if(debug){
+        //         std::cout << "after putting new mu at the finale" << '\n';
+        //         print_point(point);
+        //     }
+        //
+        //
+        //     //not implemented in opengl
+        //     // const float eta_inlier = .6f;
+        //     // const float eta_outlier = .05f;
+        //     // if( ((point.a / (point.a + point.b)) > eta_inlier) && (sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh)) {
+        //     //     point.is_outlier = false; // The seed converged
+        //     // }else if((point.a-1) / (point.a + point.b - 2) < eta_outlier){ // The seed failed to converge
+        //     //     point.is_outlier = true;
+        //     //     // it->reinit();
+        //     //     //TODO do a better reinit inside a point class
+        //     //     point.a = 10;
+        //     //     point.b = 10;
+        //     //     point.mu = (1.0/4.0);
+        //     //     point.z_range = (1.0/0.1);
+        //     //     point.sigma2 = (point.z_range*point.z_range/36);
+        //     // }
+        //     // // if the seed has converged, we initialize a new candidate point and remove the seed
+        //     // if(sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh){
+        //     //     point.converged = true;
+        //     // }
+        //     id++;
+        //
+        // }
+
+
+
+
+
+        //glm code
+        for (size_t id = 0; id < immature_points.size(); id++) {
+            bool debug=false;
+            // if(id==100){
+            //     debug=true;
+            // }
+            if(debug){
+                std::cout << "begin" << '\n';
+                print_point(p[id]);
+            }
 
             // // check if point is visible in the current image
-            const Eigen::Vector3f p_backproj_xyz= point.f_eigen.head<3>() * 1.0/point.mu;
-            const Eigen::Vector4f p_backproj_xyzw=Eigen::Vector4f(p_backproj_xyz(0),p_backproj_xyz(1),p_backproj_xyz(2),1.0);
-            const Eigen::Vector4f xyz_f_xyzw = tf_cur_host_4x4*  p_backproj_xyzw ;
-            const Eigen::Vector3f xyz_f=xyz_f_xyzw.head<3>()/xyz_f_xyzw.w();
-            if(xyz_f.z() < 0.0)  {
+            const vec3 p_backproj_xyz= p[id].f.xyz() * 1.0f/ p[id].mu;
+            const vec4 p_backproj_xyzw=vec4(p_backproj_xyz.x,p_backproj_xyz.y,p_backproj_xyz.z,1.0);
+            const vec4 xyz_f_xyzw = tf_cur_host*  p_backproj_xyzw ;
+            const vec3 xyz_f=xyz_f_xyzw.xyz()/xyz_f_xyzw.w;
+            if(xyz_f.z < 0.0)  {
                 continue; // TODO in gl this is a return
             }
 
 
-            // const Eigen::Vector3f xyz_f( tf_cur_host_4x4*(1.0/point.mu * point.f.head<3>()) );
-            // if(xyz_f.z() < 0.0)  {
-            //     continue;
-            // }
-            const Eigen::Vector2f kp_c = (frames[i].K * xyz_f).hnormalized();
-            if ( kp_c(0) < 0 || kp_c(0) >= frames[i].gray.cols || kp_c(1) < 0 || kp_c(1) >= frames[i].gray.rows ) {
-                continue;
+            const vec3 kp_c = K * xyz_f;
+            const vec2 kp_c_h=kp_c.xy()/kp_c.z;
+            if ( kp_c_h.x < 0 || kp_c_h.x >= frame_size.x || kp_c_h.y < 0 || kp_c_h.y >= frame_size.y ) {
+                continue; // TODO in gl this is a return
+            }
+
+            if(debug){
+                std::cout << "pint is visible" << '\n';
+                std::cout << "xyz_f is " << xyz_f << '\n';
+                std::cout << "K is "<< K << '\n';
+                std::cout << "kp_c is " << kp_c << '\n';
+                std::cout << "kp_c_h is " << kp_c_h << '\n';
             }
 
 
             //point is visible
-            point.last_visible_frame=frames[i].frame_id;
+            // point.last_visible_frame=frames[i].frame_id;
 
             //update inverse depth coordinates for min and max
-            point.idepth_min = point.mu + sqrt(point.sigma2);
-            point.idepth_max = std::max<float>(point.mu - sqrt(point.sigma2), 0.00000001f);
+            p[id].idepth_min = p[id].mu + sqrt(p[id].sigma2);
+            p[id].idepth_max = std::max<float>(p[id].mu - sqrt(p[id].sigma2), 0.00000001f);
+
+            if(debug){
+                std::cout << "after updating min max" << '\n';
+                print_point(p[id]);
+            }
 
             //search epiline-----------------------------------------------------------------------
            // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
             // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
-            float idepth_mean = (point.idepth_min + point.idepth_max)*0.5;
-            Eigen::Vector3f pr = KRKi_cr_eigen * Eigen::Vector3f(point.u,point.v, 1);
-            Eigen::Vector3f ptpMean = pr + Kt_cr_eigen*idepth_mean;
-            Eigen::Vector3f ptpMin = pr + Kt_cr_eigen*point.idepth_min;
-            Eigen::Vector3f ptpMax = pr + Kt_cr_eigen*point.idepth_max;
-            Eigen::Vector2f uvMean = ptpMean.hnormalized();
-            Eigen::Vector2f uvMin = ptpMin.hnormalized();
-            Eigen::Vector2f uvMax = ptpMax.hnormalized();
+            float idepth_mean = (p[id].idepth_min + p[id].idepth_max)*0.5;
+            vec3 pr = KRKi_cr * vec3(p[id].u,p[id].v, 1);
+            vec3 ptpMean = pr + Kt_cr*idepth_mean;
+            vec3 ptpMin = pr + Kt_cr*p[id].idepth_min;
+            vec3 ptpMax = pr + Kt_cr*p[id].idepth_max;
+            vec2 uvMean = ptpMean.xy()/ptpMean.z;
+            vec2 uvMin = ptpMin.xy()/ptpMin.z;
+            vec2 uvMax = ptpMax.xy()/ptpMax.z;
 
-            // Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
+            if(debug){
+                std::cout << "idepth_mean is " << idepth_mean << '\n';
+                std::cout << "uvMin " << uvMin << '\n';
+                std::cout << "uvMax " << uvMax << '\n';
+            }
 
-            Eigen::Vector2f epi_line = uvMax - uvMin;
-            float norm_epi = std::max<float>(1e-5f,epi_line.norm());
-            Eigen::Vector2f epi_dir = epi_line / norm_epi;
+
+            vec2 epi_line = uvMax - uvMin;
+            float norm_epi = std::max<float>(1e-5f,length(epi_line));
+            vec2 epi_dir = epi_line / norm_epi;
             const float  half_length = 0.5f * norm_epi;
 
-            Eigen::Vector2f bestKp;
+            vec2 bestKp;
             float bestEnergy = 1e10;
+
+            if(debug){
+                std::cout << "epi_dir is " << epi_dir << '\n';
+            }
 
             for(float l = -half_length; l <= half_length; l += 0.7f)
             {
                 float energy = 0;
-                Eigen::Vector2f kp = uvMean + l*epi_dir;
+                vec2 kp = uvMean + l*epi_dir;
 
-                if( !kp.allFinite() || ( kp(0) >= (frames[i].gray.cols-10) )  || ( kp(1) >= (frames[i].gray.rows-10) ) || ( kp(0) < 10 ) || ( kp(1) < 10) )
-                {
+                if( ( kp.x >= (frame_size.x-10) )  || ( kp.y >= (frame_size.y-10) ) || ( kp.x < 10 ) || ( kp.y < 10) ){
                     continue;
                 }
 
-                for(int idx=0;idx<pattern_rot.get_nr_points(); ++idx)
-                {
+                for(int idx=0;idx<pattern_rot_nr_points; ++idx){
                     //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
-                    Eigen::Vector2f offset=pattern_rot.get_offset(idx);
-                    float hit_color=texture_interpolate(frames[i].gray, kp(0)+offset(0), kp(1)+offset(1) , InterpolationType::LINEAR);
-                    if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
+                    vec2 offset=pattern_rot_offsets[idx];
+                    float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolationType::LINEAR);
+                    // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
 
-                    const float residual = hit_color - (float)(affine_cr_eigen[0] * point.color[idx] + affine_cr_eigen[1]);
+                    const float residual = hit_color - (float)(affine_cr.x * p[id].color[idx] + affine_cr.y);
 
                     float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
                     energy += hw *residual*residual*(2-hw);
@@ -301,28 +572,38 @@ Mesh DepthEstimatorGL2::compute_depth_simplified(){
                 }
             }
 
-            if ( bestEnergy > point.energyTH * 1.2f ) {
-                point.lastTraceStatus = PointStatus::IPS_OUTLIER;
+            if(debug){
+                std::cout << "bestEnergy is " << bestEnergy << '\n';
+            }
+
+            if ( bestEnergy > p[id].energyTH * 1.2f ) {
+                // point.lastTraceStatus = PointStatus::IPS_OUTLIER;
             }
             else
             {
-                float a = (Eigen::Vector2f(epi_dir(0),epi_dir(1)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(0),epi_dir(1)));
-                float b = (Eigen::Vector2f(epi_dir(1),-epi_dir(0)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(1),-epi_dir(0)));
-                float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
+                // float a = (Eigen::Vector2f(epi_dir(0),epi_dir(1)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(0),epi_dir(1)));
+                // float b = (Eigen::Vector2f(epi_dir(1),-epi_dir(0)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(1),-epi_dir(0)));
+                // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
+                float errorInPixel=0.0f;
 
-                if( epi_dir(0)*epi_dir(0)>epi_dir(1)*epi_dir(1) )
+                if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
                 {
-                    point.idepth_min = (pr[2]*(bestKp(0)-errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr_eigen[0] - Kt_cr_eigen[2]*(bestKp(0)-errorInPixel*epi_dir(0)));
-                    point.idepth_max = (pr[2]*(bestKp(0)+errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr_eigen[0] - Kt_cr_eigen[2]*(bestKp(0)+errorInPixel*epi_dir(0)));
+                    p[id].idepth_min = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
+                    p[id].idepth_max = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
                 }
                 else
                 {
-                    point.idepth_min = (pr[2]*(bestKp(1)-errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr_eigen[1] - Kt_cr_eigen[2]*(bestKp(1)-errorInPixel*epi_dir(1)));
-                    point.idepth_max = (pr[2]*(bestKp(1)+errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr_eigen[1] - Kt_cr_eigen[2]*(bestKp(1)+errorInPixel*epi_dir(1)));
+                    p[id].idepth_min = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
+                    p[id].idepth_max = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
                 }
-                if(point.idepth_min > point.idepth_max) std::swap<float>(point.idepth_min, point.idepth_max);
+                if(p[id].idepth_min > p[id].idepth_max) std::swap<float>(p[id].idepth_min, p[id].idepth_max);
 
-                point.lastTraceStatus = PointStatus::IPS_GOOD;
+                // point.lastTraceStatus = PointStatus::IPS_GOOD;
+            }
+
+            if(debug){
+                std::cout << "after updating again min max " << '\n';
+                print_point(p[id]);
             }
 
 
@@ -331,61 +612,71 @@ Mesh DepthEstimatorGL2::compute_depth_simplified(){
 
 
 
-            double idepth = -1;
-            double z = 0;
-            if( point.lastTraceStatus == PointStatus::IPS_GOOD ) {
-                idepth = std::max<double>(1e-5,.5*(point.idepth_min+point.idepth_max));
-                z = 1./idepth;
-            }
-            if ( point.lastTraceStatus == PointStatus::IPS_OOB  || point.lastTraceStatus == PointStatus::IPS_SKIPPED ){
-                continue;
-            }
-            if ( !std::isfinite(idepth) || point.lastTraceStatus == PointStatus::IPS_OUTLIER || point.lastTraceStatus == PointStatus::IPS_BADCONDITION ) {
-                point.b++; // increase outlier probability when no match was found
-                continue;
-            }
+            float idepth = -1;
+            float z = 0;
+            // if( point.lastTraceStatus == PointStatus::IPS_GOOD ) {
+                idepth = std::max<float>(1e-5f,.5*(p[id].idepth_min+p[id].idepth_max));
+                z = 1.0f/idepth;
+            // }
+            // if ( point.lastTraceStatus == PointStatus::IPS_OOB  || point.lastTraceStatus == PointStatus::IPS_SKIPPED ){
+            //     continue;
+            // }
+            // if ( !std::isfinite(idepth) || point.lastTraceStatus == PointStatus::IPS_OUTLIER || point.lastTraceStatus == PointStatus::IPS_BADCONDITION ) {
+            //     point.b++; // increase outlier probability when no match was found
+            //     continue;
+            // }
 
 
             // update_idepth(point,tf_host_cur, z, px_error_angle);
 
             // compute tau----------------------------------------------------------------------------
             // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
-            Eigen::Vector3f t=  Eigen::Vector3f(tf_host_cur_4x4(0,3), tf_host_cur_4x4(1,3), tf_host_cur_4x4(2,3));
+            vec3 t=  vec3(tf_host_cur[0][3], tf_host_cur[1][3], tf_host_cur[2][3]);
             // Eigen::Vector3f t(tf_host_cur.translation());
-            Eigen::Vector3f a = point.f_eigen.head<3>()*z-t;
-            double t_norm = t.norm();
-            double a_norm = a.norm();
-            double alpha = acos(point.f_eigen.head<3>().dot(t)/t_norm); // dot product
-            double beta = acos(a.dot(-t)/(t_norm*a_norm)); // dot product
-            double beta_plus = beta + px_error_angle;
-            double gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
-            double z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
-            double tau= (z_plus - z); // tau
-            double tau_inverse = 0.5 * (1.0/std::max<double>(0.0000001, z-tau) - 1.0/(z+tau));
+            vec3 a = p[id].f.xyz()*z-t;
+            float t_norm = length(t);
+            float a_norm = length(a);
+            float alpha = acos(dot(p[id].f.xyz(),t)/t_norm); // dot product
+            float beta = acos(dot(a,-t)/(t_norm*a_norm)); // dot product
+            float beta_plus = beta + px_error_angle;
+            float gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
+            float z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
+            float tau= (z_plus - z); // tau
+            float tau_inverse = 0.5 * (1.0/std::max<double>(0.0000001, z-tau) - 1.0/(z+tau));
+
+            if(debug){
+                std::cout << "tau is " << tau << '\n';
+                std::cout << "tau inverse is " << tau_inverse << '\n';
+            }
 
             // update the estimate--------------------------------------------------
             float x=1.0/z;
             float tau2=tau_inverse*tau_inverse;
             // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
-            float norm_scale = sqrt(point.sigma2 + tau2);
+            float norm_scale = sqrt(p[id].sigma2 + tau2);
             if(std::isnan(norm_scale))
                 continue;
-            float s2 = 1./(1./point.sigma2 + 1./tau2);
-            float m = s2*(point.mu/point.sigma2 + x/tau2);
-            float C1 = point.a/(point.a+point.b) * gaus_pdf(point.mu, norm_scale, x);
-            float C2 = point.b/(point.a+point.b) * 1./point.z_range;
+            float s2 = 1./(1./p[id].sigma2 + 1./tau2);
+            float m = s2*(p[id].mu/p[id].sigma2 + x/tau2);
+            float C1 = p[id].a/(p[id].a+p[id].b) * gaus_pdf(p[id].mu, norm_scale, x);
+            float C2 = p[id].b/(p[id].a+p[id].b) * 1./p[id].z_range;
             float normalization_constant = C1 + C2;
             C1 /= normalization_constant;
             C2 /= normalization_constant;
-            float f = C1*(point.a+1.)/(point.a+point.b+1.) + C2*point.a/(point.a+point.b+1.);
-            float e = C1*(point.a+1.)*(point.a+2.)/((point.a+point.b+1.)*(point.a+point.b+2.))
-                      + C2*point.a*(point.a+1.0f)/((point.a+point.b+1.0f)*(point.a+point.b+2.0f));
+            float f = C1*(p[id].a+1.)/(p[id].a+p[id].b+1.) + C2*p[id].a/(p[id].a+p[id].b+1.);
+            float e = C1*(p[id].a+1.)*(p[id].a+2.)/((p[id].a+p[id].b+1.)*(p[id].a+p[id].b+2.))
+                      + C2*p[id].a*(p[id].a+1.0f)/((p[id].a+p[id].b+1.0f)*(p[id].a+p[id].b+2.0f));
             // update parameters
-            float mu_new = C1*m+C2*point.mu;
-            point.sigma2 = C1*(s2 + m*m) + C2*(point.sigma2 + point.mu*point.mu) - mu_new*mu_new;
-            point.mu = mu_new;
-            point.a = (e-f)/(f-e/f);
-            point.b = point.a*(1.0f-f)/f;
+            float mu_new = C1*m+C2*p[id].mu;
+            p[id].sigma2 = C1*(s2 + m*m) + C2*(p[id].sigma2 + p[id].mu*p[id].mu) - mu_new*mu_new;
+            p[id].mu = mu_new;
+            p[id].a = (e-f)/(f-e/f);
+            p[id].b = p[id].a*(1.0f-f)/f;
+
+            if(debug){
+                std::cout << "after putting new mu at the finale" << '\n';
+                print_point(p[id]);
+            }
 
 
             //not implemented in opengl
@@ -409,195 +700,6 @@ Mesh DepthEstimatorGL2::compute_depth_simplified(){
             // }
 
         }
-
-
-
-
-
-        // //glm code
-        // for (size_t id = 0; id < immature_points.size(); id++) {
-        //
-        //     // // check if point is visible in the current image
-        //     const vec3 p_backproj_xyz= p[id].f.xyz() * 1.0f/ p[id].mu;
-        //     const vec4 p_backproj_xyzw=vec4(p_backproj_xyz.x,p_backproj_xyz.y,p_backproj_xyz.z,1.0);
-        //     const vec4 xyz_f_xyzw = tf_cur_host*  p_backproj_xyzw ;
-        //     const vec3 xyz_f=xyz_f_xyzw.xyz()/xyz_f_xyzw.w;
-        //     if(xyz_f.z < 0.0)  {
-        //         continue; // TODO in gl this is a return
-        //     }
-        //
-        //
-        //     const vec3 kp_c = K * xyz_f;
-        //     const vec2 kp_c_h=kp_c.xy()/kp_c.z;
-        //     if ( kp_c_h.x < 0 || kp_c_h.x >= frame_size.x || kp_c_h.y < 0 || kp_c_h.y >= frame_size.y ) {
-        //         continue; // TODO in gl this is a return
-        //     }
-        //
-        //
-        //
-        //     //point is visible
-        //     // point.last_visible_frame=frames[i].frame_id;
-        //
-        //     //update inverse depth coordinates for min and max
-        //     p[id].idepth_min = p[id].mu + sqrt(p[id].sigma2);
-        //     p[id].idepth_max = std::max<float>(p[id].mu - sqrt(p[id].sigma2), 0.00000001f);
-        //
-        //     //search epiline-----------------------------------------------------------------------
-        //    // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
-        //     // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
-        //     float idepth_mean = (p[id].idepth_min + p[id].idepth_max)*0.5;
-        //     vec3 pr = KRKi_cr * vec3(p[id].u,p[id].v, 1);
-        //     vec3 ptpMean = pr + Kt_cr*idepth_mean;
-        //     vec3 ptpMin = pr + Kt_cr*p[id].idepth_min;
-        //     vec3 ptpMax = pr + Kt_cr*p[id].idepth_max;
-        //     vec2 uvMean = ptpMean.xy()/ptpMean.z;
-        //     vec2 uvMin = ptpMin.xy()/ptpMin.z;
-        //     vec2 uvMax = ptpMax.xy()/ptpMax.z;
-        //
-        //
-        //     vec2 epi_line = uvMax - uvMin;
-        //     float norm_epi = std::max<float>(1e-5f,length(epi_line));
-        //     vec2 epi_dir = epi_line / norm_epi;
-        //     const float  half_length = 0.5f * norm_epi;
-        //
-        //     vec2 bestKp;
-        //     float bestEnergy = 1e10;
-        //
-        //     for(float l = -half_length; l <= half_length; l += 0.7f)
-        //     {
-        //         float energy = 0;
-        //         vec2 kp = uvMean + l*epi_dir;
-        //
-        //         if( ( kp.x >= (frame_size.x-10) )  || ( kp.y >= (frame_size.y-10) ) || ( kp.x < 10 ) || ( kp.y < 10) ){
-        //             continue;
-        //         }
-        //
-        //         for(int idx=0;idx<pattern_rot_nr_points; ++idx){
-        //             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
-        //             vec2 offset=pattern_rot_offsets[idx];
-        //             float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolationType::LINEAR);
-        //             // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
-        //
-        //             const float residual = hit_color - (float)(affine_cr.x * p[id].color[idx] + affine_cr.y);
-        //
-        //             float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
-        //             energy += hw *residual*residual*(2-hw);
-        //         }
-        //         if ( energy < bestEnergy )
-        //         {
-        //             bestKp = kp; bestEnergy = energy;
-        //         }
-        //     }
-        //
-        //     if ( bestEnergy > p[id].energyTH * 1.2f ) {
-        //         // point.lastTraceStatus = PointStatus::IPS_OUTLIER;
-        //     }
-        //     else
-        //     {
-        //         // float a = (Eigen::Vector2f(epi_dir(0),epi_dir(1)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(0),epi_dir(1)));
-        //         // float b = (Eigen::Vector2f(epi_dir(1),-epi_dir(0)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(1),-epi_dir(0)));
-        //         // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
-        //         float errorInPixel=0.0f;
-        //
-        //         if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
-        //         {
-        //             p[id].idepth_min = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
-        //             p[id].idepth_max = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
-        //         }
-        //         else
-        //         {
-        //             p[id].idepth_min = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
-        //             p[id].idepth_max = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
-        //         }
-        //         if(p[id].idepth_min > p[id].idepth_max) std::swap<float>(p[id].idepth_min, p[id].idepth_max);
-        //
-        //         // point.lastTraceStatus = PointStatus::IPS_GOOD;
-        //     }
-        //
-        //
-        //
-        //
-        //
-        //
-        //
-        //     float idepth = -1;
-        //     float z = 0;
-        //     // if( point.lastTraceStatus == PointStatus::IPS_GOOD ) {
-        //         idepth = std::max<float>(1e-5f,.5*(p[id].idepth_min+p[id].idepth_max));
-        //         z = 1.0f/idepth;
-        //     // }
-        //     // if ( point.lastTraceStatus == PointStatus::IPS_OOB  || point.lastTraceStatus == PointStatus::IPS_SKIPPED ){
-        //     //     continue;
-        //     // }
-        //     // if ( !std::isfinite(idepth) || point.lastTraceStatus == PointStatus::IPS_OUTLIER || point.lastTraceStatus == PointStatus::IPS_BADCONDITION ) {
-        //     //     point.b++; // increase outlier probability when no match was found
-        //     //     continue;
-        //     // }
-        //
-        //
-        //     // update_idepth(point,tf_host_cur, z, px_error_angle);
-        //
-        //     // compute tau----------------------------------------------------------------------------
-        //     // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
-        //     vec3 t=  vec3(tf_host_cur[0][3], tf_host_cur[1][3], tf_host_cur[2][3]);
-        //     // Eigen::Vector3f t(tf_host_cur.translation());
-        //     vec3 a = p[id].f.xyz()*z-t;
-        //     float t_norm = length(t);
-        //     float a_norm = length(a);
-        //     float alpha = acos(dot(p[id].f.xyz(),t)/t_norm); // dot product
-        //     float beta = acos(dot(a,-t)/(t_norm*a_norm)); // dot product
-        //     float beta_plus = beta + px_error_angle;
-        //     float gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
-        //     float z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
-        //     float tau= (z_plus - z); // tau
-        //     float tau_inverse = 0.5 * (1.0/std::max<double>(0.0000001, z-tau) - 1.0/(z+tau));
-        //
-        //     // update the estimate--------------------------------------------------
-        //     float x=1.0/z;
-        //     float tau2=tau_inverse*tau_inverse;
-        //     // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
-        //     float norm_scale = sqrt(p[id].sigma2 + tau2);
-        //     if(std::isnan(norm_scale))
-        //         continue;
-        //     float s2 = 1./(1./p[id].sigma2 + 1./tau2);
-        //     float m = s2*(p[id].mu/p[id].sigma2 + x/tau2);
-        //     float C1 = p[id].a/(p[id].a+p[id].b) * gaus_pdf(p[id].mu, norm_scale, x);
-        //     float C2 = p[id].b/(p[id].a+p[id].b) * 1./p[id].z_range;
-        //     float normalization_constant = C1 + C2;
-        //     C1 /= normalization_constant;
-        //     C2 /= normalization_constant;
-        //     float f = C1*(p[id].a+1.)/(p[id].a+p[id].b+1.) + C2*p[id].a/(p[id].a+p[id].b+1.);
-        //     float e = C1*(p[id].a+1.)*(p[id].a+2.)/((p[id].a+p[id].b+1.)*(p[id].a+p[id].b+2.))
-        //               + C2*p[id].a*(p[id].a+1.0f)/((p[id].a+p[id].b+1.0f)*(p[id].a+p[id].b+2.0f));
-        //     // update parameters
-        //     float mu_new = C1*m+C2*p[id].mu;
-        //     p[id].sigma2 = C1*(s2 + m*m) + C2*(p[id].sigma2 + p[id].mu*p[id].mu) - mu_new*mu_new;
-        //     p[id].mu = mu_new;
-        //     p[id].a = (e-f)/(f-e/f);
-        //     p[id].b = p[id].a*(1.0f-f)/f;
-        //
-        //
-        //     //not implemented in opengl
-        //     // const float eta_inlier = .6f;
-        //     // const float eta_outlier = .05f;
-        //     // if( ((point.a / (point.a + point.b)) > eta_inlier) && (sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh)) {
-        //     //     point.is_outlier = false; // The seed converged
-        //     // }else if((point.a-1) / (point.a + point.b - 2) < eta_outlier){ // The seed failed to converge
-        //     //     point.is_outlier = true;
-        //     //     // it->reinit();
-        //     //     //TODO do a better reinit inside a point class
-        //     //     point.a = 10;
-        //     //     point.b = 10;
-        //     //     point.mu = (1.0/4.0);
-        //     //     point.z_range = (1.0/0.1);
-        //     //     point.sigma2 = (point.z_range*point.z_range/36);
-        //     // }
-        //     // // if the seed has converged, we initialize a new candidate point and remove the seed
-        //     // if(sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh){
-        //     //     point.converged = true;
-        //     // }
-        //
-        // }
 
 
     }
@@ -911,7 +1013,7 @@ Eigen::Vector2f DepthEstimatorGL2::estimate_affine(std::vector<Point>& immature_
     ceres::Solver::Summary summary;
     ceres::Solve( solver_options, & problem, & summary );
     //std::cout << summary.FullReport() << std::endl;
-    std::cout << "scale= " << scaleA << " offset= "<< offsetB << std::endl;
+    // std::cout << "scale= " << scaleA << " offset= "<< offsetB << std::endl;
     return Eigen::Vector2f ( scaleA, offsetB );
 
 
@@ -1017,4 +1119,8 @@ Mesh DepthEstimatorGL2::create_mesh(const std::vector<Point>& immature_points, c
 
 
     return mesh;
+}
+
+void DepthEstimatorGL2::print_point(const Point& p){
+    std::cout << "point " << p.u << " " << p.v << " mu:  " << p.mu << " min max " << p.idepth_min << " " << p.idepth_max << '\n';
 }

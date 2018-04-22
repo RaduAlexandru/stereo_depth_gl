@@ -134,6 +134,7 @@ public:
 	float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolationType type=InterpolationType::NEAREST);
 	std::vector<Point> create_immature_points ( const Frame& frame );
 	Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frame);
+	void print_point(const Point& point);
 
 
     // Scene get_scene();
