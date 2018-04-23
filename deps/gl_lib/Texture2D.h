@@ -133,6 +133,9 @@ namespace gl{
             return m_tex_id;
         }
 
+        bool get_tex_storage_initialized (){
+            return m_tex_storage_initialized;
+        }
 
     private:
         GLuint m_tex_id;

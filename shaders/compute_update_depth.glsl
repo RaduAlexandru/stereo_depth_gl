@@ -141,9 +141,9 @@ void main(void) {
     //update inverse depth coordinates for min and max
     p[id].idepth_min = p[id].mu + sqrt(p[id].sigma2);
     p[id].idepth_max = max(p[id].mu - sqrt(p[id].sigma2), 0.00000001f);
-    memoryBarrier();
-    barrier();
-    memoryBarrier();
+    // memoryBarrier();
+    // barrier();
+    // memoryBarrier();
 
 
 
@@ -182,7 +182,7 @@ void main(void) {
         for(int idx=0;idx<pattern_rot_nr_points; ++idx){
             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
             vec2 offset=pattern_rot_offsets[idx];
-            float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+            // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
             // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
             // float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolationType::LINEAR);
             // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
@@ -191,7 +191,7 @@ void main(void) {
             // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
 
             //high qualty filter from openglsuperbible
-            // float hit_color=hqfilter(gray_img_sampler, vec2( (kp.x + offset.x)/640.0, (kp.y + offset.y)/480.0)).x;
+            float hit_color=hqfilter(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
 
             const float residual = hit_color - (affine_cr.x * p[id].color[idx] + affine_cr.y);
 
@@ -226,9 +226,9 @@ void main(void) {
             p[id].idepth_min = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
             p[id].idepth_max = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
         }
-        memoryBarrier();
-        barrier();
-        memoryBarrier();
+        // memoryBarrier();
+        // barrier();
+        // memoryBarrier();
         if(p[id].idepth_min > p[id].idepth_max) {
             // std::swap<float>(point.idepth_min, point.idepth_max);
             float tmp=p[id].idepth_min;
@@ -236,13 +236,13 @@ void main(void) {
             p[id].idepth_max=tmp;
         }
         p[id].lastTraceStatus = STATUS_GOOD;
-        memoryBarrier();
-        barrier();
-        memoryBarrier();
+        // memoryBarrier();
+        // barrier();
+        // memoryBarrier();
     }
-    memoryBarrier();
-    barrier();
-    memoryBarrier();
+    // memoryBarrier();
+    // barrier();
+    // memoryBarrier();
 
 
 
@@ -261,9 +261,9 @@ void main(void) {
         p[id].b++; // increase outlier probability when no match was found
         return;
     }
-    memoryBarrier();
-    barrier();
-    memoryBarrier();
+    // memoryBarrier();
+    // barrier();
+    // memoryBarrier();
 
 
     // update_idepth(point,tf_host_cur, z, px_error_angle);
@@ -303,15 +303,15 @@ void main(void) {
     p[id].sigma2 = C1*(s2 + m*m) + C2*(p[id].sigma2 + p[id].mu*p[id].mu) - mu_new*mu_new;
     p[id].mu = mu_new;
     p[id].a = (e-f)/(f-e/f);
-    memoryBarrier();
-    barrier();
-    memoryBarrier();
+    // memoryBarrier();
+    // barrier();
+    // memoryBarrier();
     p[id].b = p[id].a*(1.0f-f)/f;
-    memoryBarrier();
-    barrier(); //TODO add again the barrier
-    memoryBarrier();
+    // memoryBarrier();
+    // barrier(); //TODO add again the barrier
+    // memoryBarrier();
 
-    //not implemented in opengl
+    // // not implemented in opengl
     // const float eta_inlier = .6f;
     // const float eta_outlier = .05f;
     // if( ((point.a / (point.a + point.b)) > eta_inlier) && (sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh)) {

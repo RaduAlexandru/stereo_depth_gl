@@ -84,6 +84,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
      // Mesh depth_mesh=m_depth_estimator->compute_depth_simplified();  // works on cpu
      // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth(dummy_frame);  //just reads the things that were written from RENEGADE
      Mesh depth_mesh=m_depth_estimator_cl->compute_depth();
+     std::cout << "finished computing depth-------------------" << '\n';
      // Mesh depth_mesh=m_depth_estimator_gl2->compute_depth_simplified();  // works
      depth_mesh.m_show_points=true;
      m_scene.add_mesh(depth_mesh, "depth_mesh");

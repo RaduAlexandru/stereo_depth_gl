@@ -122,12 +122,11 @@ Mesh DepthEstimatorGL::compute_depth(){
     glBufferData(GL_SHADER_STORAGE_BUFFER, immature_points.size() * sizeof(Point), immature_points.data(), GL_DYNAMIC_COPY);
     TIME_END_GL("upload_immature_points");
 
-
+    glUseProgram(m_update_depth_prog_id);
     for (size_t i = 1; i < frames.size(); i++) {
         TIME_START_GL("update_depth");
-        glUseProgram(m_update_depth_prog_id);
 
-        TIME_START_GL("calculate_matrices");
+        TIME_START_GL("estimate_affine");
         const Eigen::Affine3f tf_cur_host_eigen = frames[i].tf_cam_world * frames[0].tf_cam_world.inverse();
         const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
         const Eigen::Matrix3f KRKi_cr_eigen = frames[i].K * tf_cur_host_eigen.linear() * frames[0].K.inverse();
@@ -143,13 +142,13 @@ Mesh DepthEstimatorGL::compute_depth(){
         //     std::cout << "offset for i " << i << " is " << pattern_rot.get_offset(i).transpose() << '\n';
         // }
 
-        TIME_END_GL("calculate_matrices");
+        TIME_END_GL("estimate_affine");
 
-        //upload the image
-        TIME_START_GL("upload_gray_img");
-        int size_bytes=frames[i].gray.step[0] * frames[i].gray.rows;
-        m_cur_frame.upload_data(GL_R32F, frames[i].gray.cols, frames[i].gray.rows, GL_RED, GL_FLOAT, frames[i].gray.ptr(), size_bytes);
-        TIME_END_GL("upload_gray_img");
+        // //upload the image
+        // TIME_START_GL("upload_gray_img");
+        // int size_bytes=frames[i].gray.step[0] * frames[i].gray.rows;
+        // m_cur_frame.upload_data(GL_R32F, frames[i].gray.cols, frames[i].gray.rows, GL_RED, GL_FLOAT, frames[i].gray.ptr(), size_bytes);
+        // TIME_END_GL("upload_gray_img");
 
 
         // //attempt 2 at uploading image, this time with padding to be power of 2
@@ -163,6 +162,15 @@ Mesh DepthEstimatorGL::compute_depth(){
         // int size_bytes=padded_img.step[0] * padded_img.rows;
         // m_cur_frame.upload_data(GL_R32F, padded_img.cols, padded_img.rows, GL_RED, GL_FLOAT, padded_img.ptr(), size_bytes);
         // TIME_END_GL("upload_gray_img");
+
+        //attempt 3 upload the image as a inmutable storage
+        TIME_START_GL("upload_gray_img");
+        int size_bytes=frames[i].gray.step[0] * frames[i].gray.rows;
+        if(!m_cur_frame.get_tex_storage_initialized()){
+            m_cur_frame.allocate_tex_storage_inmutable(GL_R32F,frames[i].gray.cols, frames[i].gray.rows);
+        }
+        m_cur_frame.upload_without_pbo(0,0,0, frames[i].gray.cols, frames[i].gray.rows, GL_RED, GL_FLOAT, frames[i].gray.ptr());
+        TIME_END_GL("upload_gray_img");
 
 
 
@@ -758,6 +766,7 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
             //determinant is high enough, add the point
             float hessian_det=gradient_hessian.determinant();
             if(hessian_det > 100000000){
+            // if(hessian_det > 0){
                 Point point;
                 point.u=j;
                 point.v=i;
