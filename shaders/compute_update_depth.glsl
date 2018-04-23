@@ -6,6 +6,7 @@ layout (local_size_x = 256) in;
 
 const int MAX_RES_PER_POINT=16;
 const float setting_huberTH = 9; // Huber Threshold
+const double seed_convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
 
 //https://stackoverflow.com/a/34259806
 const int STATUS_GOOD    = 0x00000001;
@@ -312,24 +313,27 @@ void main(void) {
     // memoryBarrier();
 
     // // not implemented in opengl
-    // const float eta_inlier = .6f;
-    // const float eta_outlier = .05f;
-    // if( ((point.a / (point.a + point.b)) > eta_inlier) && (sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh)) {
-    //     point.is_outlier = false; // The seed converged
-    // }else if((point.a-1) / (point.a + point.b - 2) < eta_outlier){ // The seed failed to converge
-    //     point.is_outlier = true;
-    //     // it->reinit();
-    //     //TODO do a better reinit inside a point class
-    //     point.a = 10;
-    //     point.b = 10;
-    //     point.mu = (1.0/4.0);
-    //     point.z_range = (1.0/0.1);
-    //     point.sigma2 = (point.z_range*point.z_range/36);
-    // }
-    // // if the seed has converged, we initialize a new candidate point and remove the seed
-    // if(sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh){
-    //     point.converged = true;
-    // }
+    const float eta_inlier = .6f;
+    const float eta_outlier = .05f;
+    if( ((p[id].a / (p[id].a + p[id].b)) > eta_inlier) && (sqrt(p[id].sigma2) < p[id].z_range/seed_convergence_sigma2_thresh)) {
+        p[id].is_outlier = 0; // The seed converged
+    }else if((p[id].a-1) / (p[id].a + p[id].b - 2) < eta_outlier){ // The seed failed to converge
+        p[id].is_outlier = 1;
+        // it->reinit();
+        //TODO do a better reinit inside a point class
+        p[id].a = 10;
+        p[id].b = 10;
+        p[id].mu = (1.0/4.0);
+        p[id].z_range = (1.0/0.1);
+        p[id].sigma2 = (p[id].z_range*p[id].z_range/36);
+    }
+    // if the seed has converged, we initialize a new candidate point and remove the seed
+    if(sqrt(p[id].sigma2) < p[id].z_range/seed_convergence_sigma2_thresh){
+        p[id].converged = 1;
+    }
+
+
+
 
 
 

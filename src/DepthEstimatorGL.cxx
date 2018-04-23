@@ -94,7 +94,7 @@ Mesh DepthEstimatorGL::compute_depth(){
 
     //----------------------------------------------------------------------------------------------------
     std::string dataset_path="/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png";
-    int num_images_to_read=60;
+    int num_images_to_read=120;
     bool use_modified=false;
     std::vector<Frame> frames=loadDataFromICLNUIM(dataset_path, num_images_to_read);
     std::cout << "frames size is " << frames.size() << "\n";
@@ -124,6 +124,7 @@ Mesh DepthEstimatorGL::compute_depth(){
 
     glUseProgram(m_update_depth_prog_id);
     for (size_t i = 1; i < frames.size(); i++) {
+        std::cout << "frame " << i << '\n';
         TIME_START_GL("update_depth");
 
         TIME_START_GL("estimate_affine");
@@ -131,7 +132,8 @@ Mesh DepthEstimatorGL::compute_depth(){
         const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
         const Eigen::Matrix3f KRKi_cr_eigen = frames[i].K * tf_cur_host_eigen.linear() * frames[0].K.inverse();
         const Eigen::Vector3f Kt_cr_eigen = frames[i].K * tf_cur_host_eigen.translation();
-        const Eigen::Vector2f affine_cr_eigen = estimate_affine( immature_points, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
+        // const Eigen::Vector2f affine_cr_eigen = estimate_affine( immature_points, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
+        const Eigen::Vector2f affine_cr_eigen= Eigen::Vector2f(1,1);
         const double focal_length = fabs(frames[i].K(0,0));
         double px_noise = 1.0;
         double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
@@ -207,432 +209,6 @@ Mesh DepthEstimatorGL::compute_depth(){
         glDispatchCompute(immature_points.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
         glMemoryBarrier(GL_ALL_BARRIER_BITS);
         TIME_END_GL("depth_update_kernel");
-
-
-        //do updat depth on cpu--------------------------------------------------------
-
-        // //get all the data as if it was the glsl code
-        // glm::vec2 frame_size( frames[i].gray.cols, frames[i].gray.rows);
-        // glm::mat4 tf_cur_host=glm::make_mat4x4(tf_cur_host_eigen.matrix().data());
-        // glm::mat4 tf_host_cur=glm::make_mat4x4(tf_host_cur_eigen.matrix().data());
-        // glm::mat3 K=glm::make_mat3x3(tf_host_cur_eigen.matrix().data());
-        // glm::mat3 KRKi_cr=glm::make_mat3x3(KRKi_cr_eigen.data());
-        // glm::vec3 Kt_cr=glm::make_vec3(Kt_cr_eigen.data());
-        // glm::vec2 affine_cr=glm::make_vec2(affine_cr_eigen.data());
-        // glm::vec2 pattern_rot_offsets[cl_MAX_RES_PER_POINT];
-        // for (size_t p_idx = 0; p_idx < pattern_rot.get_nr_points(); p_idx++) {
-        //     pattern_rot_offsets[p_idx]=glm::make_vec2(pattern_rot.get_offset(p_idx).data());
-        // }
-        // int pattern_rot_nr_points=pattern_rot.get_nr_points();
-        // std::vector<Point>& p=immature_points;
-        //
-        // //same code as on gpu
-        // for (size_t id = 0; id < p.size(); id++) {
-        //     // check if point is visible in the current image
-        //     const vec3 p_backproj_xyz= p[id].f.xyz() * 1.0f/p[id].mu;
-        //     const vec4 p_backproj_xyzw=vec4(p_backproj_xyz,1.0);
-        //     const vec4 xyz_f_xyzw = tf_cur_host*  p_backproj_xyzw ;
-        //     const vec3 xyz_f=xyz_f_xyzw.xyz()/xyz_f_xyzw.w;
-        //     if(xyz_f.z < 0.0)  {
-        //         // p[id].debug=1.0;
-        //         continue; //TODO in gl this is a return
-        //     }
-        //     const vec3 kp_c = K * xyz_f;
-        //     const vec2 kp_c_h=kp_c.xy()/kp_c.z;
-        //     if ( kp_c_h.x < 0 || kp_c_h.x >= frame_size.x || kp_c_h.y < 0 || kp_c_h.y >= frame_size.y ) {
-        //         // p[id].debug=1.0;
-        //         continue; //TODO in gl this is a return
-        //     }
-        //
-        //
-        //     //point is visible
-        //
-        //     //update inverse depth coordinates for min and max
-        //     p[id].idepth_min = p[id].mu + sqrt(p[id].sigma2);
-        //     p[id].idepth_max = max(p[id].mu - sqrt(p[id].sigma2), 0.00000001f);
-        //     // memoryBarrier();
-        //     // barrier();
-        //
-        //     //search epiline---------------------------------------------------------------
-        //     // search_epiline_bca (point, frame, KRKi_cr, Kt_cr, affine_cr);
-        //
-        //
-        //     float idepth_mean = (p[id].idepth_min + p[id].idepth_max)*0.5;
-        //     vec3 pr = KRKi_cr * vec3(p[id].u,p[id].v, 1);
-        //     vec3 ptpMean = pr + Kt_cr*idepth_mean;
-        //     vec3 ptpMin = pr + Kt_cr*p[id].idepth_min;
-        //     vec3 ptpMax = pr + Kt_cr*p[id].idepth_max;
-        //     vec2 uvMean = ptpMean.xy()/ptpMean.z;
-        //     vec2 uvMin = ptpMin.xy()/ptpMin.z;
-        //     vec2 uvMax = ptpMax.xy()/ptpMax.z;
-        //
-        //     // Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
-        //
-        //     vec2 epi_line = uvMax - uvMin;
-        //     float norm_epi = max(1e-5f, length(epi_line));
-        //     vec2 epi_dir = epi_line / norm_epi;
-        //     const float  half_length = 0.5f * norm_epi;
-        //
-        //     vec2 bestKp;
-        //     float bestEnergy = 1e15;
-        //
-        //     //debug stuff
-        //     float residual_debug=0;
-        //     int nr_time_switched_best=0;
-        //
-        //     for(float l = -half_length; l <= half_length; l += 0.7f){
-        //         float energy = 0;
-        //         residual_debug=0;
-        //         vec2 kp = uvMean + l*epi_dir;
-        //
-        //         if( ( kp.x >= (frame_size.x-10) )  || ( kp.y >= (frame_size.y-10) ) || ( kp.x < 10 ) || ( kp.y < 10) ){
-        //             continue;
-        //         }
-        //
-        //         for(int idx=0;idx<pattern_rot_nr_points; ++idx) {
-        //
-        //             vec2 offset=pattern_rot_offsets[idx];
-        //             // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/640, (kp.y + offset.y)/480)).x;
-        //             float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolType::LINEAR);
-        //             // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
-        //             //
-        //             const float residual = hit_color - float(affine_cr.x * p[id].color[idx] + affine_cr.y);
-        //             residual_debug+=residual;
-        //
-        //             float hw = abs(residual) < cl_setting_huberTH ? 1 : cl_setting_huberTH / abs(residual);
-        //             energy += hw *residual*residual*(2-hw);
-        //         }
-        //
-        //         // p[id].debug=energy;
-        //         if ( energy < bestEnergy ){
-        //             bestKp = kp; bestEnergy = energy;
-        //             nr_time_switched_best++;
-        //         }
-        //     }
-        //
-        //     if(bestEnergy<1e10 ){
-        //         p[id].debug=bestEnergy;
-        //     }
-        //
-        //     // p[id].debug=nr_time_switched_best;
-        //
-        //
-        //     if ( bestEnergy > p[id].energyTH * 1.2f ) {
-        //         // point.lastTraceStatus = ImmaturePointStatus::IPS_OUTLIER;
-        //     }else{
-        //         // float a = (Eigen::Vector2d(epi_dir(0),epi_dir(1)).transpose() * point.gradH * Eigen::Vector2d(epi_dir(0),epi_dir(1)));
-        //         // float b = (Eigen::Vector2d(epi_dir(1),-epi_dir(0)).transpose() * point.gradH * Eigen::Vector2d(epi_dir(1),-epi_dir(0)));
-        //         // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
-        //         float errorInPixel=0;
-        //
-        //         if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
-        //         {
-        //             p[id].idepth_min = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
-        //             p[id].idepth_max = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
-        //         }else{
-        //             p[id].idepth_min = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
-        //             p[id].idepth_max = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
-        //         }
-        //         // memoryBarrier();
-        //         // barrier();
-        //         if(p[id].idepth_min > p[id].idepth_max) {
-        //             // std::swap<float>(point.idepth_min, point.idepth_max);
-        //             float tmp=p[id].idepth_min;
-        //             p[id].idepth_min=p[id].idepth_max;
-        //             p[id].idepth_max=tmp;
-        //         }
-        //         // memoryBarrier();
-        //         // barrier();
-        //
-        //         // point.lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
-        //     }
-        //     //
-        //     //
-        //     //
-        //     //
-        //     // double idepth = -1;
-        //     // double z = 0;
-        //     // if( point.lastTraceStatus == ImmaturePointStatus::IPS_GOOD ) {
-        //     //     idepth = std::max<double>(1e-5,.5*(point.idepth_min+point.idepth_max));
-        //     //     z = 1./idepth;
-        //     // }
-        //     // if ( point.lastTraceStatus == ImmaturePointStatus::IPS_OOB  || point.lastTraceStatus == ImmaturePointStatus::IPS_SKIPPED ){
-        //     //     continue;
-        //     // }
-        //     // if ( !std::isfinite(idepth) || point.lastTraceStatus == ImmaturePointStatus::IPS_OUTLIER || point.lastTraceStatus == ImmaturePointStatus::IPS_BADCONDITION ) {
-        //     //     point.b++; // increase outlier probability when no match was found
-        //     //     continue;
-        //     // }
-        //     //
-        //     //
-        //     // update_idepth(point,tf_host_cur, z, px_error_angle);
-        //
-        //
-        //
-        //     float idepth = -1;
-        //     float z = 0;
-        //     idepth = max(1e-5,.5*(p[id].idepth_min+p[id].idepth_max));
-        //     z = 1./idepth;
-        //
-        //
-        //
-        //
-        //     // compute tau-------------------------------------------------------------------------
-        //     // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
-        //     vec3 t= vec3(tf_host_cur[0][3], tf_host_cur[1][3], tf_host_cur[2][3]);
-        //     vec3 a = p[id].f.xyz()*z-t;
-        //     float t_norm = length(t);
-        //     float a_norm = length(a);
-        //     float alpha = acos(dot(p[id].f.xyz(),t)/t_norm); // dot product
-        //     float beta = acos(dot(a,-t)/(t_norm*a_norm)); // dot product
-        //     float beta_plus = beta + px_error_angle;
-        //     float gamma_plus = 3.1415-alpha-beta_plus; // triangle angles sum to PI
-        //     float z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
-        //     float tau= (z_plus - z); // tau
-        //
-        //
-        //
-        //     float tau_inverse = 0.5f * (1.0f/max(0.0000001f, z-tau) - 1.0f/(z+tau));
-        //
-        //     // update the estimate------------------------------------------------------------------
-        //     // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
-        //
-        //     float x= 1.0/z;
-        //     float tau2=tau_inverse*tau_inverse;
-        //     float norm_scale = sqrt(p[id].sigma2 + tau2);
-        //     // if(std::isnan(norm_scale))
-        //     //     return;
-        //     float s2 = 1./(1./p[id].sigma2 + 1./tau2);
-        //     float m = s2*(p[id].mu/p[id].sigma2 + x/tau2);
-        //     float C1 = p[id].a/(p[id].a+p[id].b) *  gaus_pdf(p[id].mu, norm_scale, x);
-        //     float C2 = p[id].b/(p[id].a+p[id].b) * 1.0/p[id].z_range;
-        //     float normalization_constant = C1 + C2;
-        //     C1 /= normalization_constant;
-        //     C2 /= normalization_constant;
-        //     float f = C1*(p[id].a+1.)/(p[id].a+p[id].b+1.) + C2*p[id].a/(p[id].a+p[id].b+1.);
-        //     float e = C1*(p[id].a+1.)*(p[id].a+2.)/((p[id].a+p[id].b+1.)*(p[id].a+p[id].b+2.))
-        //               + C2*p[id].a*(p[id].a+1.0f)/((p[id].a+p[id].b+1.0f)*(p[id].a+p[id].b+2.0f));
-        //
-        //     // update parameters
-        //     float mu_new = C1*m+C2*p[id].mu;
-        //     p[id].sigma2 = C1*(s2 + m*m) + C2*(p[id].sigma2 + p[id].mu*p[id].mu) - mu_new*mu_new;
-        //     p[id].mu = mu_new;
-        //     p[id].a = (e-f)/(f-e/f);
-        //     p[id].b = p[id].a*(1.0f-f)/f;
-        //     // memoryBarrier();
-        //     // barrier();
-        // }
-
-
-
-
-
-        // //cpu but with eigen
-        //
-        // //make a ll matrices either 4x4 or 3x3 as required by gl
-        // Eigen::Matrix4f tf_cur_host_4x4= tf_cur_host_eigen.matrix();
-        // Eigen::Matrix4f tf_host_cur_4x4= tf_host_cur_eigen.matrix();
-        //
-        //
-        //
-        // // update_immature_points(immature_points, frames[i], tf_cur_host, KRKi_cr, Kt_cr, affine_cr );
-        //
-        // //done in paralel for all points in the case of opengl
-        // for (auto &point : immature_points){
-        //
-        //     // // check if point is visible in the current image
-        //     const Eigen::Vector3f p_backproj_xyz= point.f.head<3>() * 1.0/point.mu;
-        //     const Eigen::Vector4f p_backproj_xyzw=Eigen::Vector4f(p_backproj_xyz(0),p_backproj_xyz(1),p_backproj_xyz(2),1.0);
-        //     const Eigen::Vector4f xyz_f_xyzw = tf_cur_host_4x4*  p_backproj_xyzw ;
-        //     const Eigen::Vector3f xyz_f=xyz_f_xyzw.head<3>()/xyz_f_xyzw.w();
-        //     if(xyz_f.z() < 0.0)  {
-        //         continue; // TODO in gl this is a return
-        //     }
-        //
-        //
-        //     // const Eigen::Vector3f xyz_f( tf_cur_host_4x4*(1.0/point.mu * point.f.head<3>()) );
-        //     // if(xyz_f.z() < 0.0)  {
-        //     //     continue;
-        //     // }
-        //     const Eigen::Vector2f kp_c = (frames[i].K * xyz_f).hnormalized();
-        //     if ( kp_c(0) < 0 || kp_c(0) >= frames[i].gray.cols || kp_c(1) < 0 || kp_c(1) >= frames[i].gray.rows ) {
-        //         continue;
-        //     }
-        //
-        //
-        //     //point is visible
-        //     point.last_visible_frame=frames[i].frame_id;
-        //
-        //     //update inverse depth coordinates for min and max
-        //     point.idepth_min = point.mu + sqrt(point.sigma2);
-        //     point.idepth_max = std::max<float>(point.mu - sqrt(point.sigma2), 0.00000001f);
-        //
-        //     //search epiline-----------------------------------------------------------------------
-        //    // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
-        //     // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
-        //     float idepth_mean = (point.idepth_min + point.idepth_max)*0.5;
-        //     Eigen::Vector3f pr = KRKi_cr_eigen * Eigen::Vector3f(point.u,point.v, 1);
-        //     Eigen::Vector3f ptpMean = pr + Kt_cr_eigen*idepth_mean;
-        //     Eigen::Vector3f ptpMin = pr + Kt_cr_eigen*point.idepth_min;
-        //     Eigen::Vector3f ptpMax = pr + Kt_cr_eigen*point.idepth_max;
-        //     Eigen::Vector2f uvMean = ptpMean.hnormalized();
-        //     Eigen::Vector2f uvMin = ptpMin.hnormalized();
-        //     Eigen::Vector2f uvMax = ptpMax.hnormalized();
-        //
-        //     // Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
-        //
-        //     Eigen::Vector2f epi_line = uvMax - uvMin;
-        //     float norm_epi = std::max<float>(1e-5f,epi_line.norm());
-        //     Eigen::Vector2f epi_dir = epi_line / norm_epi;
-        //     const float  half_length = 0.5f * norm_epi;
-        //
-        //     Eigen::Vector2f bestKp;
-        //     float bestEnergy = 1e10;
-        //
-        //     for(float l = -half_length; l <= half_length; l += 0.7f)
-        //     {
-        //         float energy = 0;
-        //         Eigen::Vector2f kp = uvMean + l*epi_dir;
-        //
-        //         if( !kp.allFinite() || ( kp(0) >= (frames[i].gray.cols-10) )  || ( kp(1) >= (frames[i].gray.rows-10) ) || ( kp(0) < 10 ) || ( kp(1) < 10) )
-        //         {
-        //             continue;
-        //         }
-        //
-        //         for(int idx=0;idx<pattern_rot.get_nr_points(); ++idx)
-        //         {
-        //             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
-        //             Eigen::Vector2f offset=pattern_rot.get_offset(idx);
-        //             float hit_color=texture_interpolate(frames[i].gray, kp(0)+offset(0), kp(1)+offset(1) , InterpolType::LINEAR);
-        //             if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
-        //
-        //             const float residual = hit_color - (float)(affine_cr_eigen[0] * point.color[idx] + affine_cr_eigen[1]);
-        //
-        //             float hw = fabs(residual) < cl_setting_huberTH ? 1 : cl_setting_huberTH / fabs(residual);
-        //             energy += hw *residual*residual*(2-hw);
-        //         }
-        //         if ( energy < bestEnergy )
-        //         {
-        //             bestKp = kp; bestEnergy = energy;
-        //         }
-        //     }
-        //
-        //     if ( bestEnergy > point.energyTH * 1.2f ) {
-        //         // point.lastTraceStatus = ImmaturePointStatus::IPS_OUTLIER;
-        //     }
-        //     else
-        //     {
-        //         // float a = (Eigen::Vector2f(epi_dir(0),epi_dir(1)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(0),epi_dir(1)));
-        //         // float b = (Eigen::Vector2f(epi_dir(1),-epi_dir(0)).transpose() * point.gradH * Eigen::Vector2f(epi_dir(1),-epi_dir(0)));
-        //         // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
-        //         float errorInPixel=0.0;
-        //
-        //         if( epi_dir(0)*epi_dir(0)>epi_dir(1)*epi_dir(1) )
-        //         {
-        //             point.idepth_min = (pr[2]*(bestKp(0)-errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr_eigen[0] - Kt_cr_eigen[2]*(bestKp(0)-errorInPixel*epi_dir(0)));
-        //             point.idepth_max = (pr[2]*(bestKp(0)+errorInPixel*epi_dir(0)) - pr[0]) / (Kt_cr_eigen[0] - Kt_cr_eigen[2]*(bestKp(0)+errorInPixel*epi_dir(0)));
-        //         }
-        //         else
-        //         {
-        //             point.idepth_min = (pr[2]*(bestKp(1)-errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr_eigen[1] - Kt_cr_eigen[2]*(bestKp(1)-errorInPixel*epi_dir(1)));
-        //             point.idepth_max = (pr[2]*(bestKp(1)+errorInPixel*epi_dir(1)) - pr[1]) / (Kt_cr_eigen[1] - Kt_cr_eigen[2]*(bestKp(1)+errorInPixel*epi_dir(1)));
-        //         }
-        //         if(point.idepth_min > point.idepth_max) std::swap<float>(point.idepth_min, point.idepth_max);
-        //
-        //         // point.lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
-        //     }
-        //
-        //
-        //
-        //
-        //
-        //
-        //
-        //     double idepth = -1;
-        //     double z = 0;
-        //     idepth = std::max<double>(1e-5,.5*(point.idepth_min+point.idepth_max));
-        //     z = 1./idepth;
-        //     // if( point.lastTraceStatus == ImmaturePointStatus::IPS_GOOD ) {
-        //     //
-        //     // }
-        //     // if ( point.lastTraceStatus == ImmaturePointStatus::IPS_OOB  || point.lastTraceStatus == ImmaturePointStatus::IPS_SKIPPED ){
-        //     //     continue;
-        //     // }
-        //     // if ( !std::isfinite(idepth) || point.lastTraceStatus == ImmaturePointStatus::IPS_OUTLIER || point.lastTraceStatus == ImmaturePointStatus::IPS_BADCONDITION ) {
-        //     //     point.b++; // increase outlier probability when no match was found
-        //     //     continue;
-        //     // }
-        //
-        //
-        //     // update_idepth(point,tf_host_cur, z, px_error_angle);
-        //
-        //     // compute tau----------------------------------------------------------------------------
-        //     // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
-        //     Eigen::Vector3f t=  Eigen::Vector3f(tf_host_cur_4x4(0,3), tf_host_cur_4x4(1,3), tf_host_cur_4x4(2,3));
-        //     // Eigen::Vector3f t(tf_host_cur.translation());
-        //     Eigen::Vector3f a = point.f.head<3>()*z-t;
-        //     double t_norm = t.norm();
-        //     double a_norm = a.norm();
-        //     double alpha = acos(point.f.head<3>().dot(t)/t_norm); // dot product
-        //     double beta = acos(a.dot(-t)/(t_norm*a_norm)); // dot product
-        //     double beta_plus = beta + px_error_angle;
-        //     double gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
-        //     double z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
-        //     double tau= (z_plus - z); // tau
-        //     double tau_inverse = 0.5 * (1.0/std::max<double>(0.0000001, z-tau) - 1.0/(z+tau));
-        //
-        //     // update the estimate--------------------------------------------------
-        //     float x=1.0/z;
-        //     float tau2=tau_inverse*tau_inverse;
-        //     // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
-        //     float norm_scale = sqrt(point.sigma2 + tau2);
-        //     if(std::isnan(norm_scale))
-        //         continue;
-        //     float s2 = 1./(1./point.sigma2 + 1./tau2);
-        //     float m = s2*(point.mu/point.sigma2 + x/tau2);
-        //     float C1 = point.a/(point.a+point.b) * gaus_pdf(point.mu, norm_scale, x);
-        //     float C2 = point.b/(point.a+point.b) * 1./point.z_range;
-        //     float normalization_constant = C1 + C2;
-        //     C1 /= normalization_constant;
-        //     C2 /= normalization_constant;
-        //     float f = C1*(point.a+1.)/(point.a+point.b+1.) + C2*point.a/(point.a+point.b+1.);
-        //     float e = C1*(point.a+1.)*(point.a+2.)/((point.a+point.b+1.)*(point.a+point.b+2.))
-        //               + C2*point.a*(point.a+1.0f)/((point.a+point.b+1.0f)*(point.a+point.b+2.0f));
-        //     // update parameters
-        //     float mu_new = C1*m+C2*point.mu;
-        //     point.sigma2 = C1*(s2 + m*m) + C2*(point.sigma2 + point.mu*point.mu) - mu_new*mu_new;
-        //     point.mu = mu_new;
-        //     point.a = (e-f)/(f-e/f);
-        //     point.b = point.a*(1.0f-f)/f;
-        //
-        //
-        //     //not implemented in opengl
-        //     // const float eta_inlier = .6f;
-        //     // const float eta_outlier = .05f;
-        //     // if( ((point.a / (point.a + point.b)) > eta_inlier) && (sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh)) {
-        //     //     point.is_outlier = false; // The seed converged
-        //     // }else if((point.a-1) / (point.a + point.b - 2) < eta_outlier){ // The seed failed to converge
-        //     //     point.is_outlier = true;
-        //     //     // it->reinit();
-        //     //     //TODO do a better reinit inside a point class
-        //     //     point.a = 10;
-        //     //     point.b = 10;
-        //     //     point.mu = (1.0/4.0);
-        //     //     point.z_range = (1.0/0.1);
-        //     //     point.sigma2 = (point.z_range*point.z_range/36);
-        //     // }
-        //     // // if the seed has converged, we initialize a new candidate point and remove the seed
-        //     // if(sqrt(point.sigma2) < point.z_range/seed_convergence_sigma2_thresh){
-        //     //     point.converged = true;
-        //     // }
-        //
-        //
-        //
-        // }
-
-
-
-
 
         TIME_END_GL("update_depth");
     }
@@ -922,10 +498,6 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
     mesh.V.resize(immature_points.size(),3);
     mesh.V.setZero();
 
-    //debug check the first few vrices
-    for (size_t i = 0; i < 10; i++) {
-        std::cout << "point " << i << " at uv " << immature_points[i].u << " " << immature_points[i].v  << '\n';
-    }
 
     for (size_t i = 0; i < immature_points.size(); i++) {
         float u=immature_points[i].u;
@@ -934,7 +506,20 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
         // float depth=1.0;
         float depth=1/immature_points[i].mu;
 
-        if(std::isfinite(immature_points[i].mu) && immature_points[i].mu>=0.1){
+        if(std::isfinite(immature_points[i].mu) && immature_points[i].mu>=0.1 && immature_points[i].converged==1 && immature_points[i].is_outlier==0 ){
+
+            // float outlier_measure=immature_points[i].a/(immature_points[i].a+immature_points[i].b);
+            // if(outlier_measure<0.7){
+            //     continue;
+            // }
+            //
+            // if(immature_points[i].sigma2>0.000005){
+            //     continue;
+            // }
+            //
+            // std::cout << immature_points[i].sigma2 << '\n';
+
+
             //backproject the immature point
             Eigen::Vector3f point_screen;
             point_screen << u, v, 1.0;
@@ -1008,6 +593,26 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
   // std::cout << "min max debug is " << min << " " << max << '\n';
   // for (size_t i = 0; i < mesh.C.rows(); i++) {
   //      float gray_val = lerp(immature_points[i].debug, min, max, 0.0, 1.0 );
+  //      mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+  //  }
+
+
+  //  //colors based on sigma2
+  // float min=9999999999, max=-9999999999;
+  // for (size_t i = 0; i < immature_points.size(); i++) {
+  //     // std::cout << "last_visible_frame is " << immature_points[i].last_visible_frame << '\n';
+  //     if(immature_points[i].sigma2<min){
+  //         min=immature_points[i].sigma2;
+  //     }
+  //     if(immature_points[i].sigma2>max){
+  //         max=immature_points[i].sigma2;
+  //     }
+  // }
+  // min=1.0e-07;
+  // max=2.0e-05;
+  // std::cout << "min max debug is " << min << " " << max << '\n';
+  // for (size_t i = 0; i < mesh.C.rows(); i++) {
+  //      float gray_val = lerp(immature_points[i].sigma2, min, max, 0.0, 1.0 );
   //      mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
   //  }
 
