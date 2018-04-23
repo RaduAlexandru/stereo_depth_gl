@@ -10,6 +10,8 @@ public:
     cv::Mat rgb;
     cv::Mat gray;
     cv::Mat rgb_small;
+    cv::Mat grad_x;
+    cv::Mat grad_y;
     cv::Mat classes;
     cv::Mat probs;
     cv::Mat mask;

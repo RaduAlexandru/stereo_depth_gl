@@ -38,12 +38,11 @@ DepthEstimatorGL::DepthEstimatorGL():
     std::string pattern_filepath="/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/pattern_1.png";
     m_pattern.init_pattern(pattern_filepath);
 
-    //sanity check the pattern
-    std::cout << "pattern has nr of points " << m_pattern.get_nr_points() << '\n';
-    for (size_t i = 0; i < m_pattern.get_nr_points(); i++) {
-        std::cout << "offset for i " << i << " is " << m_pattern.get_offset(i).transpose() << '\n';
-    }
-
+    // //sanity check the pattern
+    // std::cout << "pattern has nr of points " << m_pattern.get_nr_points() << '\n';
+    // for (size_t i = 0; i < m_pattern.get_nr_points(); i++) {
+    //     std::cout << "offset for i " << i << " is " << m_pattern.get_offset(i).transpose() << '\n';
+    // }
 
     //more sanity checks that ensure that however I pad the Point struct it will be correct
     assert(sizeof(float) == 4);
@@ -63,6 +62,8 @@ void DepthEstimatorGL::init_opengl(){
 	}
 
     glGenBuffers(1, &m_points_gl_buf);
+    glGenBuffers(1, &m_ubo_params );
+
 
     m_cur_frame.set_wrap_mode(GL_CLAMP_TO_BORDER);
     m_cur_frame.set_filter_mode(GL_LINEAR);
@@ -94,7 +95,7 @@ Mesh DepthEstimatorGL::compute_depth(){
 
     //----------------------------------------------------------------------------------------------------
     std::string dataset_path="/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png";
-    int num_images_to_read=120;
+    int num_images_to_read=60;
     bool use_modified=false;
     std::vector<Frame> frames=loadDataFromICLNUIM(dataset_path, num_images_to_read);
     std::cout << "frames size is " << frames.size() << "\n";
@@ -146,6 +147,13 @@ Mesh DepthEstimatorGL::compute_depth(){
 
         TIME_END_GL("estimate_affine");
 
+        TIME_START_GL("upload_params");
+        //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
+        glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
+        glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
+        glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_update_depth_prog_id,"params_block"), m_ubo_params );
+        TIME_END_GL("upload_params");
+
         // //upload the image
         // TIME_START_GL("upload_gray_img");
         // int size_bytes=frames[i].gray.step[0] * frames[i].gray.rows;
@@ -165,13 +173,32 @@ Mesh DepthEstimatorGL::compute_depth(){
         // m_cur_frame.upload_data(GL_R32F, padded_img.cols, padded_img.rows, GL_RED, GL_FLOAT, padded_img.ptr(), size_bytes);
         // TIME_END_GL("upload_gray_img");
 
-        //attempt 3 upload the image as a inmutable storage
+        // //attempt 3 upload the image as a inmutable storage
+        // TIME_START_GL("upload_gray_img");
+        // int size_bytes=frames[i].gray.step[0] * frames[i].gray.rows;
+        // if(!m_cur_frame.get_tex_storage_initialized()){
+        //     m_cur_frame.allocate_tex_storage_inmutable(GL_R32F,frames[i].gray.cols, frames[i].gray.rows);
+        // }
+        // m_cur_frame.upload_without_pbo(0,0,0, frames[i].gray.cols, frames[i].gray.rows, GL_RED, GL_FLOAT, frames[i].gray.ptr());
+        // TIME_END_GL("upload_gray_img");
+
+
+        //attempt 3 upload the image as a inmutable storage but also pack the gradient into the 2nd and 3rd channel
         TIME_START_GL("upload_gray_img");
-        int size_bytes=frames[i].gray.step[0] * frames[i].gray.rows;
+        //merge all mats into one with 4 channel
+        std::vector<cv::Mat> channels;
+        channels.push_back(frames[i].gray);
+        channels.push_back(frames[i].grad_x);
+        channels.push_back(frames[i].grad_y);
+        channels.push_back(frames[i].grad_y); //dummy one stored in the alpha channels just to have a 4 channel texture
+        cv::Mat img_with_gradients;
+        cv::merge(channels, img_with_gradients);
+
+        int size_bytes=img_with_gradients.step[0] * img_with_gradients.rows; //allocate 4 channels because gpu likes multiples of 4
         if(!m_cur_frame.get_tex_storage_initialized()){
-            m_cur_frame.allocate_tex_storage_inmutable(GL_R32F,frames[i].gray.cols, frames[i].gray.rows);
+            m_cur_frame.allocate_tex_storage_inmutable(GL_RGBA32F,img_with_gradients.cols, img_with_gradients.rows);
         }
-        m_cur_frame.upload_without_pbo(0,0,0, frames[i].gray.cols, frames[i].gray.rows, GL_RED, GL_FLOAT, frames[i].gray.ptr());
+        m_cur_frame.upload_without_pbo(0,0,0, img_with_gradients.cols, img_with_gradients.rows, GL_RGBA, GL_FLOAT, img_with_gradients.ptr());
         TIME_END_GL("upload_gray_img");
 
 
@@ -281,6 +308,8 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
          cur_frame.rgb=rgb_cv;
          cv::cvtColor ( cur_frame.rgb, cur_frame.gray, CV_BGR2GRAY );
          cur_frame.depth=depth_cv;
+         cv::Scharr( cur_frame.gray, cur_frame.grad_x, CV_32F, 1, 0);
+         cv::Scharr( cur_frame.gray, cur_frame.grad_y, CV_32F, 0, 1);
          cur_frame.tf_cam_world=pose_cw;
          cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
          cur_frame.K=K;
@@ -297,13 +326,6 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
 std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame){
 
 
-    //make the sobel in x and y because we need to to calculate the hessian in order to select the immature point
-    TIME_START_GL("sobel_host_frame");
-    cv::Mat grad_x, grad_y;
-    cv::Scharr( frame.gray, grad_x, CV_32F, 1, 0);
-    cv::Scharr( frame.gray, grad_y, CV_32F, 0, 1);
-    TIME_END_GL("sobel_host_frame");
-
     TIME_START_GL("hessian_host_frame");
     std::vector<Point> immature_points;
     immature_points.reserve(200000);
@@ -317,8 +339,8 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                 int dx = m_pattern.get_offset_x(p);
                 int dy = m_pattern.get_offset_y(p);
 
-                float gradient_x=grad_x.at<float>(i+dy,j+dx); //TODO should be interpolated
-                float gradient_y=grad_y.at<float>(i+dy,j+dx);
+                float gradient_x=frame.grad_x.at<float>(i+dy,j+dx); //TODO should be interpolated
+                float gradient_y=frame.grad_y.at<float>(i+dy,j+dx);
 
                 Eigen::Vector2f grad;
                 grad << gradient_x, gradient_y;
@@ -369,10 +391,17 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
 
                     point.color[p_idx]=texture_interpolate(frame.gray, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
 
-                    float grad_x_val=texture_interpolate(grad_x, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
-                    float grad_y_val=texture_interpolate(grad_y, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
+                    float grad_x_val=texture_interpolate(frame.grad_x, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
+                    float grad_y_val=texture_interpolate(frame.grad_y, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
                     float squared_norm=grad_x_val*grad_x_val + grad_y_val*grad_y_val;
                     point.weights[p_idx] = sqrtf(cl_setting_outlierTHSumComponent / (cl_setting_outlierTHSumComponent + squared_norm));
+
+                    //for ngf
+                    point.colorD[p_idx] = Eigen::Vector2f(grad_x_val,grad_y_val);
+                    point.colorD[p_idx] /= sqrt(point.colorD[p_idx].squaredNorm()+cl_settings_Eta);
+                    point.colorGrad[p_idx] =  Eigen::Vector2f(grad_x_val,grad_y_val);
+
+
                 }
                 point.ncc_sum_templ    = 0.0f;
                 float ncc_sum_templ_sq = 0.0f;

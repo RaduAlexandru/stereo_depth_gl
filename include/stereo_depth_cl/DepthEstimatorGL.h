@@ -25,6 +25,7 @@
 #include <GL/glad.h>
 #include <glm/glm.hpp>
 
+#define MAX_RES_PER_POINT 16
 
 //TODO settings that should be refactored into a config file
 const int cl_MAX_RES_PER_POINT = 16;
@@ -33,6 +34,16 @@ const float cl_setting_overallEnergyTHWeight = 1;
 const float cl_setting_outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
 const float cl_setting_huberTH = 9; // Huber Threshold
 const double cl_seed_convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
+const float cl_settings_Eta=5;
+
+struct Params {
+    float outlierTH = 12*12;					// higher -> less strict
+    float overallEnergyTHWeight = 1;
+    float outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
+    float huberTH = 9; // Huber Threshold
+    double convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
+    float eta = 5;
+};
 
 
 enum PointStatus {
@@ -65,8 +76,11 @@ struct Point{
     int32_t is_outlier;
     int32_t pad_1;
     //
-    float color[cl_MAX_RES_PER_POINT]; 		// colors in host frame
-    float weights[cl_MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
+    float color[MAX_RES_PER_POINT]; 		// colors in host frame
+    float weights[MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
+    Eigen::Vector2f colorD[MAX_RES_PER_POINT];  //gradient in x and y at the pixel of the pattern normalized by the sqrt
+    Eigen::Vector2f colorGrad[MAX_RES_PER_POINT]; //just the raw gradient in x and y at the pixel offset of the pattern
+
 
     float ncc_sum_templ;
     float ncc_const_templ;
@@ -98,13 +112,7 @@ enum class InterpolType {
     CUBIC
 };			// not even traced once.
 
-// BOOST_COMPUTE_ADAPT_STRUCT(Point, Point, (idx_host_frame, u, v, a, b, mu, z_range, sigma2, idepth_min, idepth_max,
-//                                           energyTH, quality, converged, is_outlier, color, weights, skipZero,
-//                                           ncc_sum_templ, ncc_const_templ, gradient_hessian_det, last_visible_frame,
-//                                           gt_depth));
 
-// BOOST_COMPUTE_ADAPT_STRUCT(Point, Point, (idx_host_frame, u, v,
-//                                           gradient_hessian_det, last_visible_frame, gt_depth));
 
 
 struct  AffineAutoDiffCostFunctorGL
@@ -167,7 +175,8 @@ public:
 	Pattern m_pattern;
 
     //gl stuff
-    GLuint m_points_gl_buf;
+    GLuint m_points_gl_buf; //stores all the immature points
+    GLuint m_ubo_params; //stores all parameters that may be needed inside the shader
     gl::Texture2D m_cur_frame;
 
     //gl shaders
@@ -180,6 +189,7 @@ public:
     //params
     bool m_gl_profiling_enabled;
     bool m_show_images;
+    Params m_params; //parameters for depth estimation that may also be needed inside the gl shader
 
 
 

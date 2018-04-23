@@ -6,7 +6,8 @@ layout (local_size_x = 256) in;
 
 const int MAX_RES_PER_POINT=16;
 const float setting_huberTH = 9; // Huber Threshold
-const double seed_convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
+const float seed_convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
+const float settings_Eta = 5;
 
 //https://stackoverflow.com/a/34259806
 const int STATUS_GOOD    = 0x00000001;
@@ -39,6 +40,8 @@ struct Point{
     //
     float color[MAX_RES_PER_POINT]; 		// colors in host frame
     float weights[MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
+    vec2 colorD[MAX_RES_PER_POINT];  //gradient in x and y at the pixel of the pattern normalized by the sqrt
+    vec2 colorGrad[MAX_RES_PER_POINT]; //just the raw gradient in x and y at the pixel offset of the pattern
 
     float ncc_sum_templ;
     float ncc_const_templ;
@@ -67,10 +70,13 @@ struct Point{
 
 
 //you change it to  layout (binding = 0, std430) or layout (binding = 0, std140) in case stuff breaks
-layout (binding = 0, std430) coherent buffer array_points_block
-{
-Point p[];
+layout (binding = 0, std430) coherent buffer array_points_block{
+    Point p[];
 };
+
+layout (binding = 1, std140) uniform params_block{
+    int param_1;
+} params;
 
 
 uniform vec2 frame_size; //x, y
@@ -148,102 +154,210 @@ void main(void) {
 
 
 
-    //search epiline-----------------------------------------------------------------------
-   // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
-    // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
-    float idepth_mean = (p[id].idepth_min + p[id].idepth_max)*0.5;
-    vec3 pr = KRKi_cr * vec3(p[id].u,p[id].v, 1);
-    vec3 ptpMean = pr + Kt_cr*idepth_mean;
-    vec3 ptpMin = pr + Kt_cr*p[id].idepth_min;
-    vec3 ptpMax = pr + Kt_cr*p[id].idepth_max;
-    vec2 uvMean = ptpMean.xy/ptpMean.z;
-    vec2 uvMin = ptpMin.xy/ptpMin.z;
-    vec2 uvMax = ptpMax.xy/ptpMax.z;
+   //  //search epiline-----------------------------------------------------------------------
+   // // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
+   //  // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
+   //  float idepth_mean = (p[id].idepth_min + p[id].idepth_max)*0.5;
+   //  vec3 pr = KRKi_cr * vec3(p[id].u,p[id].v, 1);
+   //  vec3 ptpMean = pr + Kt_cr*idepth_mean;
+   //  vec3 ptpMin = pr + Kt_cr*p[id].idepth_min;
+   //  vec3 ptpMax = pr + Kt_cr*p[id].idepth_max;
+   //  vec2 uvMean = ptpMean.xy/ptpMean.z;
+   //  vec2 uvMin = ptpMin.xy/ptpMin.z;
+   //  vec2 uvMax = ptpMax.xy/ptpMax.z;
+   //
+   //
+   //
+   //  vec2 epi_line = uvMax - uvMin;
+   //  float norm_epi = max(1e-5f,length(epi_line));
+   //  vec2 epi_dir = epi_line / norm_epi;
+   //  const float  half_length = 0.5f * norm_epi;
+   //
+   //  vec2 bestKp=vec2(-1.0,-1.0);
+   //  float bestEnergy = 1e10;
+   //
+   //
+   //  for(float l = -half_length; l <= half_length; l += 0.7f)
+   //  {
+   //      float energy = 0;
+   //      vec2 kp = uvMean + l*epi_dir;
+   //
+   //      if( ( kp.x >= (frame_size.x-10) )  || ( kp.y >= (frame_size.y-10) ) || ( kp.x < 10 ) || ( kp.y < 10) ){
+   //          continue;
+   //      }
+   //
+   //      for(int idx=0;idx<pattern_rot_nr_points; ++idx){
+   //          //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
+   //          vec2 offset=pattern_rot_offsets[idx];
+   //          // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+   //          // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
+   //          // float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolationType::LINEAR);
+   //          // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
+   //
+   //          //for the case when the image is padded
+   //          // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
+   //
+   //          //high qualty filter from openglsuperbible
+   //          float hit_color=hqfilter(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+   //
+   //          const float residual = hit_color - (affine_cr.x * p[id].color[idx] + affine_cr.y);
+   //
+   //          float hw = abs(residual) < setting_huberTH ? 1 : setting_huberTH / abs(residual);
+   //          energy += hw *residual*residual*(2-hw);
+   //      }
+   //      if ( energy < bestEnergy )
+   //      {
+   //          bestKp = kp; bestEnergy = energy;
+   //      }
+   //  }
+   //
+   //
+   //  if ( bestEnergy > p[id].energyTH * 1.2f ) {
+   //      p[id].lastTraceStatus = STATUS_OUTLIER;
+   //  }
+   //  else
+   //  {
+   //      // vec2 epi_dir_inv=vec2(epi_dir.y,-epi_dir.x);
+   //      // float a = epi_dir * p[id].gradH * epi_dir;
+   //      // float b = epi_dir_inv * point.gradH * epi_dir_inv;
+   //      // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
+   //      float errorInPixel=0.0f;
+   //
+   //      if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
+   //      {
+   //          p[id].idepth_min = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
+   //          p[id].idepth_max = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
+   //      }
+   //      else
+   //      {
+   //          p[id].idepth_min = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
+   //          p[id].idepth_max = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
+   //      }
+   //      // memoryBarrier();
+   //      // barrier();
+   //      // memoryBarrier();
+   //      if(p[id].idepth_min > p[id].idepth_max) {
+   //          // std::swap<float>(point.idepth_min, point.idepth_max);
+   //          float tmp=p[id].idepth_min;
+   //          p[id].idepth_min=p[id].idepth_max;
+   //          p[id].idepth_max=tmp;
+   //      }
+   //      p[id].lastTraceStatus = STATUS_GOOD;
+   //      // memoryBarrier();
+   //      // barrier();
+   //      // memoryBarrier();
+   //  }
+   //  // memoryBarrier();
+   //  // barrier();
+   //  // memoryBarrier();
 
 
 
-    vec2 epi_line = uvMax - uvMin;
-    float norm_epi = max(1e-5f,length(epi_line));
-    vec2 epi_dir = epi_line / norm_epi;
-    const float  half_length = 0.5f * norm_epi;
-
-    vec2 bestKp=vec2(-1.0,-1.0);
-    float bestEnergy = 1e10;
 
 
-    for(float l = -half_length; l <= half_length; l += 0.7f)
-    {
-        float energy = 0;
-        vec2 kp = uvMean + l*epi_dir;
-
-        if( ( kp.x >= (frame_size.x-10) )  || ( kp.y >= (frame_size.y-10) ) || ( kp.x < 10 ) || ( kp.y < 10) ){
-            continue;
-        }
-
-        for(int idx=0;idx<pattern_rot_nr_points; ++idx){
-            //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
-            vec2 offset=pattern_rot_offsets[idx];
-            // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
-            // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
-            // float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolationType::LINEAR);
-            // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
-
-            //for the case when the image is padded
-            // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
-
-            //high qualty filter from openglsuperbible
-            float hit_color=hqfilter(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
-
-            const float residual = hit_color - (affine_cr.x * p[id].color[idx] + affine_cr.y);
-
-            float hw = abs(residual) < setting_huberTH ? 1 : setting_huberTH / abs(residual);
-            energy += hw *residual*residual*(2-hw);
-        }
-        if ( energy < bestEnergy )
-        {
-            bestKp = kp; bestEnergy = energy;
-        }
-    }
 
 
-    if ( bestEnergy > p[id].energyTH * 1.2f ) {
-        p[id].lastTraceStatus = STATUS_OUTLIER;
-    }
-    else
-    {
-        // vec2 epi_dir_inv=vec2(epi_dir.y,-epi_dir.x);
-        // float a = epi_dir * p[id].gradH * epi_dir;
-        // float b = epi_dir_inv * point.gradH * epi_dir_inv;
-        // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
-        float errorInPixel=0.0f;
 
-        if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
-        {
-            p[id].idepth_min = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
-            p[id].idepth_max = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
-        }
-        else
-        {
-            p[id].idepth_min = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
-            p[id].idepth_max = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
-        }
-        // memoryBarrier();
-        // barrier();
-        // memoryBarrier();
-        if(p[id].idepth_min > p[id].idepth_max) {
-            // std::swap<float>(point.idepth_min, point.idepth_max);
-            float tmp=p[id].idepth_min;
-            p[id].idepth_min=p[id].idepth_max;
-            p[id].idepth_max=tmp;
-        }
-        p[id].lastTraceStatus = STATUS_GOOD;
-        // memoryBarrier();
-        // barrier();
-        // memoryBarrier();
-    }
-    // memoryBarrier();
-    // barrier();
-    // memoryBarrier();
+
+   //search epiline ngf-----------------------------------------------------------------------
+  // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
+   // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
+   float idepth_mean = (p[id].idepth_min + p[id].idepth_max)*0.5;
+   vec3 pr = KRKi_cr * vec3(p[id].u,p[id].v, 1);
+   vec3 ptpMean = pr + Kt_cr*idepth_mean;
+   vec3 ptpMin = pr + Kt_cr*p[id].idepth_min;
+   vec3 ptpMax = pr + Kt_cr*p[id].idepth_max;
+   vec2 uvMean = ptpMean.xy/ptpMean.z;
+   vec2 uvMin = ptpMin.xy/ptpMin.z;
+   vec2 uvMax = ptpMax.xy/ptpMax.z;
+
+
+
+   vec2 epi_line = uvMax - uvMin;
+   float norm_epi = max(1e-5f,length(epi_line));
+   vec2 epi_dir = epi_line / norm_epi;
+   const float  half_length = 0.5f * norm_epi;
+
+   vec2 bestKp=vec2(-1.0,-1.0);
+   float bestEnergy = 1e10;
+
+
+   for(float l = -half_length; l <= half_length; l += 0.7f)
+   {
+       float energy = 0;
+       vec2 kp = uvMean + l*epi_dir;
+
+       if( ( kp.x >= (frame_size.x-10) )  || ( kp.y >= (frame_size.y-10) ) || ( kp.x < 10 ) || ( kp.y < 10) ){
+           continue;
+       }
+
+       for(int idx=0;idx<pattern_rot_nr_points; ++idx){
+
+           vec2 offset=pattern_rot_offsets[idx];
+           // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+           //high qualty filter from openglsuperbible
+           // float hit_color=hqfilter(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+
+           vec3 hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).xyz;
+           vec2 hitD=hit_color.yz;//gradient in xy
+           hitD = hitD/sqrt(pow(length(hitD),2)+settings_Eta);
+
+           const float nn =dot(hitD, p[id].colorD[idx]);
+           const float residual = max(0.0f,min(1.0f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf
+
+           energy += residual;
+       }
+       if ( energy < bestEnergy )
+       {
+           bestKp = kp; bestEnergy = energy;
+       }
+   }
+
+
+   if ( bestEnergy > p[id].energyTH * 1.2f ) {
+       p[id].lastTraceStatus = STATUS_OUTLIER;
+   }
+   else
+   {
+       // vec2 epi_dir_inv=vec2(epi_dir.y,-epi_dir.x);
+       // float a = epi_dir * p[id].gradH * epi_dir;
+       // float b = epi_dir_inv * point.gradH * epi_dir_inv;
+       // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
+       float errorInPixel=0.0f;
+
+       if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
+       {
+           p[id].idepth_min = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
+           p[id].idepth_max = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
+       }
+       else
+       {
+           p[id].idepth_min = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
+           p[id].idepth_max = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
+       }
+       // memoryBarrier();
+       // barrier();
+       // memoryBarrier();
+       if(p[id].idepth_min > p[id].idepth_max) {
+           // std::swap<float>(point.idepth_min, point.idepth_max);
+           float tmp=p[id].idepth_min;
+           p[id].idepth_min=p[id].idepth_max;
+           p[id].idepth_max=tmp;
+       }
+       p[id].lastTraceStatus = STATUS_GOOD;
+       // memoryBarrier();
+       // barrier();
+       // memoryBarrier();
+   }
+   // memoryBarrier();
+   // barrier();
+   // memoryBarrier();
+
+
+
+
+
+
 
 
 
