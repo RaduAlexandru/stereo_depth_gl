@@ -11,6 +11,7 @@
 #include "stereo_depth_cl/RosBagPlayer.h"
 #include "stereo_depth_cl/MiscUtils.h"
 #include "stereo_depth_cl/SurfelSplatter.h"
+#include "stereo_depth_cl/DepthEstimatorGL.h"
 
 //imgui
 #include "imgui_impl_glfw_gl3.h"
@@ -145,6 +146,31 @@ void Gui::update() {
 
     if (ImGui::CollapsingHeader("Surfel Splatter")) {
         ImGui::PlotLines("Point cloud to mesh distances", m_core->m_splatter->m_nr_points_in_bucket.data(), m_core->m_splatter->m_nr_points_in_bucket.size());
+    }
+
+
+    if (ImGui::CollapsingHeader("Depth Estimation")) {
+        if(ImGui::SliderFloat("gradH_th", &m_core->m_depth_estimator_cl->m_params.gradH_th, 100000, 800000000)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("outlierTH", &m_core->m_depth_estimator_cl->m_params.outlierTH, 1, 300)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("overallEnergyTHWeight", &m_core->m_depth_estimator_cl->m_params.overallEnergyTHWeight, 0.1, 50)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("outlierTHSumComponent", &m_core->m_depth_estimator_cl->m_params.outlierTHSumComponent, 5, 500)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("huberTH", &m_core->m_depth_estimator_cl->m_params.huberTH, 0.1, 50)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("convergence_sigma2_thresh", &m_core->m_depth_estimator_cl->m_params.convergence_sigma2_thresh, 0.1, 300)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("eta", &m_core->m_depth_estimator_cl->m_params.eta, 0.1, 200)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
     }
 
 

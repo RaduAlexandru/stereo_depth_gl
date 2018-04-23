@@ -18,6 +18,7 @@ public:
     Mesh& get_mesh_with_name(const std::string name);
     Mesh& get_mesh_with_idx(const int idx);
     int get_idx_for_name(const std::string name);
+    bool does_mesh_with_name_exist(const std::string name);
 
 
     std::shared_ptr<igl::opengl::glfw::Viewer> m_view;

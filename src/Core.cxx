@@ -83,11 +83,16 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
      // Mesh depth_mesh=m_depth_estimator->compute_depth2(dummy_frame);
      // Mesh depth_mesh=m_depth_estimator->compute_depth_simplified();  // works on cpu
      // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth(dummy_frame);  //just reads the things that were written from RENEGADE
-     Mesh depth_mesh=m_depth_estimator_cl->compute_depth();
+     // Mesh depth_mesh=m_depth_estimator_cl->compute_depth();
+
+     m_depth_estimator_cl->init_data();
+     m_depth_estimator_cl->compute_depth_and_create_mesh();
+
+
      std::cout << "finished computing depth-------------------" << '\n';
      // Mesh depth_mesh=m_depth_estimator_gl2->compute_depth_simplified();  // works
-     depth_mesh.m_show_points=true;
-     m_scene.add_mesh(depth_mesh, "depth_mesh");
+     // depth_mesh.m_show_points=true;
+     // m_scene.add_mesh(depth_mesh, "depth_mesh");
 
 
 
@@ -105,6 +110,17 @@ void Core::update() {
     // }
 
 
+    if(m_depth_estimator_cl->is_modified()){
+        std::string mesh_name="depth_mesh";
+        Mesh depth_mesh=m_depth_estimator_cl->get_mesh();
+        depth_mesh.m_show_points=true;
+        depth_mesh.name=mesh_name;
+        if(m_scene.does_mesh_with_name_exist(mesh_name)){
+            m_scene.get_mesh_with_name(mesh_name)=depth_mesh; //it exists, just assign to it
+        }else{
+            m_scene.add_mesh(depth_mesh, mesh_name); //doesn't exist, add it to the scene
+        }
+    }
 
 
     if (m_loader->is_modified()) {

@@ -83,38 +83,26 @@ float DepthEstimatorGL::gaus_pdf(float mean, float sd, float x){
     return exp(- (x-mean)*(x-mean)/(2*sd)*(2*sd)  )  / (sd*sqrt(2*M_PI));
 }
 
-
-Mesh DepthEstimatorGL::compute_depth(){
-    Mesh mesh;
-
-    //read images from ICL_NUIM
-    //calculate pyramid and gradients
-    //grab the first frame and calculate inmature points for it
-
-    //for each new frame afterwards we grab pass it to open and update the inmature points depth
-
+void DepthEstimatorGL::init_data(){
     //----------------------------------------------------------------------------------------------------
     std::string dataset_path="/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png";
     int num_images_to_read=60;
     bool use_modified=false;
-    std::vector<Frame> frames=loadDataFromICLNUIM(dataset_path, num_images_to_read);
-    std::cout << "frames size is " << frames.size() << "\n";
+    m_frames.clear();
+    m_frames=loadDataFromICLNUIM(dataset_path, num_images_to_read);
+    std::cout << "frames size is " << m_frames.size() << "\n";
+}
 
+void DepthEstimatorGL::compute_depth_and_create_mesh(){
+    m_mesh.clear();
 
-    //TODO undistort images
 
     TIME_START_GL("compute_depth");
 
-    //calculate the gradients of it (cpu)
-    //calculate immature points (cpu)
-    //upload immature points vector to gpu
-    //upload each new frame to gpu
 
     std::vector<Point> immature_points;
-    immature_points=create_immature_points(frames[0]);
+    immature_points=create_immature_points(m_frames[0]);
     std::cout << "immature_points size is " << immature_points.size() << '\n';
-
-
 
 
     //upload to gpu the inmature points
@@ -124,18 +112,18 @@ Mesh DepthEstimatorGL::compute_depth(){
     TIME_END_GL("upload_immature_points");
 
     glUseProgram(m_update_depth_prog_id);
-    for (size_t i = 1; i < frames.size(); i++) {
+    for (size_t i = 1; i < m_frames.size(); i++) {
         std::cout << "frame " << i << '\n';
         TIME_START_GL("update_depth");
 
         TIME_START_GL("estimate_affine");
-        const Eigen::Affine3f tf_cur_host_eigen = frames[i].tf_cam_world * frames[0].tf_cam_world.inverse();
+        const Eigen::Affine3f tf_cur_host_eigen = m_frames[i].tf_cam_world * m_frames[0].tf_cam_world.inverse();
         const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
-        const Eigen::Matrix3f KRKi_cr_eigen = frames[i].K * tf_cur_host_eigen.linear() * frames[0].K.inverse();
-        const Eigen::Vector3f Kt_cr_eigen = frames[i].K * tf_cur_host_eigen.translation();
+        const Eigen::Matrix3f KRKi_cr_eigen = m_frames[i].K * tf_cur_host_eigen.linear() * m_frames[0].K.inverse();
+        const Eigen::Vector3f Kt_cr_eigen = m_frames[i].K * tf_cur_host_eigen.translation();
         // const Eigen::Vector2f affine_cr_eigen = estimate_affine( immature_points, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
         const Eigen::Vector2f affine_cr_eigen= Eigen::Vector2f(1,1);
-        const double focal_length = fabs(frames[i].K(0,0));
+        const double focal_length = fabs(m_frames[i].K(0,0));
         double px_noise = 1.0;
         double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
         Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr_eigen.topLeftCorner<2,2>() );
@@ -187,10 +175,10 @@ Mesh DepthEstimatorGL::compute_depth(){
         TIME_START_GL("upload_gray_img");
         //merge all mats into one with 4 channel
         std::vector<cv::Mat> channels;
-        channels.push_back(frames[i].gray);
-        channels.push_back(frames[i].grad_x);
-        channels.push_back(frames[i].grad_y);
-        channels.push_back(frames[i].grad_y); //dummy one stored in the alpha channels just to have a 4 channel texture
+        channels.push_back(m_frames[i].gray);
+        channels.push_back(m_frames[i].grad_x);
+        channels.push_back(m_frames[i].grad_y);
+        channels.push_back(m_frames[i].grad_y); //dummy one stored in the alpha channels just to have a 4 channel texture
         cv::Mat img_with_gradients;
         cv::merge(channels, img_with_gradients);
 
@@ -208,7 +196,7 @@ Mesh DepthEstimatorGL::compute_depth(){
         //upload the matrices
         TIME_START_GL("upload_matrices");
         Eigen::Vector2f frame_size;
-        frame_size<< frames[i].gray.cols, frames[i].gray.rows;
+        frame_size<< m_frames[i].gray.cols, m_frames[i].gray.rows;
         const Eigen::Matrix4f tf_cur_host_eigen_trans = tf_cur_host_eigen.matrix().transpose();
         const Eigen::Matrix4f tf_host_cur_eigen_trans = tf_host_cur_eigen.matrix().transpose();
         glUniform2fv(glGetUniformLocation(m_update_depth_prog_id,"frame_size"), 1, frame_size.data());
@@ -216,7 +204,7 @@ Mesh DepthEstimatorGL::compute_depth(){
         // glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_host_cur"), 1, GL_FALSE, tf_host_cur_eigen_trans.data());
         glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_cur_host"), 1, GL_TRUE, tf_cur_host_eigen.data());
         glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_host_cur"), 1, GL_TRUE, tf_host_cur_eigen.data());
-        glUniformMatrix3fv(glGetUniformLocation(m_update_depth_prog_id,"K"), 1, GL_FALSE, frames[i].K.data());
+        glUniformMatrix3fv(glGetUniformLocation(m_update_depth_prog_id,"K"), 1, GL_FALSE, m_frames[i].K.data());
         glUniformMatrix3fv(glGetUniformLocation(m_update_depth_prog_id,"KRKi_cr"), 1, GL_FALSE, KRKi_cr_eigen.data());
         glUniform3fv(glGetUniformLocation(m_update_depth_prog_id,"Kt_cr"), 1, Kt_cr_eigen.data());
         glUniform2fv(glGetUniformLocation(m_update_depth_prog_id,"affine_cr"), 1, affine_cr_eigen.data());
@@ -250,27 +238,19 @@ Mesh DepthEstimatorGL::compute_depth(){
         immature_points[i]=ptr[i];
     }
 
-    //read debug from first point
-    for (size_t i = 0; i < 16; i++) {
-        std::cout << "debug " << i << " is " << immature_points[0].debug2[i] << '\n';
-    }
-
-
-
-    std::cout << "outlierTH " << m_params.outlierTH << '\n';
-    std::cout << "overallEnergyTHWeight " << m_params.overallEnergyTHWeight << '\n';
-    std::cout << "outlierTHSumComponent " << m_params.outlierTHSumComponent << '\n';
-    std::cout << "huberTH " << m_params.huberTH << '\n';
-    std::cout << "convergence_sigma2_thresh " << m_params.convergence_sigma2_thresh << '\n';
-    std::cout << "eta " << m_params.eta << '\n';
-
 
     TIME_END_GL("compute_depth");
 
 
-    mesh=create_mesh(immature_points, frames);
-    return mesh;
+    m_mesh=create_mesh(immature_points, m_frames);
 
+    m_scene_is_modified=true;
+
+}
+
+Mesh DepthEstimatorGL::get_mesh(){
+    m_scene_is_modified=false;
+    return m_mesh;
 }
 
 std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read){
@@ -364,7 +344,7 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
 
             //determinant is high enough, add the point
             float hessian_det=gradient_hessian.determinant();
-            if(hessian_det > 100000000){
+            if(hessian_det > m_params.gradH_th){
             // if(hessian_det > 0){
                 Point point;
                 point.u=j;
@@ -442,12 +422,10 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
 
         }
     }
-    TIME_END_GL("hessian_host_frame");
-
-
-
 
     return immature_points;
+    TIME_END_GL("hessian_host_frame");
+
 }
 
 Eigen::Vector2f DepthEstimatorGL::estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr){
@@ -583,6 +561,8 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
     double min_z, max_z;
     min_z = mesh.V.col(2).minCoeff();
     max_z = mesh.V.col(2).maxCoeff();
+    min_z=-7;
+    max_z=-4;
     std::cout << "min max z is " << min_z << " " << max_z << '\n';
     for (size_t i = 0; i < mesh.C.rows(); i++) {
         float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );

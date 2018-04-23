@@ -83,7 +83,9 @@ layout (std140) uniform params_block{
     float convergence_sigma2_thresh;      //!< threshold on depth uncertainty for convergence.
     float eta;
 
-    float pad_1; //pad to 16 bytes (blocks of 4 floats)
+    float gradH_th;
+    //pad to 16 bytes if needed  (blocks of 4 floats)
+    // float pad_1;
     float pad_2;
 }params ;
 
@@ -332,6 +334,10 @@ void main(void) {
   //
   //          const float nn =dot(hitD, p[id].colorD[idx]);
   //          const float residual = max(0.0f,min(1.0f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf
+  //
+  //          // float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
+  //          // energy += hw *residual*residual*(2-hw);
+  //
   //
   //          energy += residual;
   //      }

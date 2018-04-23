@@ -27,15 +27,6 @@
 
 #define MAX_RES_PER_POINT 16
 
-//TODO settings that should be refactored into a config file
-// const int cl_MAX_RES_PER_POINT = 16;
-// const float cl_setting_outlierTH = 12*12;					// higher -> less strict
-// const float cl_setting_overallEnergyTHWeight = 1;
-// const float cl_setting_outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
-// const float cl_setting_huberTH = 9; // Huber Threshold
-// const float cl_seed_convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
-// const float cl_settings_Eta=5;
-
 struct Params {
     float outlierTH = 12*12;					// higher -> less strict
     float overallEnergyTHWeight = 1;
@@ -44,10 +35,11 @@ struct Params {
     float convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
     float eta = 5;
 
-    float pad_1; //pad to 16 bytes (blocks of 4 floats)
+    float gradH_th=800000000; //threshold on the gradient of the pixels. If gradient is above this value we will create immaure point
+    //pad to 16 bytes if needed  (blocks of 4 floats)
+    // float pad_1;
     float pad_2;
 };
-
 
 enum PointStatus {
     STATUS_GOOD=0,					// traced well and good
@@ -115,9 +107,6 @@ enum class InterpolType {
     CUBIC
 };			// not even traced once.
 
-
-
-
 struct  AffineAutoDiffCostFunctorGL
 {
     explicit AffineAutoDiffCostFunctorGL( const double & refColor, const double & newColor )
@@ -149,23 +138,12 @@ namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
 
 class DepthEstimatorGL{
 public:
-
-
-
-
     DepthEstimatorGL();
     ~DepthEstimatorGL(); //needed so that forward declarations work
-    void init_opengl();
 
-    //start with everything
-    std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
-    Mesh compute_depth();
-    float gaus_pdf(float mean, float sd, float x);
-    std::vector<Point> create_immature_points (const Frame& frame);
-    Eigen::Vector2f estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
-    float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
-    Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames);
-
+    void init_data(); //Reads the images for the depth estimation and prepares the gl context
+    void compute_depth_and_create_mesh(); //from all the immature points created triangulate depth for them, updates the mesh
+    Mesh get_mesh();
 
 
     // Scene get_scene();
@@ -188,6 +166,9 @@ public:
 
     //databasse
     std::atomic<bool> m_scene_is_modified;
+    Mesh m_mesh;
+    std::vector<Frame> m_frames;
+    // std::vector<Point> m_points;
 
     //params
     bool m_gl_profiling_enabled;
@@ -198,7 +179,16 @@ public:
 
 
 private:
+    void init_opengl();
     void compile_shaders();
+
+    //start with everything
+    std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
+    float gaus_pdf(float mean, float sd, float x);
+    std::vector<Point> create_immature_points (const Frame& frame);
+    Eigen::Vector2f estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
+    float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
+    Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames);
 
 };
 

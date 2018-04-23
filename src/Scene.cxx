@@ -78,3 +78,12 @@ int Scene::get_idx_for_name(const std::string name){
     LOG_S(ERROR) << "No mesh with name " << name;
 
 }
+
+bool Scene::does_mesh_with_name_exist(const std::string name){
+    for (size_t i = 0; i < m_meshes.size(); i++) {
+        if(m_meshes[i].name==name){
+            return true;
+        }
+    }
+    return false;
+}
