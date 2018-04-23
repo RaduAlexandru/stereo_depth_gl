@@ -28,21 +28,24 @@
 #define MAX_RES_PER_POINT 16
 
 //TODO settings that should be refactored into a config file
-const int cl_MAX_RES_PER_POINT = 16;
-const float cl_setting_outlierTH = 12*12;					// higher -> less strict
-const float cl_setting_overallEnergyTHWeight = 1;
-const float cl_setting_outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
-const float cl_setting_huberTH = 9; // Huber Threshold
-const double cl_seed_convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
-const float cl_settings_Eta=5;
+// const int cl_MAX_RES_PER_POINT = 16;
+// const float cl_setting_outlierTH = 12*12;					// higher -> less strict
+// const float cl_setting_overallEnergyTHWeight = 1;
+// const float cl_setting_outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
+// const float cl_setting_huberTH = 9; // Huber Threshold
+// const float cl_seed_convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
+// const float cl_settings_Eta=5;
 
 struct Params {
     float outlierTH = 12*12;					// higher -> less strict
     float overallEnergyTHWeight = 1;
     float outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
     float huberTH = 9; // Huber Threshold
-    double convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
+    float convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
     float eta = 5;
+
+    float pad_1; //pad to 16 bytes (blocks of 4 floats)
+    float pad_2;
 };
 
 

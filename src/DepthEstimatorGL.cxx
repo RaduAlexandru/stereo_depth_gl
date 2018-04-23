@@ -250,6 +250,19 @@ Mesh DepthEstimatorGL::compute_depth(){
         immature_points[i]=ptr[i];
     }
 
+    //read debug from first point
+    for (size_t i = 0; i < 16; i++) {
+        std::cout << "debug " << i << " is " << immature_points[0].debug2[i] << '\n';
+    }
+
+
+
+    std::cout << "outlierTH " << m_params.outlierTH << '\n';
+    std::cout << "overallEnergyTHWeight " << m_params.overallEnergyTHWeight << '\n';
+    std::cout << "outlierTHSumComponent " << m_params.outlierTHSumComponent << '\n';
+    std::cout << "huberTH " << m_params.huberTH << '\n';
+    std::cout << "convergence_sigma2_thresh " << m_params.convergence_sigma2_thresh << '\n';
+    std::cout << "eta " << m_params.eta << '\n';
 
 
     TIME_END_GL("compute_depth");
@@ -394,11 +407,11 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                     float grad_x_val=texture_interpolate(frame.grad_x, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
                     float grad_y_val=texture_interpolate(frame.grad_y, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
                     float squared_norm=grad_x_val*grad_x_val + grad_y_val*grad_y_val;
-                    point.weights[p_idx] = sqrtf(cl_setting_outlierTHSumComponent / (cl_setting_outlierTHSumComponent + squared_norm));
+                    point.weights[p_idx] = sqrtf(m_params.outlierTHSumComponent / (m_params.outlierTHSumComponent + squared_norm));
 
                     //for ngf
                     point.colorD[p_idx] = Eigen::Vector2f(grad_x_val,grad_y_val);
-                    point.colorD[p_idx] /= sqrt(point.colorD[p_idx].squaredNorm()+cl_settings_Eta);
+                    point.colorD[p_idx] /= sqrt(point.colorD[p_idx].squaredNorm()+m_params.eta);
                     point.colorGrad[p_idx] =  Eigen::Vector2f(grad_x_val,grad_y_val);
 
 
@@ -412,8 +425,8 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                 }
                 point.ncc_const_templ = m_pattern.get_nr_points() * ncc_sum_templ_sq - (double) point.ncc_sum_templ*point.ncc_sum_templ;
 
-                point.energyTH = m_pattern.get_nr_points()*cl_setting_outlierTH;
-                point.energyTH *= cl_setting_overallEnergyTHWeight*cl_setting_overallEnergyTHWeight;
+                point.energyTH = m_pattern.get_nr_points()*m_params.outlierTH;
+                point.energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
 
                 point.quality=10000;
                 //-------------------------------------
@@ -451,8 +464,8 @@ Eigen::Vector2f DepthEstimatorGL::estimate_affine(std::vector<Point>& immature_p
             continue;
 
         //get colors at the current frame
-        float color_cur_frame[cl_MAX_RES_PER_POINT];
-        float color_host_frame[cl_MAX_RES_PER_POINT];
+        float color_cur_frame[MAX_RES_PER_POINT];
+        float color_host_frame[MAX_RES_PER_POINT];
 
 
         if ( 1.0/point.gt_depth > 0 ) {
