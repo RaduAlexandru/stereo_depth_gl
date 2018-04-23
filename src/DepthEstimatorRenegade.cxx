@@ -11,7 +11,6 @@
 //My stuff
 #include "stereo_depth_cl/Profiler.h"
 #include "stereo_depth_cl/MiscUtils.h"
-#include "UtilsCL.h"
 
 //Libigl
 #include <igl/opengl/glfw/Viewer.h>

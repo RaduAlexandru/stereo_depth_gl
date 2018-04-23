@@ -14,7 +14,6 @@ set(PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include
                         ${CMAKE_SOURCE_DIR}/deps/octree
                         ${CMAKE_SOURCE_DIR}/deps/dir_watcher
                         ${CMAKE_SOURCE_DIR}/deps/gl_lib
-                        ${CMAKE_SOURCE_DIR}/deps/cl_lib
                         ${CMAKE_SOURCE_DIR}/deps/cv_lib)		# Header folder
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
@@ -35,7 +34,6 @@ find_package(LIBIGL REQUIRED)
 find_package(nanoflann)
 # find_package(Boost 1.64 REQUIRED COMPONENTS system thread filesystem)
 find_package(kqueue REQUIRED)
-find_package(OpenCL REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -128,7 +126,6 @@ include_directories(${LIBIGL_INCLUDE_DIRS})
 add_definitions(${LIBIGL_DEFINITIONS})
 include_directories(${nanoflann_INCLUDE_DIRS})
 include_directories(${KQUEUE_INCLUDE_DIRS})
-include_directories(${OPENCL_INCLUDE})
 include_directories(${CERES_INCLUDE_DIR})
 #add_definitions(${GLM_DEFINITIONS})
 #include_directories("/media/alex/Data/Master/SHK/c_ws/src/laser_mesher/deps/libigl/external/nanogui/ext/glew/include/")
@@ -176,7 +173,6 @@ target_link_libraries(stereo_depth_cl ${catkin_LIBRARIES} ${Boost_libs_164} ${Op
           ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
           ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
           ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
-          ${OPENCL_LIBRARY}
           ceres
 )
 #definitions for cmake variables that are necesarry during runtime

@@ -721,18 +721,6 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
 std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame){
 
 
-    //create all of the pixels as inmature points
-    // std::vector<ImmaturePoint> immature_points;
-    // for (size_t i = 0; i < frame.gray.rows; i++) {
-    //     for (size_t j = 0; j < frame.gray.cols; j++) {
-    //         ImmaturePoint point;
-    //         point.u=j;
-    //         point.v=i;
-    //         point.depth=frame.depth.at<float>(i,j);
-    //         immature_points.push_back(point);
-    //     }
-    // }
-
     //make the sobel in x and y because we need to to calculate the hessian in order to select the immature point
     TIME_START_GL("sobel_host_frame");
     cv::Mat grad_x, grad_y;
@@ -774,7 +762,6 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
 
                 //Seed::Seed
                 Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.u,point.v,1)).normalized();
-                // point.f = Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
                 point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
 
                 //start at an initial value for depth at around 4 meters (depth_filter->Seed::reinit)
@@ -788,7 +775,6 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                 float z_inv_max = std::max<float>(point.mu- sqrt(point.sigma2), 0.00000001f);
                 point.idepth_min = z_inv_min;
                 point.idepth_max = z_inv_max;
-                // std::cout << "point ideph min and max is " << point.idepth_min << " " << point.idepth_max << '\n';
 
                 point.a=10.0;
                 point.b=10.0;
