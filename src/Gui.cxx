@@ -150,6 +150,9 @@ void Gui::update() {
 
 
     if (ImGui::CollapsingHeader("Depth Estimation")) {
+        if(ImGui::SliderInt("search_epi_method", &m_core->m_depth_estimator_cl->m_params.search_epi_method, 0, 1)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
         if(ImGui::SliderFloat("gradH_th", &m_core->m_depth_estimator_cl->m_params.gradH_th, 100000, 800000000)){
             m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
         }
@@ -170,6 +173,9 @@ void Gui::update() {
         }
         if(ImGui::SliderFloat("eta", &m_core->m_depth_estimator_cl->m_params.eta, 0.1, 200)){
             m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if (ImGui::Button("Write_depth_image_to_file")) {
+            m_core->m_depth_estimator_cl->save_depth_image();
         }
     }
 

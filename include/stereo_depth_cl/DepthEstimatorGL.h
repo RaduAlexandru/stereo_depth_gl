@@ -36,9 +36,10 @@ struct Params {
     float eta = 5;
 
     float gradH_th=800000000; //threshold on the gradient of the pixels. If gradient is above this value we will create immaure point
+    int search_epi_method=0; //0=bca, 1=ngf
     //pad to 16 bytes if needed  (blocks of 4 floats)
     // float pad_1;
-    float pad_2;
+    // float pad_2;
 };
 
 enum PointStatus {
@@ -143,6 +144,7 @@ public:
 
     void init_data(); //Reads the images for the depth estimation and prepares the gl context
     void compute_depth_and_create_mesh(); //from all the immature points created triangulate depth for them, updates the mesh
+    void save_depth_image();
     Mesh get_mesh();
 
 
@@ -168,7 +170,7 @@ public:
     std::atomic<bool> m_scene_is_modified;
     Mesh m_mesh;
     std::vector<Frame> m_frames;
-    // std::vector<Point> m_points;
+    std::vector<Point> m_points;
 
     //params
     bool m_gl_profiling_enabled;

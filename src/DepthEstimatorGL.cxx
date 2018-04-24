@@ -243,6 +243,7 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
 
 
     m_mesh=create_mesh(immature_points, m_frames);
+    m_points=immature_points; //save the points in the class in case we need them for later saving to a file
 
     m_scene_is_modified=true;
 
@@ -314,6 +315,15 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
    }
    std::cout << "read " << imagesRead << " images. (" << frames.size() <<", " << ")" << std::endl;
    return frames;
+}
+
+void DepthEstimatorGL::save_depth_image(){
+    std::ofstream f ( "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/results/depth_image.txt" );
+    for ( const Point & point : m_points ){
+        const float idepth = point.mu;
+        f << point.u << " " << point.v << " " << idepth << " " << std::endl;
+    }
+    f.close();
 }
 
 std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame){
@@ -561,8 +571,8 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
     double min_z, max_z;
     min_z = mesh.V.col(2).minCoeff();
     max_z = mesh.V.col(2).maxCoeff();
-    min_z=-7;
-    max_z=-4;
+    // min_z=-7;
+    // max_z=-4;
     std::cout << "min max z is " << min_z << " " << max_z << '\n';
     for (size_t i = 0; i < mesh.C.rows(); i++) {
         float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
