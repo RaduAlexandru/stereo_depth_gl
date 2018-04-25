@@ -174,6 +174,29 @@ void Gui::update() {
         if(ImGui::SliderFloat("eta", &m_core->m_depth_estimator_cl->m_params.eta, 0.1, 200)){
             m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
         }
+
+        //denoise things
+        if(ImGui::SliderInt("denoise_nr_iterations", &m_core->m_depth_estimator_cl->m_params.denoise_nr_iterations, 0, 400)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("denoise_depth_range", &m_core->m_depth_estimator_cl->m_params.denoise_depth_range, 1.0, 10.0)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("denoise_lambda", &m_core->m_depth_estimator_cl->m_params.denoise_lambda, 0.1, 10)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("denoise_L", &m_core->m_depth_estimator_cl->m_params.denoise_L, 0.1, 20)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("denoise_tau", &m_core->m_depth_estimator_cl->m_params.denoise_tau, 0.00001, 5)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+        if(ImGui::SliderFloat("denoise_theta", &m_core->m_depth_estimator_cl->m_params.denoise_theta, 0.00001, 20)){
+            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        }
+
+
+
         if (ImGui::Button("Write_depth_image_to_file")) {
             m_core->m_depth_estimator_cl->save_depth_image();
         }

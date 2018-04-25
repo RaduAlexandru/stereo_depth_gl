@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <fstream>
+#include <sstream>
 
 //My stuff
 #include "stereo_depth_cl/Profiler.h"
@@ -88,11 +89,11 @@ float DepthEstimatorGL::gaus_pdf(float mean, float sd, float x){
 
 void DepthEstimatorGL::init_data(){
     //----------------------------------------------------------------------------------------------------
-    std::string dataset_path="/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png";
     int num_images_to_read=60;
     bool use_modified=false;
     m_frames.clear();
-    m_frames=loadDataFromICLNUIM(dataset_path, num_images_to_read);
+    m_frames=loadDataFromICLNUIM("/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png", num_images_to_read);
+    // m_frames=loadDataFromRGBD_TUM("/media/alex/Data/Master/Thesis/data/RGBD_TUM/rgbd_dataset_freiburg1_xyz", num_images_to_read);
     std::cout << "frames size is " << m_frames.size() << "\n";
 }
 
@@ -250,9 +251,9 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
     glUseProgram(m_denoise_depth_prog_id);
 
 
-    int depth_range=5;
-    float lambda=0.5;
-    int iterations=200;
+    int depth_range=m_params.denoise_depth_range;
+    float lambda=m_params.denoise_lambda;
+    int iterations=m_params.denoise_nr_iterations;
     const float large_sigma2 = depth_range * depth_range / 72.f;
     // computeWeightsAndMu( )
     for ( auto &point : immature_points){
@@ -269,12 +270,20 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
     glBufferData(GL_SHADER_STORAGE_BUFFER, immature_points.size() * sizeof(Point), immature_points.data(), GL_DYNAMIC_COPY);
     TIME_END_GL("upload_immature_points");
 
+    TIME_START_GL("upload_params");
+    //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
+    glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
+    glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
+    glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_denoise_depth_prog_id,"params_block"), m_ubo_params );
+    TIME_END_GL("upload_params");
+
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_points_gl_buf);
     TIME_START_GL("depth_denoise_kernel");
-    for (size_t i = 0; i < 400; i++) {
+    std::cout << "running for "<< m_params.denoise_nr_iterations << '\n';
+    for (size_t i = 0; i < m_params.denoise_nr_iterations; i++) {
         glDispatchCompute(immature_points.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
-        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        // glMemoryBarrier(GL_ALL_BARRIER_BITS);
     }
     TIME_END_GL("depth_denoise_kernel");
 
@@ -367,6 +376,136 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
    }
    std::cout << "read " << imagesRead << " images. (" << frames.size() <<", " << ")" << std::endl;
    return frames;
+}
+
+std::vector<Frame> DepthEstimatorGL::loadDataFromRGBD_TUM ( const std::string & dataset_path, const int num_images_to_read ){
+    std::vector< Frame > frames;
+    std::string filename_rgb = dataset_path + "/rgb.txt";
+    std::string filename_depth = dataset_path + "/depth.txt";
+    std::string filename_gt = dataset_path + "/groundtruth.txt";
+
+    //K is from here https://vision.in.tum.de/data/datasets/rgbd-dataset/file_formats
+    Eigen::Matrix3f K;
+    K.setZero();
+    K(0,0)=525.0; //fx
+    K(1,1)=525.0 ; //fy
+    K(0,2)=319.5; // cx
+    K(1,2)=239.5; //cy
+    K(2,2)=1.0;
+
+    std::ifstream image_file ( filename_rgb, std::ifstream::in );
+    std::ifstream depth_file ( filename_depth, std::ifstream::in );
+    std::ifstream gt_file ( filename_gt, std::ifstream::in );
+
+    std::string rgb_line;
+    std::string depth_line;
+    std::string gt_line;
+    int images_read=0;
+    while(std::getline(image_file, rgb_line)) {
+        std::getline(depth_file, depth_line);
+        std::getline(gt_file, gt_line);
+
+        //https://stackoverflow.com/a/28379466
+        ltrim(rgb_line);  // remove leading whitespace
+        rtrim(rgb_line);  // remove trailing whitespace
+        //skip comments
+        if(rgb_line.at(0)=='#') {
+            continue;
+        }
+
+        float timestamp;
+        std::string rgb_filename;
+        std::string depth_filename;
+        float tx, ty, tz, qx, qy, qz, qw;
+
+        std::istringstream iss_rgb(rgb_line);
+        iss_rgb >> timestamp >> rgb_filename;
+
+        std::istringstream iss_depth(depth_line);
+        iss_depth >> timestamp >> depth_filename;
+
+        std::istringstream iss_gt(gt_line);
+        iss_gt >> timestamp >> tx >> ty >> tz >> qx >> qy >> qz >> qw;
+
+        std::cout << "reading " << rgb_filename << '\n';
+        std::cout << "reading " << depth_filename << '\n';
+
+        Eigen::Affine3f pose_wc = Eigen::Affine3f::Identity();
+        pose_wc.translation() << tx,ty,tz;
+        pose_wc.linear() = Eigen::Quaternionf(qw,qx,qy,qz).toRotationMatrix();
+        Eigen::Affine3f pose_cw = pose_wc.inverse();
+
+        cv::Mat rgb_cv=cv::imread(dataset_path + "/" + rgb_filename, CV_LOAD_IMAGE_UNCHANGED);
+        cv::Mat depth_cv=cv::imread(dataset_path + "/" + depth_filename, CV_LOAD_IMAGE_UNCHANGED);
+        depth_cv.convertTo ( depth_cv, CV_32F, 1./5000. ); //ICLNUIM stores theis weird units so we transform to meters
+
+
+        Frame cur_frame;
+        cur_frame.rgb=rgb_cv;
+        cv::cvtColor ( cur_frame.rgb, cur_frame.gray, CV_BGR2GRAY );
+        cur_frame.depth=depth_cv;
+        cv::Scharr( cur_frame.gray, cur_frame.grad_x, CV_32F, 1, 0);
+        cv::Scharr( cur_frame.gray, cur_frame.grad_y, CV_32F, 0, 1);
+        cur_frame.tf_cam_world=pose_cw;
+        cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
+        cur_frame.K=K;
+        cur_frame.frame_id=images_read;
+
+        frames.push_back(cur_frame);
+
+
+        images_read++;
+        if(images_read>num_images_to_read){
+            break;
+        }
+    }
+
+    return frames;
+
+    // int images_read = 0;
+    // for ( images_read = 0; image_file.good() && images_read <= num_images_to_read ; ++images_read ){
+    //    std::string depth_file_name, color_file_name;
+    //    int idc, idd, idg;
+    //    double tsc, tx, ty, tz, qx, qy, qz, qw;
+    //    image_file >> idd >> depthFileName >> idc >> colorFileName;
+    //
+    //    if ( idd == 0 )
+    //        continue;
+    //    grtruFile >> idg >> tx >> ty >> tz >> qx >> qy >> qz >> qw;
+    //
+    //    if ( idc != idd || idc != idg ){
+    //        std::cerr << "Error during reading... not correct anymore!" << std::endl;
+    //        break;
+    //    }
+    //
+    //    if ( ! depthFileName.empty() ){
+    //       Eigen::Affine3f pose_wc = Eigen::Affine3f::Identity();
+    //       pose_wc.translation() << tx,ty,tz;
+    //       pose_wc.linear() = Eigen::Quaternionf(qw,qx,qy,qz).toRotationMatrix();
+    //       Eigen::Affine3f pose_cw = pose_wc.inverse();
+    //
+    //       cv::Mat rgb_cv=cv::imread(dataset_path + "/" + colorFileName, CV_LOAD_IMAGE_UNCHANGED);
+    //       cv::Mat depth_cv=cv::imread(dataset_path + "/" + depthFileName, CV_LOAD_IMAGE_UNCHANGED);
+    //       depth_cv.convertTo ( depth_cv, CV_32F, 1./5000. ); //ICLNUIM stores theis weird units so we transform to meters
+    //
+    //
+    //       Frame cur_frame;
+    //       cur_frame.rgb=rgb_cv;
+    //       cv::cvtColor ( cur_frame.rgb, cur_frame.gray, CV_BGR2GRAY );
+    //       cur_frame.depth=depth_cv;
+    //       cv::Scharr( cur_frame.gray, cur_frame.grad_x, CV_32F, 1, 0);
+    //       cv::Scharr( cur_frame.gray, cur_frame.grad_y, CV_32F, 0, 1);
+    //       cur_frame.tf_cam_world=pose_cw;
+    //       cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
+    //       cur_frame.K=K;
+    //       cur_frame.frame_id=imagesRead;
+    //
+    //       frames.push_back(cur_frame);
+    //       VLOG(1) << "read img " << imagesRead << " " << colorFileName;
+    //    }
+    // }
+    // std::cout << "read " << imagesRead << " images. (" << frames.size() <<", " << ")" << std::endl;
+    return frames;
 }
 
 void DepthEstimatorGL::save_depth_image(){

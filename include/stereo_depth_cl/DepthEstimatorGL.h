@@ -40,6 +40,16 @@ struct Params {
     //pad to 16 bytes if needed  (blocks of 4 floats)
     // float pad_1;
     // float pad_2;
+    //until here it's paded correctly to 16 bytes-----
+
+    int denoise_nr_iterations=200;
+    float denoise_depth_range=5.0;
+    float denoise_lambda=0.5;
+    float denoise_L=sqrt(8.0f);
+    float denoise_tau=0.02f;
+    float denoise_theta=0.5;
+    float pad_1;
+    float pad_2;
 };
 
 enum PointStatus {
@@ -207,6 +217,7 @@ private:
 
     //start with everything
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
+    std::vector<Frame> loadDataFromRGBD_TUM ( const std::string & dataset_path, const int num_images_to_read );
     float gaus_pdf(float mean, float sd, float x);
     std::vector<Point> create_immature_points (const Frame& frame);
     Eigen::Vector2f estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);

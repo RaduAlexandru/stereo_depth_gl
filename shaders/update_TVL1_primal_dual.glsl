@@ -94,6 +94,17 @@ layout (std140) uniform params_block{
     //pad to 16 bytes if needed  (blocks of 4 floats)
     // float pad_1;
     // float pad_2;
+    //until here it's paded correctly to 16 bytes-----
+
+    int denoise_nr_iterations;
+    float denoise_depth_range;
+    float denoise_lambda;
+    float denoise_L;
+    float denoise_tau;
+    float denoise_theta;
+    float pad_1;
+    float pad_2;
+
 }params ;
 
 
@@ -102,39 +113,39 @@ void main(void) {
 
     int id = int(gl_GlobalInvocationID.x);
 
-    const float L = sqrt(8.0f);
-    const float tau = (0.02f);
-    const float sigma = ((1 / (L*L)) / tau);
-    const float theta = 0.5f;
-    const float lambda=0.5;
-
-
-    // update dual
-    const float g_val = p[id].g_val;
-    const vec2 p_vec = p[id].p_vec;
-    vec2 grad_uhead;
-    const float current_u = p[id].val_mu_denoised;
-    float right_mu_head = (p[id].right == -1) ? p[id].mu_head : p[p[id].right].mu_head;
-    float below_mu_head = (p[id].below == -1) ? p[id].mu_head : p[p[id].below].mu_head;
-    grad_uhead.x = right_mu_head - current_u; //->atXY(min<int>(c_img_size.width-1, x+1), y)  - current_u;
-    grad_uhead.y = below_mu_head - current_u; //->atXY(x, min<int>(c_img_size.height-1, y+1)) - current_u;
-    const vec2 temp_p = g_val * grad_uhead * sigma + p_vec;
-    const float sqrt_p = length(temp_p); //sqrt(temp_p[0] * temp_p[0] + temp_p[1] * temp_p[1]);
-    p[id].p_vec = temp_p / max(1.0f, sqrt_p);
-
-    // update primal:
-    const float noisy_depth = p[id].mu;
-    const float old_u = p[id].val_mu_denoised;
-    const float g = p[id].g_val;
-
-    vec2 current_p = p[id].p_vec;
-    vec2 left_p = (p[id].left == -1) ? p[id].p_vec : p[p[id].left].p_vec;
-    vec2 above_p = (p[id].above == -1) ? p[id].p_vec : p[p[id].above].p_vec;
-    vec2 w_p = left_p;
-    vec2 n_p = above_p;
-
-    const float x = p[id].u;
-    const float y = p[id].v;
+    // const float L = params.denoise_L;
+    // const float tau = params.denoise_tau;
+    // const float theta = params.denoise_theta;
+    // const float lambda=params.denoise_lambda;
+    // const float sigma = ((1 / (L*L)) / tau);
+    //
+    //
+    // // update dual
+    // const float g_val = p[id].g_val;
+    // const vec2 p_vec = p[id].p_vec;
+    // vec2 grad_uhead;
+    // const float current_u = p[id].val_mu_denoised;
+    // float right_mu_head = (p[id].right == -1) ? p[id].mu_head : p[p[id].right].mu_head;
+    // float below_mu_head = (p[id].below == -1) ? p[id].mu_head : p[p[id].below].mu_head;
+    // grad_uhead.x = right_mu_head - current_u; //->atXY(min<int>(c_img_size.width-1, x+1), y)  - current_u;
+    // grad_uhead.y = below_mu_head - current_u; //->atXY(x, min<int>(c_img_size.height-1, y+1)) - current_u;
+    // const vec2 temp_p = g_val * grad_uhead * sigma + p_vec;
+    // const float sqrt_p = length(temp_p); //sqrt(temp_p[0] * temp_p[0] + temp_p[1] * temp_p[1]);
+    // p[id].p_vec = temp_p / max(1.0f, sqrt_p);
+    //
+    // // update primal:
+    // const float noisy_depth = p[id].mu;
+    // const float old_u = p[id].val_mu_denoised;
+    // const float g = p[id].g_val;
+    //
+    // vec2 current_p = p[id].p_vec;
+    // vec2 left_p = (p[id].left == -1) ? p[id].p_vec : p[p[id].left].p_vec;
+    // vec2 above_p = (p[id].above == -1) ? p[id].p_vec : p[p[id].above].p_vec;
+    // vec2 w_p = left_p;
+    // vec2 n_p = above_p;
+    //
+    // const float x = p[id].u;
+    // const float y = p[id].v;
     // if ( x == 0)
     //     w_p.x = 0.f;
     // else if ( x >= 480-1 )
@@ -143,23 +154,60 @@ void main(void) {
     //     n_p.y = 0.f;
     // else if ( y >= 640-1 )
     //     current_p.y = 0.f;
+    //
+    // const float divergence = current_p.x - w_p.x + current_p.y - n_p.y;
+    // const float tauLambda = tau*lambda;
+    // const float temp_u = old_u + tau * g * divergence;
+    //
+    // if ((temp_u - noisy_depth) > (tauLambda)){
+    //     p[id].val_mu_denoised = temp_u - tauLambda;
+    // }else if ((temp_u - noisy_depth) < (-tauLambda)){
+    //     p[id].val_mu_denoised = temp_u + tauLambda;
+    // }else{
+    //     p[id].val_mu_denoised = noisy_depth;
+    // }
+    // p[id].mu_head = p[id].val_mu_denoised + theta * (p[id].val_mu_denoised - old_u);
 
-    const float divergence = current_p.x - w_p.x + current_p.y - n_p.y;
-    const float tauLambda = tau*lambda;
-    const float temp_u = old_u + tau * g * divergence;
 
-    if ((temp_u - noisy_depth) > (tauLambda)){
+
+    //the only data we need from the point is:
+        //float val_mu_denoised
+        //float g_val
+        //vec2 p_vec
+        //float mu
+        //float mu_head
+        // that would require an image with 6 channels, maybe use a 3d texture or a texture 2d array
+
+
+    //attemot at making at faster
+    const float sigma = ((1.0 / (params.denoise_L*params.denoise_L)) / params.denoise_tau);
+
+
+    // update dual
+    float right_mu_head = (p[id].right == -1) ? p[id].mu_head : p[p[id].right].mu_head;
+    float below_mu_head = (p[id].below == -1) ? p[id].mu_head : p[p[id].below].mu_head;
+    vec2 grad_uhead=vec2(right_mu_head - p[id].val_mu_denoised, below_mu_head - p[id].val_mu_denoised);
+    const vec2 temp_p = p[id].g_val * grad_uhead * sigma + p[id].p_vec;
+    const float sqrt_p = length(temp_p); //sqrt(temp_p[0] * temp_p[0] + temp_p[1] * temp_p[1]);
+    p[id].p_vec = temp_p / max(1.0f, sqrt_p);
+
+    // update primal:
+    const float old_u = p[id].val_mu_denoised;
+    vec2 current_p = p[id].p_vec;
+    vec2 left_p = (p[id].left == -1) ? p[id].p_vec : p[p[id].left].p_vec;
+    vec2 above_p = (p[id].above == -1) ? p[id].p_vec : p[p[id].above].p_vec;
+    const float divergence = current_p.x - left_p.x + current_p.y - above_p.y;
+    const float tauLambda = params.denoise_tau*params.denoise_lambda;
+    const float temp_u = old_u + params.denoise_tau * p[id].g_val * divergence;
+    float diff =temp_u - p[id].mu;
+    if (diff> (tauLambda)){
         p[id].val_mu_denoised = temp_u - tauLambda;
-    }else if ((temp_u - noisy_depth) < (-tauLambda)){
+    }else if (diff < (-tauLambda)){
         p[id].val_mu_denoised = temp_u + tauLambda;
     }else{
-        p[id].val_mu_denoised = noisy_depth;
+        p[id].val_mu_denoised = p[id].mu;
     }
-    p[id].mu_head = p[id].val_mu_denoised + theta * (p[id].val_mu_denoised - old_u);
-
-
-
-
+    p[id].mu_head = p[id].val_mu_denoised + params.denoise_theta * (p[id].val_mu_denoised - old_u);
 
 
 

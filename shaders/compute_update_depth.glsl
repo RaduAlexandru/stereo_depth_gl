@@ -108,6 +108,16 @@ layout (std140) uniform params_block{
     //pad to 16 bytes if needed  (blocks of 4 floats)
     // float pad_1;
     // float pad_2;
+    //until here it's paded correctly to 16 bytes-----
+
+    int denoise_nr_iterations;
+    float denoise_depth_range;
+    float denoise_lambda;
+    float denoise_L;
+    float denoise_tau;
+    float denoise_theta;
+    float pad_1;
+    float pad_2;
 }params ;
 
 
