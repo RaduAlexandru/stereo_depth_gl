@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
+#include <fstream>
 
 //My stuff
 #include "stereo_depth_cl/Profiler.h"
@@ -238,6 +239,9 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
         immature_points[i]=ptr[i];
     }
 
+    assign_neighbours_for_points(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
+    denoise_cpu(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
+
 
     TIME_END_GL("compute_depth");
 
@@ -436,6 +440,183 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
     return immature_points;
     TIME_END_GL("hessian_host_frame");
 
+}
+
+void DepthEstimatorGL::assign_neighbours_for_points(std::vector<Point>& immature_points, const int frame_width, const int frame_height){
+    //TODO this works for the reference frame because we know there will not be overlaps but for any other frames we would need to just reproject the points into the frame and then get the one with the smallest depth in case they lie in the same pixel. Also it would need to be done after updating their depth of course.
+    //another way to deal with it is to only make the neighbours for their respective host frame, so we would need to pass a parameter to this function that makes it that we only create neighbours for points that have a specific idx_host_frame
+
+
+    //make an uniqu identifier for each point, assign that identifier to the texture, and then check neighbours
+    std::vector<int> point_ids(immature_points.size());
+    for (size_t i = 0; i < point_ids.size(); i++) {
+        point_ids[i]=i;
+    }
+
+
+    //TODO create it of a size of frame and initialize to -1
+    Eigen::MatrixXi texture_indices(frame_height,frame_width);
+    texture_indices.setConstant(-1);
+
+    for (size_t i = 0; i < immature_points.size(); i++) {
+        int u=immature_points[i].u;
+        int v=immature_points[i].v;
+        texture_indices(v,u)=i;
+    }
+
+
+    //go through the immature points again and assign the neighbours
+    for (size_t i = 0; i < immature_points.size(); i++) {
+        int u=immature_points[i].u;
+        int v=immature_points[i].v;
+
+        //left
+        int point_left=texture_indices(v,u-1);
+        // std::cout << "point left is " << point_left << '\n';
+        if(point_left!=-1){ immature_points[i].left=point_left; }
+
+        //right
+        int point_right=texture_indices(v,u+1);
+        if(point_right!=-1){ immature_points[i].right=point_right; }
+
+        //up
+        int point_up=texture_indices(v+1,u);
+        if(point_up!=-1){ immature_points[i].above=point_up; }
+
+        //down
+        int point_down=texture_indices(v-1,u);
+        if(point_down!=-1){ immature_points[i].below=point_down; }
+
+        //left_upper
+        int point_left_up=texture_indices(v+1,u-1);
+        if(point_left_up!=-1){ immature_points[i].left_upper=point_left_up; }
+
+        //righ_upper
+        int point_right_up=texture_indices(v+1,u+1);
+        if(point_right_up!=-1){ immature_points[i].right_upper=point_right_up; }
+
+        //left_lower
+        int point_left_down=texture_indices(v-1,u-1);
+        if(point_left_down!=-1){ immature_points[i].left_lower=point_left_down; }
+
+        //right_lower
+        int point_right_down=texture_indices(v-1,u+1);
+        if(point_right_down!=-1){ immature_points[i].right_lower=point_right_down; }
+
+    }
+
+}
+
+void DepthEstimatorGL::denoise_cpu( std::vector<Point>& immature_points, const int frame_width, const int frame_height){
+
+    int depth_range=5;
+    float lambda=0.5;
+    int iterations=200;
+
+    std::cout << "starting to denoise." << std::endl;
+    const float large_sigma2 = depth_range * depth_range / 72.f;
+
+    // computeWeightsAndMu( )
+    for ( auto &point : immature_points){
+        const float E_pi = point.a / ( point.a + point.b);
+
+        point.g = std::max<float> ( (E_pi * point.sigma2 + (1.0f-E_pi) * large_sigma2) / large_sigma2, 1.0f );
+        point.mu_denoised = point.mu;
+        point.mu_head = point.u;
+        point.p.setZero();
+    }
+
+
+    const float L = sqrt(8.0f);
+    const float tau = (0.02f);
+    const float sigma = ((1 / (L*L)) / tau);
+    const float theta = 0.5f;
+
+    for (size_t i = 0; i < iterations; i++) {
+        // std::cout << "iter " << i << '\n';
+
+        int point_idx=0;
+        // update dual
+        for ( auto &point : immature_points ){
+            // std::cout << "update point " << point_idx << '\n';
+            point_idx++;
+            const float g = point.g;
+            const Eigen::Vector2f p = point.p;
+            Eigen::Vector2f grad_uhead = Eigen::Vector2f::Zero();
+            const float current_u = point.mu_denoised;
+
+            Point & right = (point.right == -1) ? point : immature_points[point.right];
+            Point & below = (point.below == -1) ? point : immature_points[point.below];
+
+            // if(point.right != -1){
+            //     std::cout << "------------" << '\n';
+            //     std::cout << "point is " << point.u << " " << point.v << '\n';
+            //     std::cout << "right is " << right.u << " " << right.v << '\n';
+            //     std::cout << "point.right is " << point.right << '\n';
+            // }
+
+
+            grad_uhead[0] = right.mu_head - current_u; //->atXY(min<int>(c_img_size.width-1, x+1), y)  - current_u;
+            grad_uhead[1] = below.mu_head - current_u; //->atXY(x, min<int>(c_img_size.height-1, y+1)) - current_u;
+            const Eigen::Vector2f temp_p = g * grad_uhead * sigma + p;
+            const float sqrt_p = temp_p.norm(); //sqrt(temp_p[0] * temp_p[0] + temp_p[1] * temp_p[1]);
+            point.p = temp_p / std::max<float>(1.0f, sqrt_p);
+        }
+
+        // std::cout << " update primal" << '\n';
+        // update primal:
+        for ( auto &point : immature_points ){
+            //debug
+            // std::cout << "point left is " << point.left << '\n';
+
+            const float noisy_depth = point.mu;
+            const float old_u = point.mu_denoised;
+            const float g = point.g;
+
+            Eigen::Vector2f current_p = point.p;
+            Point & left = (point.left == -1) ? point : immature_points[point.left];
+            Point & above = (point.above == -1) ? point : immature_points[point.above];
+            Eigen::Vector2f w_p = left.p;
+            Eigen::Vector2f n_p = above.p;
+
+            const int x = point.u;
+            const int y = point.v;
+            if ( x == 0)
+                w_p[0] = 0.f;
+            else if ( x >= frame_width-1 )
+                current_p[0] = 0.f;
+            if ( y == 0 )
+                n_p[1] = 0.f;
+            else if ( y >= frame_height-1 )
+                current_p[1] = 0.f;
+
+            const float divergence = current_p[0] - w_p[0] + current_p[1] - n_p[1];
+
+            const float tauLambda = tau*lambda;
+            const float temp_u = old_u + tau * g * divergence;
+            // std::cout << "tmp u - noisy depth is " << temp_u - noisy_depth << '\n';
+            // std::cout << "tauLambda is " << tauLambda << '\n';
+            if ((temp_u - noisy_depth) > (tauLambda))
+            {
+                point.mu_denoised = temp_u - tauLambda;
+            }
+            else if ((temp_u - noisy_depth) < (-tauLambda))
+            {
+                point.mu_denoised = temp_u + tauLambda;
+            }
+            else
+            {
+                point.mu_denoised = noisy_depth;
+            }
+            point.mu_head = point.mu_denoised + theta * (point.mu_denoised - old_u);
+        }
+    }
+
+
+    for (auto &point : immature_points) {
+        // std::cout << "changin mu depth from " << point.mu  << " to " << point.mu_denoised << '\n';
+        point.mu=point.mu_denoised;
+    }
 }
 
 Eigen::Vector2f DepthEstimatorGL::estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr){
@@ -647,6 +828,33 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
   //      float gray_val = lerp(immature_points[i].sigma2, min, max, 0.0, 1.0 );
   //      mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
   //  }
+
+
+  // // //debug mesh to check the texture indices
+  // Eigen::MatrixXi texture_indices(480,640);
+  // texture_indices.setConstant(-1);
+  // for (size_t i = 0; i < immature_points.size(); i++) {
+  //     int u=immature_points[i].u;
+  //     int v=immature_points[i].v;
+  //     texture_indices(v,u)=i;
+  // }
+  // Mesh debug_mesh;
+  // debug_mesh.V.resize(immature_points.size(),3);
+  // debug_mesh.V.setZero();
+  // for (size_t i = 0; i < immature_points.size(); i++) {
+  //     int u=immature_points[i].u;
+  //     int v=immature_points[i].v;
+  //     // if( texture_indices(v,u)!=-1){
+  //     //     debug_mesh.V.row(i) << u,v,0.0;
+  //     // }
+  //
+  //     int point_left=texture_indices(v,u-1);
+  //     // std::cout << "point left is " << point_left << '\n';
+  //     if(point_left!=-1){
+  //         debug_mesh.V.row(i) << u,v,0.0;
+  //     }
+  // }
+  // return debug_mesh;
 
 
 

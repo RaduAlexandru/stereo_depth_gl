@@ -89,6 +89,26 @@ struct Point{
     float pad_4;
     float pad_5;
 
+    //for denoising (indexes iinto the array of points of each of the 8 neighbours)
+    int32_t left = -1;
+    int32_t right = -1;
+    int32_t above = -1;
+    int32_t below = -1;
+    int32_t left_upper = -1;
+    int32_t right_upper = -1;
+    int32_t left_lower = -1;
+    int32_t right_lower = -1;
+
+    //some other things for denoising
+    float g;
+    float mu_denoised;
+    float mu_head;
+    float pad_6;
+    Eigen::Vector2f p;
+    // glm::vec2 p;
+    float pad_7;
+    float pad_8;
+
 
     //debug stuff
     float gradient_hessian_det;
@@ -190,6 +210,8 @@ private:
     std::vector<Point> create_immature_points (const Frame& frame);
     Eigen::Vector2f estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
+    void assign_neighbours_for_points( std::vector<Point>& immature_points, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
+    void denoise_cpu( std::vector<Point>& immature_points, const int frame_width, const int frame_height);
     Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames);
 
 };
@@ -215,68 +237,3 @@ private:
 #define TIME_END_GL(name)\
     if (m_gl_profiling_enabled) glFinish();\
     TIME_END_2(name,m_profiler);
-
-
-
-// // This is for not packed structs but _NOT_ for cl_typeN structs
-// #define BOOST_COMPUTE_ADAPT_STRUCT_NOT_PACKED(type, name, members) \
-//     BOOST_COMPUTE_TYPE_NAME(type, name) \
-//     namespace boost { namespace compute { \
-//     template<> \
-//     inline std::string type_definition<type>() \
-//     { \
-//         std::stringstream declaration; \
-//         declaration << "typedef struct {\n" \
-//                     BOOST_PP_SEQ_FOR_EACH( \
-//                         BOOST_COMPUTE_DETAIL_ADAPT_STRUCT_INSERT_MEMBER, \
-//                         type, \
-//                         BOOST_COMPUTE_PP_TUPLE_TO_SEQ(members) \
-//                     ) \
-//                     << "} " << type_name<type>() << ";\n"; \
-//         return declaration.str(); \
-//     } \
-//     namespace detail { \
-//     template<> \
-//     struct inject_type_impl<type> \
-//     { \
-//         void operator()(meta_kernel &kernel) \
-//         { \
-//             kernel.add_type_declaration<type>(type_definition<type>()); \
-//         } \
-//     }; \
-//     inline meta_kernel& operator<<(meta_kernel &k, type s) \
-//     { \
-//         return k << "(" << #name << "){" \
-//                BOOST_PP_SEQ_FOR_EACH_I( \
-//                    BOOST_COMPUTE_DETAIL_ADAPT_STRUCT_STREAM_MEMBER, \
-//                    s, \
-//                    BOOST_COMPUTE_PP_TUPLE_TO_SEQ(members) \
-//                ) \
-//                << "}"; \
-//     } \
-//     }}}
-//
-// // Internal (This is for cl_typeN structs)
-// #define BOOST_COMPUTE_ADAPT_CL_VECTOR_STRUCT_NAME(type, n, name) \
-//     BOOST_COMPUTE_TYPE_NAME(type, name) \
-//     namespace boost { namespace compute { \
-//     namespace detail { \
-//     inline meta_kernel& operator<<(meta_kernel &k, type x) \
-//     { \
-//         k << "(" << type_name<type>() << ")"; \
-//         k << "("; \
-//         for(size_t i = 0; i < n; i++){ \
-//             k << k.lit(x.s[i]); \
-//             \
-//             if(i != n - 1){ \
-//                 k << ","; \
-//             } \
-//         } \
-//         k << ")"; \
-//         return k; \
-//     } \
-//     }}}
-//
-// // This is for cl_typeN structs
-// #define BOOST_COMPUTE_ADAPT_CL_VECTOR_STRUCT(type, n) \
-//     BOOST_COMPUTE_ADAPT_CL_VECTOR_STRUCT_NAME(BOOST_PP_CAT(cl_, BOOST_PP_CAT(type, n)), n, BOOST_PP_CAT(type, n))

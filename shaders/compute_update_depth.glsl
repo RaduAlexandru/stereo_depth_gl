@@ -54,6 +54,26 @@ struct Point{
     float pad_4;
     float pad_5;
 
+    //for denoising (indexes iinto the array of points of each of the 8 neighbours)
+    int left;
+    int right;
+    int above;
+    int below;
+    int left_upper;
+    int right_upper;
+    int left_lower;
+    int right_lower;
+
+    //some other things for denoising
+    float g;
+    float mu_denoised;
+    float mu_head;
+    float pad_6;
+    vec2 p;
+    // glm::vec2 p;
+    float pad_7;
+    float pad_8;
+
 
     //debug stuff
     float gradient_hessian_det;
