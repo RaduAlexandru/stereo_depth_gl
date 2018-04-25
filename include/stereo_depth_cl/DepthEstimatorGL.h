@@ -184,6 +184,7 @@ public:
 
     //gl shaders
     GLuint m_update_depth_prog_id;
+    GLuint m_denoise_depth_prog_id;
 
 
     //databasse

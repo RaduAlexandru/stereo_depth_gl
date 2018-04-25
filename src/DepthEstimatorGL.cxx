@@ -77,6 +77,8 @@ void DepthEstimatorGL::compile_shaders(){
 
     m_update_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_update_depth.glsl");
 
+    m_denoise_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/update_TVL1_primal_dual.glsl");
+
 }
 
 //https://www.boost.org/doc/libs/1_47_0/libs/math/doc/sf_and_dist/html/math_toolkit/dist/dist_ref/dists/normal_dist.html
@@ -238,9 +240,55 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
     for (size_t i = 0; i < immature_points.size(); i++) {
         immature_points[i]=ptr[i];
     }
+    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
     assign_neighbours_for_points(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
-    denoise_cpu(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
+    // denoise_cpu(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
+
+
+    //GPU---------------------------------------------------------------------------------------------------------
+    glUseProgram(m_denoise_depth_prog_id);
+
+
+    int depth_range=5;
+    float lambda=0.5;
+    int iterations=200;
+    const float large_sigma2 = depth_range * depth_range / 72.f;
+    // computeWeightsAndMu( )
+    for ( auto &point : immature_points){
+        const float E_pi = point.a / ( point.a + point.b);
+        point.g = std::max<float> ( (E_pi * point.sigma2 + (1.0f-E_pi) * large_sigma2) / large_sigma2, 1.0f );
+        point.mu_denoised = point.mu;
+        point.mu_head = point.u;
+        point.p.setZero();
+    }
+
+    //upload to gpu the inmature points
+    TIME_START_GL("upload_immature_points");
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, immature_points.size() * sizeof(Point), immature_points.data(), GL_DYNAMIC_COPY);
+    TIME_END_GL("upload_immature_points");
+
+
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_points_gl_buf);
+    TIME_START_GL("depth_denoise_kernel");
+    for (size_t i = 0; i < 400; i++) {
+        glDispatchCompute(immature_points.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    }
+    TIME_END_GL("depth_denoise_kernel");
+
+    //Read to cpu AND APPLY THE DENOISED VALUES
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    ptr = (Point*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+    for (size_t i = 0; i < immature_points.size(); i++) {
+        immature_points[i]=ptr[i];
+    }
+    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+    for (auto &point : immature_points) {
+        // std::cout << "changin mu depth from " << point.mu  << " to " << point.mu_denoised << '\n';
+        point.mu=point.mu_denoised;
+    }
 
 
     TIME_END_GL("compute_depth");
@@ -752,8 +800,8 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
     double min_z, max_z;
     min_z = mesh.V.col(2).minCoeff();
     max_z = mesh.V.col(2).maxCoeff();
-    // min_z=-7;
-    // max_z=-4;
+    min_z=-6.5;
+    max_z=-4;
     std::cout << "min max z is " << min_z << " " << max_z << '\n';
     for (size_t i = 0; i < mesh.C.rows(); i++) {
         float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
