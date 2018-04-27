@@ -50,9 +50,7 @@ struct Point{
 
     //Stuff that may be to be removed
     mat2 gradH;
-    vec2 kp_GT;
-    float pad_4;
-    float pad_5;
+
 
     //for denoising (indexes iinto the array of points of each of the 8 neighbours)
     int left;
@@ -167,13 +165,13 @@ void main(void) {
     // return;
 
 
-    //debug the parameter block
-    p[id].debug2[0]=params.outlierTH;
-    p[id].debug2[1]=params.overallEnergyTHWeight;
-    p[id].debug2[2]=params.outlierTHSumComponent; 		// higher -> less strong gradient-based reweighting .
-    p[id].debug2[3]=params.huberTH; // Huber Threshold
-    p[id].debug2[4]=params.convergence_sigma2_thresh;      //!< threshold on depth uncertainty for convergence.
-    p[id].debug2[5]=params.eta;
+    // //debug the parameter block
+    // p[id].debug2[0]=params.outlierTH;
+    // p[id].debug2[1]=params.overallEnergyTHWeight;
+    // p[id].debug2[2]=params.outlierTHSumComponent; 		// higher -> less strong gradient-based reweighting .
+    // p[id].debug2[3]=params.huberTH; // Huber Threshold
+    // p[id].debug2[4]=params.convergence_sigma2_thresh;      //!< threshold on depth uncertainty for convergence.
+    // p[id].debug2[5]=params.eta;
 
 
     //debug the parameter block
@@ -227,6 +225,15 @@ void main(void) {
         vec2 uvMax = ptpMax.xy/ptpMax.z;
 
 
+        //debug the uv mean
+        if(id==100){
+            p[id].debug2[0]=p[id].u;
+            p[id].debug2[1]=p[id].v;
+            p[id].debug2[2]=uvMean.x; 		// higher -> less strong gradient-based reweighting .
+            p[id].debug2[3]=uvMean.y; // Huber Threshold
+            p[id].debug2[4]=99999999;      //!< threshold on depth uncertainty for convergence.
+            p[id].debug2[5]=999999;
+        }
 
         vec2 epi_line = uvMax - uvMin;
         float norm_epi = max(1e-5f,length(epi_line));
@@ -242,7 +249,7 @@ void main(void) {
             float energy = 0;
             vec2 kp = uvMean + l*epi_dir;
 
-            if( ( kp.x >= (frame_size.x-10) )  || ( kp.y >= (frame_size.y-10) ) || ( kp.x < 10 ) || ( kp.y < 10) ){
+            if( ( kp.x >= (frame_size.x-20) )  || ( kp.y >= (frame_size.y-20) ) || ( kp.x < 20 ) || ( kp.y < 20) ){
                 continue;
             }
 
@@ -259,6 +266,8 @@ void main(void) {
 
                 //high qualty filter from openglsuperbible
                 float hit_color=hqfilter(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+
+                // float hit_color=0.0;
 
                 const float residual = hit_color - (affine_cr.x * p[id].color[idx] + affine_cr.y);
 
@@ -322,7 +331,6 @@ void main(void) {
          vec2 uvMean = ptpMean.xy/ptpMean.z;
          vec2 uvMin = ptpMin.xy/ptpMin.z;
          vec2 uvMax = ptpMax.xy/ptpMax.z;
-
 
 
          vec2 epi_line = uvMax - uvMin;

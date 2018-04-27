@@ -42,7 +42,7 @@ struct Params {
     // float pad_2;
     //until here it's paded correctly to 16 bytes-----
 
-    int denoise_nr_iterations=200;
+    int denoise_nr_iterations=0;
     float denoise_depth_range=5.0;
     float denoise_lambda=0.5;
     float denoise_L=sqrt(8.0f);
@@ -76,7 +76,8 @@ struct Point{
     float quality;
     //-----------------up until here we have 48 bytes so it's padded correctly to 16 bytes
 
-    glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
+    // glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
+    Eigen::Vector4f f;
     PointStatus lastTraceStatus;
     int32_t converged;
     int32_t is_outlier;
@@ -94,10 +95,8 @@ struct Point{
     float pad_3;
 
     //Stuff that may be to be removed
-    glm::mat2 gradH;
-    glm::vec2 kp_GT;
-    float pad_4;
-    float pad_5;
+    Eigen::Matrix2f gradH;
+
 
     //for denoising (indexes iinto the array of points of each of the 8 neighbours)
     int32_t left = -1;
@@ -174,6 +173,7 @@ public:
 
     void init_data(); //Reads the images for the depth estimation and prepares the gl context
     void compute_depth_and_create_mesh(); //from all the immature points created triangulate depth for them, updates the mesh
+    void compute_depth_and_create_mesh_cpu();
     void save_depth_image();
     Mesh get_mesh();
 
@@ -206,6 +206,9 @@ public:
     //params
     bool m_gl_profiling_enabled;
     bool m_show_images;
+    bool m_use_rgbd_tum;
+    int m_start_frame;
+    float m_mean_starting_depth;
     Params m_params; //parameters for depth estimation that may also be needed inside the gl shader
 
 
@@ -218,6 +221,7 @@ private:
     //start with everything
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
     std::vector<Frame> loadDataFromRGBD_TUM ( const std::string & dataset_path, const int num_images_to_read );
+    void undistort_image(cv::Mat gray_img, const Eigen::Matrix3f K, const Eigen::VectorXf distort_coeffs);
     float gaus_pdf(float mean, float sd, float x);
     std::vector<Point> create_immature_points (const Frame& frame);
     Eigen::Vector2f estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);

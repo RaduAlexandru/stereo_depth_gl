@@ -86,7 +86,8 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
      // Mesh depth_mesh=m_depth_estimator_cl->compute_depth();
 
      m_depth_estimator_cl->init_data();
-     m_depth_estimator_cl->compute_depth_and_create_mesh();
+     // m_depth_estimator_cl->compute_depth_and_create_mesh();
+     m_depth_estimator_cl->compute_depth_and_create_mesh_cpu();
 
 
      std::cout << "finished computing depth-------------------" << '\n';

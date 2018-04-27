@@ -28,12 +28,15 @@
 //gl
 #include <glm/gtc/type_ptr.hpp>
 
-using namespace glm;
+// using namespace glm;
 
 DepthEstimatorGL::DepthEstimatorGL():
         m_scene_is_modified(false),
         m_gl_profiling_enabled(true),
-        m_show_images(false)
+        m_show_images(false),
+        m_use_rgbd_tum(false),
+        m_start_frame(0),
+        m_mean_starting_depth(4.0)
         {
 
     init_opengl();
@@ -92,8 +95,14 @@ void DepthEstimatorGL::init_data(){
     int num_images_to_read=60;
     bool use_modified=false;
     m_frames.clear();
-    m_frames=loadDataFromICLNUIM("/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png", num_images_to_read);
-    // m_frames=loadDataFromRGBD_TUM("/media/alex/Data/Master/Thesis/data/RGBD_TUM/rgbd_dataset_freiburg1_xyz", num_images_to_read);
+    if(m_use_rgbd_tum){
+        // m_frames=loadDataFromRGBD_TUM("/media/alex/Data/Master/Thesis/data/RGBD_TUM/rgbd_dataset_freiburg1_xyz", num_images_to_read);
+        m_frames=loadDataFromRGBD_TUM("/media/alex/Data/Master/Thesis/data/RGBD_TUM/rgbd_dataset_freiburg3_long_office_household", num_images_to_read);
+    }else{
+        m_frames=loadDataFromICLNUIM("/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png", num_images_to_read);
+    }
+
+
     std::cout << "frames size is " << m_frames.size() << "\n";
 }
 
@@ -105,7 +114,7 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
 
 
     std::vector<Point> immature_points;
-    immature_points=create_immature_points(m_frames[0]);
+    immature_points=create_immature_points(m_frames[m_start_frame]);
     std::cout << "immature_points size is " << immature_points.size() << '\n';
 
 
@@ -121,9 +130,9 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
         TIME_START_GL("update_depth");
 
         TIME_START_GL("estimate_affine");
-        const Eigen::Affine3f tf_cur_host_eigen = m_frames[i].tf_cam_world * m_frames[0].tf_cam_world.inverse();
+        const Eigen::Affine3f tf_cur_host_eigen = m_frames[i].tf_cam_world * m_frames[m_start_frame].tf_cam_world.inverse();
         const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
-        const Eigen::Matrix3f KRKi_cr_eigen = m_frames[i].K * tf_cur_host_eigen.linear() * m_frames[0].K.inverse();
+        const Eigen::Matrix3f KRKi_cr_eigen = m_frames[i].K * tf_cur_host_eigen.linear() * m_frames[m_start_frame].K.inverse();
         const Eigen::Vector3f Kt_cr_eigen = m_frames[i].K * tf_cur_host_eigen.translation();
         // const Eigen::Vector2f affine_cr_eigen = estimate_affine( immature_points, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
         const Eigen::Vector2f affine_cr_eigen= Eigen::Vector2f(1,1);
@@ -243,8 +252,8 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
     }
     glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
-    assign_neighbours_for_points(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
-    // denoise_cpu(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
+    assign_neighbours_for_points(immature_points, m_frames[m_start_frame].gray.cols, m_frames[m_start_frame].gray.rows);
+    // denoise_cpu(immature_points, m_frames[m_start_frame].gray.cols, m_frames[m_start_frame].gray.rows);
 
 
     //GPU---------------------------------------------------------------------------------------------------------
@@ -308,6 +317,300 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
 
     m_scene_is_modified=true;
 
+}
+
+void DepthEstimatorGL::compute_depth_and_create_mesh_cpu(){
+    m_mesh.clear();
+    std::vector<Point> immature_points;
+    immature_points=create_immature_points(m_frames[m_start_frame]);
+    assign_neighbours_for_points(immature_points, m_frames[m_start_frame].gray.cols, m_frames[m_start_frame].gray.rows);
+
+
+    for (size_t i = m_start_frame+1; i < m_frames.size(); i++) {
+        bool debug=false;
+        // if(i==120){
+        //     debug=true;
+        // }
+
+        std::cout << "frame " << i << '\n';
+        TIME_START_GL("update_depth");
+
+        TIME_START_GL("estimate_affine");
+        const Eigen::Affine3f tf_cur_host_eigen = m_frames[i].tf_cam_world * m_frames[m_start_frame].tf_cam_world.inverse();
+        const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
+        const Eigen::Matrix3f KRKi_cr_eigen = m_frames[i].K * tf_cur_host_eigen.linear() * m_frames[m_start_frame].K.inverse();
+        const Eigen::Vector3f Kt_cr_eigen = m_frames[i].K * tf_cur_host_eigen.translation();
+        // const Eigen::Vector2f affine_cr_eigen = estimate_affine( immature_points, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
+        const Eigen::Vector2f affine_cr_eigen= Eigen::Vector2f(1,1);
+        const double focal_length = fabs(m_frames[i].K(0,0));
+        double px_noise = 1.0;
+        double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
+        Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr_eigen.topLeftCorner<2,2>() );
+        TIME_END_GL("estimate_affine");
+
+        //just to be more similar to the shader code
+        std::vector<Point>& p = immature_points;
+        Eigen::Matrix3f K= m_frames[i].K ;
+        Eigen::Vector2f frame_size;
+        frame_size << m_frames[i].gray.cols , m_frames[i].gray.rows;
+        const Eigen::Affine3f tf_cur_host=tf_cur_host_eigen;
+        const Eigen::Affine3f tf_host_cur =tf_host_cur_eigen;
+        const Eigen::Matrix3f KRKi_cr=KRKi_cr_eigen;
+        const Eigen::Vector3f Kt_cr=Kt_cr_eigen;
+        const Eigen::Vector2f affine_cr=affine_cr_eigen;
+
+
+        for (size_t id = 0; id < immature_points.size(); id++) {
+            if(debug){
+                std::cout << "processing point " << id << '\n';
+            }
+            // // check if point is visible in the current image
+            const Eigen::Vector3f p_backproj_xyz= p[id].f.head<3>() * 1.0f/ p[id].mu;
+            const Eigen::Vector4f p_backproj_xyzw=Eigen::Vector4f(p_backproj_xyz.x(),p_backproj_xyz.y(),p_backproj_xyz.z(),1.0);
+            const Eigen::Vector4f xyz_f_xyzw = tf_cur_host_eigen*  p_backproj_xyzw ;
+            const Eigen::Vector3f xyz_f=xyz_f_xyzw.head<3>()/xyz_f_xyzw.w();
+            if(xyz_f.z() < 0.0)  {
+                continue; // TODO in gl this is a return
+            }
+
+
+            const Eigen::Vector3f kp_c = K * xyz_f;
+            const Eigen::Vector2f kp_c_h=kp_c.head<2>()/kp_c.z();
+            if ( kp_c_h.x() < 0 || kp_c_h.x() >= frame_size.x() || kp_c_h.y() < 0 || kp_c_h.y() >= frame_size.y() ) {
+                continue; // TODO in gl this is a return
+            }
+
+
+            //point is visible
+            // point.last_visible_frame=frames[i].frame_id;
+
+            //update inverse depth coordinates for min and max
+            p[id].idepth_min = p[id].mu + sqrt(p[id].sigma2);
+            p[id].idepth_max = glm::max(p[id].mu - sqrt(p[id].sigma2), 0.00000001);
+            // memoryBarrier();
+            // barrier();
+            // memoryBarrier();
+
+
+            //search epiline-----------------------------------------------------------------------
+           // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
+            // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
+            float idepth_mean = (p[id].idepth_min + p[id].idepth_max)*0.5;
+            Eigen::Vector3f pr = KRKi_cr * Eigen::Vector3f(p[id].u,p[id].v, 1);
+            Eigen::Vector3f ptpMean = pr + Kt_cr*idepth_mean;
+            Eigen::Vector3f ptpMin = pr + Kt_cr*p[id].idepth_min;
+            Eigen::Vector3f ptpMax = pr + Kt_cr*p[id].idepth_max;
+            Eigen::Vector2f uvMean = ptpMean.head<2>()/ptpMean.z();
+            Eigen::Vector2f uvMin = ptpMin.head<2>()/ptpMin.z();
+            Eigen::Vector2f uvMax = ptpMax.head<2>()/ptpMax.z();
+
+            //cap the uv min and uv max
+            uvMin(0)=clamp(uvMin(0), 0.0f, 640.0f);
+            uvMin(1)=clamp(uvMin(1), 0.0f, 480.0f);
+            uvMax(0)=clamp(uvMax(0), 0.0f, 640.0f);
+            uvMax(1)=clamp(uvMax(1), 0.0f, 480.0f);
+
+
+            // //debug the uv mean
+            // if(id==100){
+            //     p[id].debug2[0]=p[id].u;
+            //     p[id].debug2[1]=p[id].v;
+            //     p[id].debug2[2]=uvMean.x; 		// higher -> less strong gradient-based reweighting .
+            //     p[id].debug2[3]=uvMean.y; // Huber Threshold
+            //     p[id].debug2[4]=99999999;      //!< threshold on depth uncertainty for convergence.
+            //     p[id].debug2[5]=999999;
+            // }
+
+            Eigen::Vector2f epi_line = uvMax - uvMin;
+            float norm_epi = glm::max(1e-5f,epi_line.norm());
+            Eigen::Vector2f epi_dir = epi_line / norm_epi;
+            const float  half_length = 0.5f * norm_epi;
+
+            Eigen::Vector2f bestKp=Eigen::Vector2f(-1.0,-1.0);
+            float bestEnergy = 1e10;
+
+            if(debug){
+                std::cout << "p uv is " << p[id].u << " " << p[id].v << '\n';
+                std::cout << "idepth_mean is " << idepth_mean << '\n';
+                std::cout << "p mu is " << p[id].mu << '\n';
+                std::cout << "p sigma2 is " << p[id].sigma2 << '\n';
+                std::cout << "uvMean is " << uvMean.transpose() << '\n';
+                std::cout << "uvMin is " << uvMin.transpose() << '\n';
+                std::cout << "uvMax is " << uvMax.transpose() << '\n';
+                std::cout << "half_length is " << half_length << '\n';
+            }
+
+            for(float l = -half_length; l <= half_length; l += 0.7f)
+            {
+                float energy = 0;
+                Eigen::Vector2f kp = uvMean + l*epi_dir;
+
+                if( ( kp.x() >= (frame_size.x()-20) )  || ( kp.y() >= (frame_size.y()-20) ) || ( kp.x() < 20 ) || ( kp.y() < 20) ){
+                    continue;
+                }
+
+                for(int idx=0;idx<pattern_rot.get_nr_points(); ++idx){
+                    //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
+                    Eigen::Vector2f offset=pattern_rot.get_offset(idx);
+                    // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+                    // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
+                    float hit_color=texture_interpolate(m_frames[i].gray, kp.x()+offset.x(), kp.y()+offset.y() , InterpolType::LINEAR);
+                    // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
+
+                    //for the case when the image is padded
+                    // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
+
+                    //high qualty filter from openglsuperbible
+                    // float hit_color=hqfilter(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+
+                    // float hit_color=0.0;
+
+                    const float residual = hit_color - (affine_cr.x() * p[id].color[idx] + affine_cr.y());
+
+                    float hw = abs(residual) < m_params.huberTH ? 1 : m_params.huberTH / abs(residual);
+                    energy += hw *residual*residual*(2-hw);
+                }
+                if ( energy < bestEnergy )
+                {
+                    bestKp = kp; bestEnergy = energy;
+                }
+            }
+
+
+            if ( bestEnergy > p[id].energyTH * 1.2f ) {
+                p[id].lastTraceStatus = STATUS_OUTLIER;
+            }
+            else
+            {
+                // vec2 epi_dir_inv=vec2(epi_dir.y,-epi_dir.x);
+                // float a = epi_dir * p[id].gradH * epi_dir;
+                // float b = epi_dir_inv * point.gradH * epi_dir_inv;
+                // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
+                float errorInPixel=0.0f;
+
+                if( epi_dir.x()*epi_dir.x()>epi_dir.y()*epi_dir.y() )
+                {
+                    p[id].idepth_min = (pr.z()*(bestKp.x()-errorInPixel*epi_dir.x()) - pr.x()) / (Kt_cr.x() - Kt_cr.z()*(bestKp.x()-errorInPixel*epi_dir.x()));
+                    p[id].idepth_max = (pr.z()*(bestKp.x()+errorInPixel*epi_dir.x()) - pr.x()) / (Kt_cr.x() - Kt_cr.z()*(bestKp.x()+errorInPixel*epi_dir.x()));
+                }
+                else
+                {
+                    p[id].idepth_min = (pr.z()*(bestKp.y()-errorInPixel*epi_dir.y()) - pr.y()) / (Kt_cr.y() - Kt_cr.z()*(bestKp.y()-errorInPixel*epi_dir.y()));
+                    p[id].idepth_max = (pr.z()*(bestKp.y()+errorInPixel*epi_dir.y()) - pr.y()) / (Kt_cr.y() - Kt_cr.z()*(bestKp.y()+errorInPixel*epi_dir.y()));
+                }
+                // memoryBarrier();
+                // barrier();
+                // memoryBarrier();
+                if(p[id].idepth_min > p[id].idepth_max) {
+                    // std::swap<float>(point.idepth_min, point.idepth_max);
+                    float tmp=p[id].idepth_min;
+                    p[id].idepth_min=p[id].idepth_max;
+                    p[id].idepth_max=tmp;
+                }
+                p[id].lastTraceStatus = STATUS_GOOD;
+                // memoryBarrier();
+                // barrier();
+                // memoryBarrier();
+            }
+            // memoryBarrier();
+            // barrier();
+            // memoryBarrier();
+
+
+            float idepth = -1;
+            float z = 0;
+            if( p[id].lastTraceStatus == STATUS_GOOD ) {
+                idepth = glm::max(1e-5f, 0.5f*(p[id].idepth_min+p[id].idepth_max));
+                z = 1.0f/idepth;
+            }
+            if ( p[id].lastTraceStatus == STATUS_OOB  || p[id].lastTraceStatus == STATUS_SKIPPED ){
+                continue; //TODO in shader it's a return
+            }
+            //0.04 is 25 meters
+            if ( idepth<0.04 || idepth>1000 || p[id].lastTraceStatus == STATUS_OUTLIER || p[id].lastTraceStatus == STATUS_BADCONDITION ) {
+                p[id].b++; // increase outlier probability when no match was found
+                continue; //TODO in shader it's a return
+            }
+            // memoryBarrier();
+            // barrier();
+            // memoryBarrier();
+
+
+            // update_idepth(point,tf_host_cur, z, px_error_angle);
+
+            // compute tau----------------------------------------------------------------------------
+            // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
+            // Eigen::Vector3f t=  Eigen::Vector3f(tf_host_cur[0][3], tf_host_cur[1][3], tf_host_cur[2][3]);
+            Eigen::Vector3f t(tf_host_cur.translation());
+            Eigen::Vector3f a = p[id].f.head<3>()*z-t;
+            float t_norm = t.norm();
+            float a_norm = a.norm();
+            float alpha = acos(  p[id].f.head<3>().dot(t)  /t_norm); // dot product
+            float beta = acos( a.dot(-t) / (t_norm*a_norm)); // dot product
+            float beta_plus = beta + px_error_angle;
+            float gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
+            float z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
+            float tau= (z_plus - z); // tau
+            float tau_inverse = 0.5 * (1.0f/glm::max(0.0000001f, z-tau) - 1.0/(z+tau));
+
+            // update the estimate--------------------------------------------------
+            float x=1.0/z;
+            float tau2=tau_inverse*tau_inverse;
+            // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
+            float norm_scale = sqrt(p[id].sigma2 + tau2);
+            float s2 = 1./(1./p[id].sigma2 + 1./tau2);
+            float m = s2*(p[id].mu/p[id].sigma2 + x/tau2);
+            float C1 = p[id].a/(p[id].a+p[id].b) * gaus_pdf(p[id].mu, norm_scale, x);
+            float C2 = p[id].b/(p[id].a+p[id].b) * 1./p[id].z_range;
+            float normalization_constant = C1 + C2;
+            C1 /= normalization_constant;
+            C2 /= normalization_constant;
+            float f = C1*(p[id].a+1.)/(p[id].a+p[id].b+1.) + C2*p[id].a/(p[id].a+p[id].b+1.);
+            float e = C1*(p[id].a+1.)*(p[id].a+2.)/((p[id].a+p[id].b+1.)*(p[id].a+p[id].b+2.))
+                      + C2*p[id].a*(p[id].a+1.0f)/((p[id].a+p[id].b+1.0f)*(p[id].a+p[id].b+2.0f));
+            // update parameters
+            float mu_new = C1*m+C2*p[id].mu;
+            p[id].sigma2 = C1*(s2 + m*m) + C2*(p[id].sigma2 + p[id].mu*p[id].mu) - mu_new*mu_new;
+            p[id].mu = mu_new;
+            p[id].a = (e-f)/(f-e/f);
+            // memoryBarrier();
+            // barrier();
+            // memoryBarrier();
+            p[id].b = p[id].a*(1.0f-f)/f;
+            // memoryBarrier();
+            // barrier(); //TODO add again the barrier
+            // memoryBarrier();
+
+            // // not implemented in opengl
+            const float eta_inlier = .6f;
+            const float eta_outlier = .05f;
+            if( ((p[id].a / (p[id].a + p[id].b)) > eta_inlier) && (sqrt(p[id].sigma2) < p[id].z_range/m_params.convergence_sigma2_thresh)) {
+                p[id].is_outlier = 0; // The seed converged
+            }else if((p[id].a-1) / (p[id].a + p[id].b - 2) < eta_outlier){ // The seed failed to converge
+                p[id].is_outlier = 1;
+                // it->reinit();
+                //TODO do a better reinit inside a point class
+                p[id].a = 10;
+                p[id].b = 10;
+                p[id].mu = (1.0/m_mean_starting_depth);
+                p[id].z_range = (1.0/0.1);
+                p[id].sigma2 = (p[id].z_range*p[id].z_range/36);
+            }
+            // if the seed has converged, we initialize a new candidate point and remove the seed
+            if(sqrt(p[id].sigma2) < p[id].z_range/m_params.convergence_sigma2_thresh){
+                p[id].converged = 1;
+            }
+        }
+
+    }
+
+    std::cout << "create mesh" << '\n';
+    m_mesh=create_mesh(immature_points, m_frames);
+    m_points=immature_points; //save the points in the class in case we need them for later saving to a file
+
+    m_scene_is_modified=true;
+
+    TIME_END_GL("update_depth");
 }
 
 Mesh DepthEstimatorGL::get_mesh(){
@@ -380,52 +683,186 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
 
 std::vector<Frame> DepthEstimatorGL::loadDataFromRGBD_TUM ( const std::string & dataset_path, const int num_images_to_read ){
     std::vector< Frame > frames;
-    std::string filename_rgb = dataset_path + "/rgb.txt";
-    std::string filename_depth = dataset_path + "/depth.txt";
-    std::string filename_gt = dataset_path + "/groundtruth.txt";
+    // std::string filename_rgb = dataset_path + "/rgb.txt";
+    // std::string filename_depth = dataset_path + "/depth.txt";
+    // std::string filename_gt = dataset_path + "/groundtruth.txt";
+    //
+    //
+    //
+    // //K is from here https://vision.in.tum.de/data/datasets/rgbd-dataset/file_formats
+    // Eigen::Matrix3f K;
+    // K.setZero();
+    // //with no distorsion
+    // // K(0,0)=525.0; //fx
+    // // K(1,1)=525.0 ; //fy
+    // // K(0,2)=319.5; // cx
+    // // K(1,2)=239.5; //cy
+    // // K(2,2)=1.0;
+    //
+    // //with distorsion
+    // K(0,0)=517.3; //fx
+    // K(1,1)=516.5 ; //fy
+    // K(0,2)=318.6 ; // cx
+    // K(1,2)=255.3; //cy
+    // K(2,2)=1.0;
+    // Eigen::VectorXf distort_coeffs(5);
+    // distort_coeffs(0)=0.2624;
+    // distort_coeffs(1)=-0.9531;
+    // distort_coeffs(2)=-0.0054;
+    // distort_coeffs(3)=0.0026;
+    // distort_coeffs(4)=1.1633;
+    //
+    //
+    // std::ifstream image_file ( filename_rgb, std::ifstream::in );
+    // std::ifstream depth_file ( filename_depth, std::ifstream::in );
+    // std::ifstream gt_file ( filename_gt, std::ifstream::in );
+    //
+    // std::string rgb_line;
+    // std::string depth_line;
+    // std::string gt_line;
+    // int images_read=0;
+    // while(std::getline(image_file, rgb_line)) {
+    //     std::getline(depth_file, depth_line);
+    //     std::getline(gt_file, gt_line);
+    //
+    //     //https://stackoverflow.com/a/28379466
+    //     ltrim(rgb_line);  // remove leading whitespace
+    //     rtrim(rgb_line);  // remove trailing whitespace
+    //     //skip comments
+    //     if(rgb_line.at(0)=='#') {
+    //         continue;
+    //     }
+    //
+    //     float timestamp;
+    //     std::string rgb_filename;
+    //     std::string depth_filename;
+    //     float tx, ty, tz, qx, qy, qz, qw;
+    //
+    //     std::istringstream iss_rgb(rgb_line);
+    //     iss_rgb >> timestamp >> rgb_filename;
+    //
+    //     std::istringstream iss_depth(depth_line);
+    //     iss_depth >> timestamp >> depth_filename;
+    //
+    //     std::istringstream iss_gt(gt_line);
+    //     iss_gt >> timestamp >> tx >> ty >> tz >> qx >> qy >> qz >> qw;
+    //     std::cout << "got gt pose: " << tx << " " << ty << " " << tz << " " << qx << " " << qy << " " << qz<< " " << qw << '\n';
+    //
+    //     std::cout << "reading " << rgb_filename << '\n';
+    //     std::cout << "reading " << depth_filename << '\n';
+    //
+    //     Eigen::Affine3f pose_wc = Eigen::Affine3f::Identity();
+    //     pose_wc.translation() << tx,ty,tz;
+    //     pose_wc.linear() = Eigen::Quaternionf(qw,qx,qy,qz).toRotationMatrix();
+    //     Eigen::Affine3f pose_cw = pose_wc.inverse();
+    //
+    //     cv::Mat rgb_cv=cv::imread(dataset_path + "/" + rgb_filename, CV_LOAD_IMAGE_UNCHANGED);
+    //     cv::Mat depth_cv=cv::imread(dataset_path + "/" + depth_filename, CV_LOAD_IMAGE_UNCHANGED);
+    //     depth_cv.convertTo ( depth_cv, CV_32F, 1./5000. ); //ICLNUIM stores theis weird units so we transform to meters
+    //
+    //
+    //     Frame cur_frame;
+    //     cur_frame.rgb=rgb_cv;
+    //     cv::cvtColor ( cur_frame.rgb, cur_frame.gray, CV_BGR2GRAY );
+    //     cur_frame.depth=depth_cv;
+    //     cv::Scharr( cur_frame.gray, cur_frame.grad_x, CV_32F, 1, 0);
+    //     cv::Scharr( cur_frame.gray, cur_frame.grad_y, CV_32F, 0, 1);
+    //     undistort_image( cur_frame.gray, K, distort_coeffs);
+    //     undistort_image( cur_frame.grad_x, K, distort_coeffs);
+    //     undistort_image( cur_frame.grad_y, K, distort_coeffs);
+    //     cur_frame.tf_cam_world=pose_cw;
+    //     cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
+    //     cur_frame.K=K;
+    //     cur_frame.frame_id=images_read;
+    //
+    //     frames.push_back(cur_frame);
+    //
+    //
+    //     images_read++;
+    //     if(images_read>num_images_to_read){
+    //         break;
+    //     }
+    // }
+    //
+    // return frames;
+
+
+
+
+
+
+    //use the associated gt poses rgb and depth from Jan
+    std::string filename_associate = dataset_path + "/associate.txt";
+
 
     //K is from here https://vision.in.tum.de/data/datasets/rgbd-dataset/file_formats
     Eigen::Matrix3f K;
     K.setZero();
-    K(0,0)=525.0; //fx
-    K(1,1)=525.0 ; //fy
-    K(0,2)=319.5; // cx
-    K(1,2)=239.5; //cy
-    K(2,2)=1.0;
+    Eigen::VectorXf distort_coeffs(5);
+    //with no distorsion
+    // K(0,0)=525.0; //fx
+    // K(1,1)=525.0 ; //fy
+    // K(0,2)=319.5; // cx
+    // K(1,2)=239.5; //cy
+    // K(2,2)=1.0;
 
-    std::ifstream image_file ( filename_rgb, std::ifstream::in );
-    std::ifstream depth_file ( filename_depth, std::ifstream::in );
-    std::ifstream gt_file ( filename_gt, std::ifstream::in );
+    if(dataset_path.find("freiburg1")!=std::string::npos){
+        //with distorsion
+        K(0,0)=517.3; //fx
+        K(1,1)=516.5 ; //fy
+        K(0,2)=318.6 ; // cx
+        K(1,2)=255.3; //cy
+        K(2,2)=1.0;
+        distort_coeffs(0)=0.2624;
+        distort_coeffs(1)=-0.9531;
+        distort_coeffs(2)=-0.0054;
+        distort_coeffs(3)=0.0026;
+        distort_coeffs(4)=1.1633;
+    }else if(dataset_path.find("freiburg2")!=std::string::npos){
+        //with distorsion
+        K(0,0)=520.9; //fx
+        K(1,1)=521.0 ; //fy
+        K(0,2)=325.1 ; // cx
+        K(1,2)=249.7; //cy
+        K(2,2)=1.0;
+        Eigen::VectorXf distort_coeffs(5);
+        distort_coeffs(0)=0.2312;
+        distort_coeffs(1)=-0.7849;
+        distort_coeffs(2)=-0.0033;
+        distort_coeffs(3)=-0.0001;
+        distort_coeffs(4)=0.9172;
+    }else if(dataset_path.find("freiburg3")!=std::string::npos){
+        //with distorsion
+        K(0,0)=535.4; //fx
+        K(1,1)=539.2 ; //fy
+        K(0,2)=320.1 ; // cx
+        K(1,2)=247.6; //cy
+        K(2,2)=1.0;
+        Eigen::VectorXf distort_coeffs(5);
+        distort_coeffs.setZero();
+    }else{
+        LOG(FATAL) << "Please provide a valid filepath";
+    }
 
-    std::string rgb_line;
-    std::string depth_line;
-    std::string gt_line;
+
+
+    std::ifstream associate_file ( filename_associate, std::ifstream::in );
+
+
+    std::string line;
     int images_read=0;
-    while(std::getline(image_file, rgb_line)) {
-        std::getline(depth_file, depth_line);
-        std::getline(gt_file, gt_line);
+    while(std::getline(associate_file, line)) {
 
-        //https://stackoverflow.com/a/28379466
-        ltrim(rgb_line);  // remove leading whitespace
-        rtrim(rgb_line);  // remove trailing whitespace
-        //skip comments
-        if(rgb_line.at(0)=='#') {
-            continue;
-        }
 
-        float timestamp;
+        float timestamp_gt, timestamp_rgb, timestamp_depth;
         std::string rgb_filename;
         std::string depth_filename;
         float tx, ty, tz, qx, qy, qz, qw;
 
-        std::istringstream iss_rgb(rgb_line);
-        iss_rgb >> timestamp >> rgb_filename;
+        std::istringstream iss(line);
+        iss >> timestamp_gt  >> tx >> ty >> tz >> qx >> qy >> qz >> qw >> timestamp_rgb >> rgb_filename >> timestamp_depth >> depth_filename;
 
-        std::istringstream iss_depth(depth_line);
-        iss_depth >> timestamp >> depth_filename;
-
-        std::istringstream iss_gt(gt_line);
-        iss_gt >> timestamp >> tx >> ty >> tz >> qx >> qy >> qz >> qw;
+        std::cout << "got gt pose: " << tx << " " << ty << " " << tz << " " << qx << " " << qy << " " << qz<< " " << qw << '\n';
 
         std::cout << "reading " << rgb_filename << '\n';
         std::cout << "reading " << depth_filename << '\n';
@@ -435,6 +872,7 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromRGBD_TUM ( const std::string & 
         pose_wc.linear() = Eigen::Quaternionf(qw,qx,qy,qz).toRotationMatrix();
         Eigen::Affine3f pose_cw = pose_wc.inverse();
 
+
         cv::Mat rgb_cv=cv::imread(dataset_path + "/" + rgb_filename, CV_LOAD_IMAGE_UNCHANGED);
         cv::Mat depth_cv=cv::imread(dataset_path + "/" + depth_filename, CV_LOAD_IMAGE_UNCHANGED);
         depth_cv.convertTo ( depth_cv, CV_32F, 1./5000. ); //ICLNUIM stores theis weird units so we transform to meters
@@ -443,11 +881,12 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromRGBD_TUM ( const std::string & 
         Frame cur_frame;
         cur_frame.rgb=rgb_cv;
         cv::cvtColor ( cur_frame.rgb, cur_frame.gray, CV_BGR2GRAY );
+        cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
+        undistort_image( cur_frame.gray, K, distort_coeffs);
         cur_frame.depth=depth_cv;
         cv::Scharr( cur_frame.gray, cur_frame.grad_x, CV_32F, 1, 0);
         cv::Scharr( cur_frame.gray, cur_frame.grad_y, CV_32F, 0, 1);
-        cur_frame.tf_cam_world=pose_cw;
-        cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
+        cur_frame.tf_cam_world=pose_wc;
         cur_frame.K=K;
         cur_frame.frame_id=images_read;
 
@@ -462,50 +901,29 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromRGBD_TUM ( const std::string & 
 
     return frames;
 
-    // int images_read = 0;
-    // for ( images_read = 0; image_file.good() && images_read <= num_images_to_read ; ++images_read ){
-    //    std::string depth_file_name, color_file_name;
-    //    int idc, idd, idg;
-    //    double tsc, tx, ty, tz, qx, qy, qz, qw;
-    //    image_file >> idd >> depthFileName >> idc >> colorFileName;
-    //
-    //    if ( idd == 0 )
-    //        continue;
-    //    grtruFile >> idg >> tx >> ty >> tz >> qx >> qy >> qz >> qw;
-    //
-    //    if ( idc != idd || idc != idg ){
-    //        std::cerr << "Error during reading... not correct anymore!" << std::endl;
-    //        break;
-    //    }
-    //
-    //    if ( ! depthFileName.empty() ){
-    //       Eigen::Affine3f pose_wc = Eigen::Affine3f::Identity();
-    //       pose_wc.translation() << tx,ty,tz;
-    //       pose_wc.linear() = Eigen::Quaternionf(qw,qx,qy,qz).toRotationMatrix();
-    //       Eigen::Affine3f pose_cw = pose_wc.inverse();
-    //
-    //       cv::Mat rgb_cv=cv::imread(dataset_path + "/" + colorFileName, CV_LOAD_IMAGE_UNCHANGED);
-    //       cv::Mat depth_cv=cv::imread(dataset_path + "/" + depthFileName, CV_LOAD_IMAGE_UNCHANGED);
-    //       depth_cv.convertTo ( depth_cv, CV_32F, 1./5000. ); //ICLNUIM stores theis weird units so we transform to meters
-    //
-    //
-    //       Frame cur_frame;
-    //       cur_frame.rgb=rgb_cv;
-    //       cv::cvtColor ( cur_frame.rgb, cur_frame.gray, CV_BGR2GRAY );
-    //       cur_frame.depth=depth_cv;
-    //       cv::Scharr( cur_frame.gray, cur_frame.grad_x, CV_32F, 1, 0);
-    //       cv::Scharr( cur_frame.gray, cur_frame.grad_y, CV_32F, 0, 1);
-    //       cur_frame.tf_cam_world=pose_cw;
-    //       cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
-    //       cur_frame.K=K;
-    //       cur_frame.frame_id=imagesRead;
-    //
-    //       frames.push_back(cur_frame);
-    //       VLOG(1) << "read img " << imagesRead << " " << colorFileName;
-    //    }
-    // }
-    // std::cout << "read " << imagesRead << " images. (" << frames.size() <<", " << ")" << std::endl;
-    return frames;
+}
+
+void DepthEstimatorGL::undistort_image(cv::Mat gray_img, const Eigen::Matrix3f K, const Eigen::VectorXf distort_coeffs){
+
+  cv::Mat undistortMapX, undistortMapY;
+
+  cv::Mat_<double> Kc = cv::Mat_<double>::eye( 3, 3 );
+  Kc (0,0) = K(0,0);
+  Kc (1,1) = K(1,1);
+  Kc (0,2) = K(0,2);
+  Kc (1,2) = K(1,2);
+  cv::Mat_<double> distortion ( 5, 1 );
+  distortion ( 0 ) = distort_coeffs(0);
+  distortion ( 1 ) = distort_coeffs(1);
+  distortion ( 2 ) = distort_coeffs(2);
+  distortion ( 3 ) = distort_coeffs(3);
+  distortion ( 4 ) = distort_coeffs(4);
+  cv::Mat_<double> Id = cv::Mat_<double>::eye ( 3, 3 );
+  cv::initUndistortRectifyMap ( Kc, distortion, Id, Kc, gray_img.size(), CV_32FC1, undistortMapX, undistortMapY );
+
+  cv::Mat undistorted_img;
+  cv::remap ( gray_img, undistorted_img, undistortMapX, undistortMapY, cv::INTER_LINEAR );
+  gray_img=undistorted_img.clone();
 }
 
 void DepthEstimatorGL::save_depth_image(){
@@ -545,19 +963,23 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
 
             //determinant is high enough, add the point
             float hessian_det=gradient_hessian.determinant();
-            if(hessian_det > m_params.gradH_th){
+            if(hessian_det > m_params.gradH_th && frame.depth.at<float>(i,j)!=0.0){
             // if(hessian_det > 0){
                 Point point;
                 point.u=j;
                 point.v=i;
-                point.gradH=glm::make_mat2x2(gradient_hessian.data());
+                // point.gradH=glm::make_mat2x2(gradient_hessian.data());
+                point.gradH=gradient_hessian;
 
                 //Seed::Seed
                 Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.u,point.v,1)).normalized();
-                point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+                // point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+                point.f=Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
 
                 //start at an initial value for depth at around 4 meters (depth_filter->Seed::reinit)
-                float mean_starting_depth=4.0;
+                // float mean_starting_depth=4.0;
+                // float mean_starting_depth=frame.depth.at<float>(i,j);
+                float mean_starting_depth=m_mean_starting_depth;
                 float min_starting_depth=0.1;
                 point.mu = (1.0/mean_starting_depth);
                 point.z_range = (1.0/min_starting_depth);
@@ -904,7 +1326,8 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
         // float depth=1.0;
         float depth=1/immature_points[i].mu;
 
-        if(std::isfinite(immature_points[i].mu) && immature_points[i].mu>=0.1 && immature_points[i].converged==1 && immature_points[i].is_outlier==0 ){
+        // if(std::isfinite(immature_points[i].mu) && immature_points[i].mu>=0.1 && immature_points[i].converged==1 && immature_points[i].is_outlier==0 ){
+        if(true){
 
             // float outlier_measure=immature_points[i].a/(immature_points[i].a+immature_points[i].b);
             // if(outlier_measure<0.7){
@@ -923,12 +1346,18 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
             point_screen << u, v, 1.0;
             Eigen::Vector3f point_dir=frames[0].K.inverse()*point_screen; //TODO get the K and also use the cam to world corresponding to the immature point
             // point_dir.normalize(); //this is just the direction (in cam coordinates) of that pixel
+
+            // point_dir=Eigen::Vector3f(point_dir.x()/point_dir.z(), point_dir.y()/point_dir.z(), 1.0);
             Eigen::Vector3f point_cam = point_dir*depth;
-            point_cam(2)=-point_cam(2); //flip the depth because opengl has a camera which looks at the negative z axis (therefore, more depth means a more negative number)
+            point_cam(2)=-point_cam(2); //flip the depth because opengl 7has a camera which looks at the negative z axis (therefore, more depth means a more negative number)
+            if(m_use_rgbd_tum){
+                point_cam(1)=-point_cam(1);
+            }
 
-            Eigen::Vector3f point_world=frames[0].tf_cam_world.inverse()*point_cam;
+            // Eigen::Vector3f point_world=frames[0].tf_cam_world.inverse()*point_cam;
 
-            mesh.V.row(i)=point_world.cast<double>();
+            mesh.V.row(i)=point_cam.cast<double>();
+
         }
 
 
@@ -939,8 +1368,8 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
     double min_z, max_z;
     min_z = mesh.V.col(2).minCoeff();
     max_z = mesh.V.col(2).maxCoeff();
-    min_z=-6.5;
-    max_z=-4;
+    // min_z=-6.5;
+    // max_z=-4;
     std::cout << "min max z is " << min_z << " " << max_z << '\n';
     for (size_t i = 0; i < mesh.C.rows(); i++) {
         float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
@@ -1045,6 +1474,12 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
 
 
 
+  //debug by checking the value of debug2 for point 100
+  int point_idx=100;
+  std::cout << "point " << point_idx << " has uv " << immature_points[point_idx].u << " " << immature_points[point_idx].v << " and gt depth " << immature_points[point_idx].gt_depth << '\n';
+  for (size_t i = 0; i < 16; i++) {
+      std::cout << "debug2 is " << immature_points[point_idx].debug2[i] << '\n';
+  }
 
 
 
