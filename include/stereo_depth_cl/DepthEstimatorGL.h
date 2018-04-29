@@ -202,6 +202,7 @@ public:
     Mesh m_mesh;
     std::vector<Frame> m_frames;
     std::vector<Point> m_points;
+    Eigen::Vector2i m_frame_size; //xy
 
     //params
     bool m_gl_profiling_enabled;

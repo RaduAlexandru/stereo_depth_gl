@@ -75,10 +75,19 @@ Mesh DepthEstimatorRenegade::compute_depth(Frame& frame){
 
     Eigen::Matrix3d K;
     K.setZero();
-    K(0,0)=481.2; //fx
-    K(1,1)=-480; //fy
-    K(0,2)=319.5; // cx
-    K(1,2)=239.5; //cy
+
+    //iclnuim
+    // K(0,0)=481.2; //fx
+    // K(1,1)=-480; //fy
+    // K(0,2)=319.5; // cx
+    // K(1,2)=239.5; //cy
+    // K(2,2)=1.0;
+
+    // rgbd tum freiburg 3
+    K(0,0)=535.4; //fx
+    K(1,1)=539.2 ; //fy
+    K(0,2)=320.1 ; // cx
+    K(1,2)=247.6; //cy
     K(2,2)=1.0;
 
     std::ifstream infile( "/media/alex/Data/Master/SHK/c_ws/src/RENEGADE/results/inverse_depth_filter.txt" );
