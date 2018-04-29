@@ -36,9 +36,6 @@ struct Point{
 
     //Stuff that may be to be removed
     mat2 gradH;
-    vec2 kp_GT;
-    float pad_4;
-    float pad_5;
 
     //for denoising (indexes iinto the array of p[id]s of each of the 8 neighbours)
     int left;

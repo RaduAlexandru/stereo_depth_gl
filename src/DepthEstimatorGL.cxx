@@ -92,7 +92,7 @@ float DepthEstimatorGL::gaus_pdf(float mean, float sd, float x){
 
 void DepthEstimatorGL::init_data(){
     //----------------------------------------------------------------------------------------------------
-    int num_images_to_read=200;
+    int num_images_to_read=60;
     bool use_modified=false;
     m_frames.clear();
     if(m_use_rgbd_tum){
@@ -294,7 +294,7 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
     std::cout << "running for "<< m_params.denoise_nr_iterations << '\n';
     for (size_t i = 0; i < m_params.denoise_nr_iterations; i++) {
         glDispatchCompute(immature_points.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
-        // glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
     }
     TIME_END_GL("depth_denoise_kernel");
 
@@ -322,306 +322,306 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
 }
 
 void DepthEstimatorGL::compute_depth_and_create_mesh_cpu(){
-    m_mesh.clear();
-    std::vector<Point> immature_points;
-    immature_points=create_immature_points(m_frames[0]);
-    assign_neighbours_for_points(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
-
-
-    for (size_t i = 1; i < m_frames.size(); i++) {
-
-        // cv::Mat img_display;
-        // cv::normalize(m_frames[i].gray, img_display, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-        // cv::imshow("gray_img", img_display);
-        // cv::waitKey(30);
-
-        bool debug=false;
-        // if(i==120){
-        //     debug=true;
-        // }
-
-        std::cout << "frame " << i << '\n';
-        TIME_START_GL("update_depth");
-
-        TIME_START_GL("estimate_affine");
-        const Eigen::Affine3f tf_cur_host_eigen = m_frames[i].tf_cam_world * m_frames[0].tf_cam_world.inverse();
-        const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
-        const Eigen::Matrix3f KRKi_cr_eigen = m_frames[i].K * tf_cur_host_eigen.linear() * m_frames[0].K.inverse();
-        const Eigen::Vector3f Kt_cr_eigen = m_frames[i].K * tf_cur_host_eigen.translation();
-        // const Eigen::Vector2f affine_cr_eigen = estimate_affine( immature_points, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
-        const Eigen::Vector2f affine_cr_eigen= Eigen::Vector2f(1,1);
-        const double focal_length = fabs(m_frames[i].K(0,0));
-        double px_noise = 1.0;
-        double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
-        Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr_eigen.topLeftCorner<2,2>() );
-        TIME_END_GL("estimate_affine");
-
-        //just to be more similar to the shader code
-        std::vector<Point>& p = immature_points;
-        Eigen::Matrix3f K= m_frames[i].K ;
-        Eigen::Vector2f frame_size;
-        frame_size << m_frames[i].gray.cols , m_frames[i].gray.rows;
-        const Eigen::Affine3f tf_cur_host=tf_cur_host_eigen;
-        const Eigen::Affine3f tf_host_cur =tf_host_cur_eigen;
-        const Eigen::Matrix3f KRKi_cr=KRKi_cr_eigen;
-        const Eigen::Vector3f Kt_cr=Kt_cr_eigen;
-        const Eigen::Vector2f affine_cr=affine_cr_eigen;
-
-
-        for (size_t id = 0; id < immature_points.size(); id++) {
-            if(debug){
-                std::cout << "processing point " << id << '\n';
-            }
-            // // check if point is visible in the current image
-            const Eigen::Vector3f p_backproj_xyz= p[id].f.head<3>() * 1.0f/ p[id].mu;
-            const Eigen::Vector4f p_backproj_xyzw=Eigen::Vector4f(p_backproj_xyz.x(),p_backproj_xyz.y(),p_backproj_xyz.z(),1.0);
-            const Eigen::Vector4f xyz_f_xyzw = tf_cur_host_eigen*  p_backproj_xyzw ;
-            const Eigen::Vector3f xyz_f=xyz_f_xyzw.head<3>()/xyz_f_xyzw.w();
-            if(xyz_f.z() < 0.0)  {
-                continue; // TODO in gl this is a return
-            }
-
-
-            const Eigen::Vector3f kp_c = K * xyz_f;
-            const Eigen::Vector2f kp_c_h=kp_c.head<2>()/kp_c.z();
-            if ( kp_c_h.x() < 0 || kp_c_h.x() >= frame_size.x() || kp_c_h.y() < 0 || kp_c_h.y() >= frame_size.y() ) {
-                continue; // TODO in gl this is a return
-            }
-
-
-            //point is visible
-            // point.last_visible_frame=frames[i].frame_id;
-
-            //update inverse depth coordinates for min and max
-            p[id].idepth_min = p[id].mu + sqrt(p[id].sigma2);
-            p[id].idepth_max = glm::max(p[id].mu - sqrt(p[id].sigma2), 0.00000001);
-            // memoryBarrier();
-            // barrier();
-            // memoryBarrier();
-
-
-            //search epiline-----------------------------------------------------------------------
-           // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
-            // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
-            float idepth_mean = (p[id].idepth_min + p[id].idepth_max)*0.5;
-            Eigen::Vector3f pr = KRKi_cr * Eigen::Vector3f(p[id].u,p[id].v, 1);
-            Eigen::Vector3f ptpMean = pr + Kt_cr*idepth_mean;
-            Eigen::Vector3f ptpMin = pr + Kt_cr*p[id].idepth_min;
-            Eigen::Vector3f ptpMax = pr + Kt_cr*p[id].idepth_max;
-            Eigen::Vector2f uvMean = ptpMean.head<2>()/ptpMean.z();
-            Eigen::Vector2f uvMin = ptpMin.head<2>()/ptpMin.z();
-            Eigen::Vector2f uvMax = ptpMax.head<2>()/ptpMax.z();
-
-            //cap the uv min and uv max
-            // uvMin(0)=clamp(uvMin(0), 0.0f, (float)m_frame_size.x());
-            // uvMin(1)=clamp(uvMin(1), 0.0f, (float)m_frame_size.y());
-            // uvMax(0)=clamp(uvMax(0), 0.0f, (float)m_frame_size.x());
-            // uvMax(1)=clamp(uvMax(1), 0.0f, (float)m_frame_size.y());
-
-
-            // //debug the uv mean
-            // if(id==100){
-            //     p[id].debug2[0]=p[id].u;
-            //     p[id].debug2[1]=p[id].v;
-            //     p[id].debug2[2]=uvMean.x; 		// higher -> less strong gradient-based reweighting .
-            //     p[id].debug2[3]=uvMean.y; // Huber Threshold
-            //     p[id].debug2[4]=99999999;      //!< threshold on depth uncertainty for convergence.
-            //     p[id].debug2[5]=999999;
-            // }
-
-            Eigen::Vector2f epi_line = uvMax - uvMin;
-            float norm_epi = glm::max(1e-5f,epi_line.norm());
-            Eigen::Vector2f epi_dir = epi_line / norm_epi;
-            const float  half_length = 0.5f * norm_epi;
-
-            Eigen::Vector2f bestKp=Eigen::Vector2f(-1.0,-1.0);
-            float bestEnergy = 1e10;
-
-            if(debug){
-                std::cout << "p uv is " << p[id].u << " " << p[id].v << '\n';
-                std::cout << "idepth_mean is " << idepth_mean << '\n';
-                std::cout << "p mu is " << p[id].mu << '\n';
-                std::cout << "p sigma2 is " << p[id].sigma2 << '\n';
-                std::cout << "uvMean is " << uvMean.transpose() << '\n';
-                std::cout << "uvMin is " << uvMin.transpose() << '\n';
-                std::cout << "uvMax is " << uvMax.transpose() << '\n';
-                std::cout << "half_length is " << half_length << '\n';
-            }
-
-            for(float l = -half_length; l <= half_length; l += 0.7f)
-            {
-                float energy = 0;
-                Eigen::Vector2f kp = uvMean + l*epi_dir;
-
-                if( ( kp.x() >= (frame_size.x()-20) )  || ( kp.y() >= (frame_size.y()-20) ) || ( kp.x() < 20 ) || ( kp.y() < 20) ){
-                    continue;
-                }
-
-                for(int idx=0;idx<pattern_rot.get_nr_points(); ++idx){
-                    //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
-                    Eigen::Vector2f offset=pattern_rot.get_offset(idx);
-                    // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
-                    // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
-                    float hit_color=texture_interpolate(m_frames[i].gray, kp.x()+offset.x(), kp.y()+offset.y() , InterpolType::LINEAR);
-                    // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
-
-                    //for the case when the image is padded
-                    // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
-
-                    //high qualty filter from openglsuperbible
-                    // float hit_color=hqfilter(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
-
-                    // float hit_color=0.0;
-
-                    const float residual = hit_color - (affine_cr.x() * p[id].color[idx] + affine_cr.y());
-
-                    float hw = abs(residual) < m_params.huberTH ? 1 : m_params.huberTH / abs(residual);
-                    energy += hw *residual*residual*(2-hw);
-                }
-                if ( energy < bestEnergy )
-                {
-                    bestKp = kp; bestEnergy = energy;
-                }
-            }
-
-
-            if ( bestEnergy > p[id].energyTH * 1.2f ) {
-                p[id].lastTraceStatus = STATUS_OUTLIER;
-            }
-            else
-            {
-
-                Eigen::Vector2f epi_dir_inv=Eigen::Vector2f(epi_dir.y(),-epi_dir.x());
-                float a = epi_dir.transpose() * p[id].gradH * epi_dir;
-                float b = epi_dir_inv.transpose() * p[id].gradH * epi_dir_inv;
-                float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
-                // float errorInPixel=0.0f;
-
-                if( epi_dir.x()*epi_dir.x()>epi_dir.y()*epi_dir.y() )
-                {
-                    p[id].idepth_min = (pr.z()*(bestKp.x()-errorInPixel*epi_dir.x()) - pr.x()) / (Kt_cr.x() - Kt_cr.z()*(bestKp.x()-errorInPixel*epi_dir.x()));
-                    p[id].idepth_max = (pr.z()*(bestKp.x()+errorInPixel*epi_dir.x()) - pr.x()) / (Kt_cr.x() - Kt_cr.z()*(bestKp.x()+errorInPixel*epi_dir.x()));
-                }
-                else
-                {
-                    p[id].idepth_min = (pr.z()*(bestKp.y()-errorInPixel*epi_dir.y()) - pr.y()) / (Kt_cr.y() - Kt_cr.z()*(bestKp.y()-errorInPixel*epi_dir.y()));
-                    p[id].idepth_max = (pr.z()*(bestKp.y()+errorInPixel*epi_dir.y()) - pr.y()) / (Kt_cr.y() - Kt_cr.z()*(bestKp.y()+errorInPixel*epi_dir.y()));
-                }
-                // memoryBarrier();
-                // barrier();
-                // memoryBarrier();
-                if(p[id].idepth_min > p[id].idepth_max) {
-                    // std::swap<float>(point.idepth_min, point.idepth_max);
-                    float tmp=p[id].idepth_min;
-                    p[id].idepth_min=p[id].idepth_max;
-                    p[id].idepth_max=tmp;
-                }
-                p[id].lastTraceStatus = STATUS_GOOD;
-                // memoryBarrier();
-                // barrier();
-                // memoryBarrier();
-            }
-            // memoryBarrier();
-            // barrier();
-            // memoryBarrier();
-
-
-            float idepth = -1;
-            float z = 0;
-            if( p[id].lastTraceStatus == STATUS_GOOD ) {
-                idepth = glm::max(1e-5f, 0.5f*(p[id].idepth_min+p[id].idepth_max));
-                z = 1.0f/idepth;
-            }
-            if ( p[id].lastTraceStatus == STATUS_OOB  || p[id].lastTraceStatus == STATUS_SKIPPED ){
-                continue; //TODO in shader it's a return
-            }
-            //0.04 is 25 meters
-            if ( idepth<0.04 || idepth>1000 || p[id].lastTraceStatus == STATUS_OUTLIER || p[id].lastTraceStatus == STATUS_BADCONDITION ) {
-                p[id].b++; // increase outlier probability when no match was found
-                continue; //TODO in shader it's a return
-            }
-            // memoryBarrier();
-            // barrier();
-            // memoryBarrier();
-
-
-            // update_idepth(point,tf_host_cur, z, px_error_angle);
-
-            // compute tau----------------------------------------------------------------------------
-            // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
-            // Eigen::Vector3f t=  Eigen::Vector3f(tf_host_cur[0][3], tf_host_cur[1][3], tf_host_cur[2][3]);
-            Eigen::Vector3f t(tf_host_cur.translation());
-            Eigen::Vector3f a = p[id].f.head<3>()*z-t;
-            float t_norm = t.norm();
-            float a_norm = a.norm();
-            float alpha = acos(  p[id].f.head<3>().dot(t)  /t_norm); // dot product
-            float beta = acos( a.dot(-t) / (t_norm*a_norm)); // dot product
-            float beta_plus = beta + px_error_angle;
-            float gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
-            float z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
-            float tau= (z_plus - z); // tau
-            float tau_inverse = 0.5 * (1.0f/glm::max(0.0000001f, z-tau) - 1.0/(z+tau));
-
-            // update the estimate--------------------------------------------------
-            float x=1.0/z;
-            float tau2=tau_inverse*tau_inverse;
-            // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
-            float norm_scale = sqrt(p[id].sigma2 + tau2);
-            float s2 = 1./(1./p[id].sigma2 + 1./tau2);
-            float m = s2*(p[id].mu/p[id].sigma2 + x/tau2);
-            float C1 = p[id].a/(p[id].a+p[id].b) * gaus_pdf(p[id].mu, norm_scale, x);
-            float C2 = p[id].b/(p[id].a+p[id].b) * 1./p[id].z_range;
-            float normalization_constant = C1 + C2;
-            C1 /= normalization_constant;
-            C2 /= normalization_constant;
-            float f = C1*(p[id].a+1.)/(p[id].a+p[id].b+1.) + C2*p[id].a/(p[id].a+p[id].b+1.);
-            float e = C1*(p[id].a+1.)*(p[id].a+2.)/((p[id].a+p[id].b+1.)*(p[id].a+p[id].b+2.))
-                      + C2*p[id].a*(p[id].a+1.0f)/((p[id].a+p[id].b+1.0f)*(p[id].a+p[id].b+2.0f));
-            // update parameters
-            float mu_new = C1*m+C2*p[id].mu;
-            p[id].sigma2 = C1*(s2 + m*m) + C2*(p[id].sigma2 + p[id].mu*p[id].mu) - mu_new*mu_new;
-            p[id].mu = mu_new;
-            p[id].a = (e-f)/(f-e/f);
-            // memoryBarrier();
-            // barrier();
-            // memoryBarrier();
-            p[id].b = p[id].a*(1.0f-f)/f;
-            // memoryBarrier();
-            // barrier(); //TODO add again the barrier
-            // memoryBarrier();
-
-            // // not implemented in opengl
-            const float eta_inlier = .6f;
-            const float eta_outlier = .05f;
-            if( ((p[id].a / (p[id].a + p[id].b)) > eta_inlier) && (sqrt(p[id].sigma2) < p[id].z_range/m_params.convergence_sigma2_thresh)) {
-                p[id].is_outlier = 0; // The seed converged
-            }else if((p[id].a-1) / (p[id].a + p[id].b - 2) < eta_outlier){ // The seed failed to converge
-                p[id].is_outlier = 1;
-                // it->reinit();
-                //TODO do a better reinit inside a point class
-                p[id].a = 10;
-                p[id].b = 10;
-                p[id].mu = (1.0/m_mean_starting_depth);
-                p[id].z_range = (1.0/0.1);
-                p[id].sigma2 = (p[id].z_range*p[id].z_range/36);
-            }
-            // if the seed has converged, we initialize a new candidate point and remove the seed
-            if(sqrt(p[id].sigma2) < p[id].z_range/m_params.convergence_sigma2_thresh){
-                p[id].converged = 1;
-            }
-        }
-
-    }
-
-    denoise_cpu(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
-
-    std::cout << "create mesh" << '\n';
-    m_mesh=create_mesh(immature_points, m_frames);
-    m_points=immature_points; //save the points in the class in case we need them for later saving to a file
-
-    m_scene_is_modified=true;
-
-    TIME_END_GL("update_depth");
+    // m_mesh.clear();
+    // std::vector<Point> immature_points;
+    // immature_points=create_immature_points(m_frames[0]);
+    // assign_neighbours_for_points(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
+    //
+    //
+    // for (size_t i = 1; i < m_frames.size(); i++) {
+    //
+    //     // cv::Mat img_display;
+    //     // cv::normalize(m_frames[i].gray, img_display, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+    //     // cv::imshow("gray_img", img_display);
+    //     // cv::waitKey(30);
+    //
+    //     bool debug=false;
+    //     // if(i==120){
+    //     //     debug=true;
+    //     // }
+    //
+    //     std::cout << "frame " << i << '\n';
+    //     TIME_START_GL("update_depth");
+    //
+    //     TIME_START_GL("estimate_affine");
+    //     const Eigen::Affine3f tf_cur_host_eigen = m_frames[i].tf_cam_world * m_frames[0].tf_cam_world.inverse();
+    //     const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
+    //     const Eigen::Matrix3f KRKi_cr_eigen = m_frames[i].K * tf_cur_host_eigen.linear() * m_frames[0].K.inverse();
+    //     const Eigen::Vector3f Kt_cr_eigen = m_frames[i].K * tf_cur_host_eigen.translation();
+    //     // const Eigen::Vector2f affine_cr_eigen = estimate_affine( immature_points, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
+    //     const Eigen::Vector2f affine_cr_eigen= Eigen::Vector2f(1,1);
+    //     const double focal_length = fabs(m_frames[i].K(0,0));
+    //     double px_noise = 1.0;
+    //     double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
+    //     Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr_eigen.topLeftCorner<2,2>() );
+    //     TIME_END_GL("estimate_affine");
+    //
+    //     //just to be more similar to the shader code
+    //     std::vector<Point>& p = immature_points;
+    //     Eigen::Matrix3f K= m_frames[i].K ;
+    //     Eigen::Vector2f frame_size;
+    //     frame_size << m_frames[i].gray.cols , m_frames[i].gray.rows;
+    //     const Eigen::Affine3f tf_cur_host=tf_cur_host_eigen;
+    //     const Eigen::Affine3f tf_host_cur =tf_host_cur_eigen;
+    //     const Eigen::Matrix3f KRKi_cr=KRKi_cr_eigen;
+    //     const Eigen::Vector3f Kt_cr=Kt_cr_eigen;
+    //     const Eigen::Vector2f affine_cr=affine_cr_eigen;
+    //
+    //
+    //     for (size_t id = 0; id < immature_points.size(); id++) {
+    //         if(debug){
+    //             std::cout << "processing point " << id << '\n';
+    //         }
+    //         // // check if point is visible in the current image
+    //         const Eigen::Vector3f p_backproj_xyz= p[id].f.head<3>() * 1.0f/ p[id].mu;
+    //         const Eigen::Vector4f p_backproj_xyzw=Eigen::Vector4f(p_backproj_xyz.x(),p_backproj_xyz.y(),p_backproj_xyz.z(),1.0);
+    //         const Eigen::Vector4f xyz_f_xyzw = tf_cur_host_eigen*  p_backproj_xyzw ;
+    //         const Eigen::Vector3f xyz_f=xyz_f_xyzw.head<3>()/xyz_f_xyzw.w();
+    //         if(xyz_f.z() < 0.0)  {
+    //             continue; // TODO in gl this is a return
+    //         }
+    //
+    //
+    //         const Eigen::Vector3f kp_c = K * xyz_f;
+    //         const Eigen::Vector2f kp_c_h=kp_c.head<2>()/kp_c.z();
+    //         if ( kp_c_h.x() < 0 || kp_c_h.x() >= frame_size.x() || kp_c_h.y() < 0 || kp_c_h.y() >= frame_size.y() ) {
+    //             continue; // TODO in gl this is a return
+    //         }
+    //
+    //
+    //         //point is visible
+    //         // point.last_visible_frame=frames[i].frame_id;
+    //
+    //         //update inverse depth coordinates for min and max
+    //         p[id].idepth_min = p[id].mu + sqrt(p[id].sigma2);
+    //         p[id].idepth_max = glm::max(p[id].mu - sqrt(p[id].sigma2), 0.00000001);
+    //         // memoryBarrier();
+    //         // barrier();
+    //         // memoryBarrier();
+    //
+    //
+    //         //search epiline-----------------------------------------------------------------------
+    //        // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
+    //         // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
+    //         float idepth_mean = (p[id].idepth_min + p[id].idepth_max)*0.5;
+    //         Eigen::Vector3f pr = KRKi_cr * Eigen::Vector3f(p[id].u,p[id].v, 1);
+    //         Eigen::Vector3f ptpMean = pr + Kt_cr*idepth_mean;
+    //         Eigen::Vector3f ptpMin = pr + Kt_cr*p[id].idepth_min;
+    //         Eigen::Vector3f ptpMax = pr + Kt_cr*p[id].idepth_max;
+    //         Eigen::Vector2f uvMean = ptpMean.head<2>()/ptpMean.z();
+    //         Eigen::Vector2f uvMin = ptpMin.head<2>()/ptpMin.z();
+    //         Eigen::Vector2f uvMax = ptpMax.head<2>()/ptpMax.z();
+    //
+    //         //cap the uv min and uv max
+    //         // uvMin(0)=clamp(uvMin(0), 0.0f, (float)m_frame_size.x());
+    //         // uvMin(1)=clamp(uvMin(1), 0.0f, (float)m_frame_size.y());
+    //         // uvMax(0)=clamp(uvMax(0), 0.0f, (float)m_frame_size.x());
+    //         // uvMax(1)=clamp(uvMax(1), 0.0f, (float)m_frame_size.y());
+    //
+    //
+    //         // //debug the uv mean
+    //         // if(id==100){
+    //         //     p[id].debug2[0]=p[id].u;
+    //         //     p[id].debug2[1]=p[id].v;
+    //         //     p[id].debug2[2]=uvMean.x; 		// higher -> less strong gradient-based reweighting .
+    //         //     p[id].debug2[3]=uvMean.y; // Huber Threshold
+    //         //     p[id].debug2[4]=99999999;      //!< threshold on depth uncertainty for convergence.
+    //         //     p[id].debug2[5]=999999;
+    //         // }
+    //
+    //         Eigen::Vector2f epi_line = uvMax - uvMin;
+    //         float norm_epi = glm::max(1e-5f,epi_line.norm());
+    //         Eigen::Vector2f epi_dir = epi_line / norm_epi;
+    //         const float  half_length = 0.5f * norm_epi;
+    //
+    //         Eigen::Vector2f bestKp=Eigen::Vector2f(-1.0,-1.0);
+    //         float bestEnergy = 1e10;
+    //
+    //         if(debug){
+    //             std::cout << "p uv is " << p[id].u << " " << p[id].v << '\n';
+    //             std::cout << "idepth_mean is " << idepth_mean << '\n';
+    //             std::cout << "p mu is " << p[id].mu << '\n';
+    //             std::cout << "p sigma2 is " << p[id].sigma2 << '\n';
+    //             std::cout << "uvMean is " << uvMean.transpose() << '\n';
+    //             std::cout << "uvMin is " << uvMin.transpose() << '\n';
+    //             std::cout << "uvMax is " << uvMax.transpose() << '\n';
+    //             std::cout << "half_length is " << half_length << '\n';
+    //         }
+    //
+    //         for(float l = -half_length; l <= half_length; l += 0.7f)
+    //         {
+    //             float energy = 0;
+    //             Eigen::Vector2f kp = uvMean + l*epi_dir;
+    //
+    //             if( ( kp.x() >= (frame_size.x()-20) )  || ( kp.y() >= (frame_size.y()-20) ) || ( kp.x() < 20 ) || ( kp.y() < 20) ){
+    //                 continue;
+    //             }
+    //
+    //             for(int idx=0;idx<pattern_rot.get_nr_points(); ++idx){
+    //                 //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
+    //                 Eigen::Vector2f offset=pattern_rot.get_offset(idx);
+    //                 // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+    //                 // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
+    //                 float hit_color=texture_interpolate(m_frames[i].gray, kp.x()+offset.x(), kp.y()+offset.y() , InterpolType::LINEAR);
+    //                 // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
+    //
+    //                 //for the case when the image is padded
+    //                 // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
+    //
+    //                 //high qualty filter from openglsuperbible
+    //                 // float hit_color=hqfilter(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+    //
+    //                 // float hit_color=0.0;
+    //
+    //                 const float residual = hit_color - (affine_cr.x() * p[id].color[idx] + affine_cr.y());
+    //
+    //                 float hw = abs(residual) < m_params.huberTH ? 1 : m_params.huberTH / abs(residual);
+    //                 energy += hw *residual*residual*(2-hw);
+    //             }
+    //             if ( energy < bestEnergy )
+    //             {
+    //                 bestKp = kp; bestEnergy = energy;
+    //             }
+    //         }
+    //
+    //
+    //         if ( bestEnergy > p[id].energyTH * 1.2f ) {
+    //             p[id].lastTraceStatus = STATUS_OUTLIER;
+    //         }
+    //         else
+    //         {
+    //
+    //             Eigen::Vector2f epi_dir_inv=Eigen::Vector2f(epi_dir.y(),-epi_dir.x());
+    //             float a = epi_dir.transpose() * p[id].gradH * epi_dir;
+    //             float b = epi_dir_inv.transpose() * p[id].gradH * epi_dir_inv;
+    //             float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
+    //             // float errorInPixel=0.0f;
+    //
+    //             if( epi_dir.x()*epi_dir.x()>epi_dir.y()*epi_dir.y() )
+    //             {
+    //                 p[id].idepth_min = (pr.z()*(bestKp.x()-errorInPixel*epi_dir.x()) - pr.x()) / (Kt_cr.x() - Kt_cr.z()*(bestKp.x()-errorInPixel*epi_dir.x()));
+    //                 p[id].idepth_max = (pr.z()*(bestKp.x()+errorInPixel*epi_dir.x()) - pr.x()) / (Kt_cr.x() - Kt_cr.z()*(bestKp.x()+errorInPixel*epi_dir.x()));
+    //             }
+    //             else
+    //             {
+    //                 p[id].idepth_min = (pr.z()*(bestKp.y()-errorInPixel*epi_dir.y()) - pr.y()) / (Kt_cr.y() - Kt_cr.z()*(bestKp.y()-errorInPixel*epi_dir.y()));
+    //                 p[id].idepth_max = (pr.z()*(bestKp.y()+errorInPixel*epi_dir.y()) - pr.y()) / (Kt_cr.y() - Kt_cr.z()*(bestKp.y()+errorInPixel*epi_dir.y()));
+    //             }
+    //             // memoryBarrier();
+    //             // barrier();
+    //             // memoryBarrier();
+    //             if(p[id].idepth_min > p[id].idepth_max) {
+    //                 // std::swap<float>(point.idepth_min, point.idepth_max);
+    //                 float tmp=p[id].idepth_min;
+    //                 p[id].idepth_min=p[id].idepth_max;
+    //                 p[id].idepth_max=tmp;
+    //             }
+    //             p[id].lastTraceStatus = STATUS_GOOD;
+    //             // memoryBarrier();
+    //             // barrier();
+    //             // memoryBarrier();
+    //         }
+    //         // memoryBarrier();
+    //         // barrier();
+    //         // memoryBarrier();
+    //
+    //
+    //         float idepth = -1;
+    //         float z = 0;
+    //         if( p[id].lastTraceStatus == STATUS_GOOD ) {
+    //             idepth = glm::max(1e-5f, 0.5f*(p[id].idepth_min+p[id].idepth_max));
+    //             z = 1.0f/idepth;
+    //         }
+    //         if ( p[id].lastTraceStatus == STATUS_OOB  || p[id].lastTraceStatus == STATUS_SKIPPED ){
+    //             continue; //TODO in shader it's a return
+    //         }
+    //         //0.04 is 25 meters
+    //         if ( idepth<0.04 || idepth>1000 || p[id].lastTraceStatus == STATUS_OUTLIER || p[id].lastTraceStatus == STATUS_BADCONDITION ) {
+    //             p[id].b++; // increase outlier probability when no match was found
+    //             continue; //TODO in shader it's a return
+    //         }
+    //         // memoryBarrier();
+    //         // barrier();
+    //         // memoryBarrier();
+    //
+    //
+    //         // update_idepth(point,tf_host_cur, z, px_error_angle);
+    //
+    //         // compute tau----------------------------------------------------------------------------
+    //         // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
+    //         // Eigen::Vector3f t=  Eigen::Vector3f(tf_host_cur[0][3], tf_host_cur[1][3], tf_host_cur[2][3]);
+    //         Eigen::Vector3f t(tf_host_cur.translation());
+    //         Eigen::Vector3f a = p[id].f.head<3>()*z-t;
+    //         float t_norm = t.norm();
+    //         float a_norm = a.norm();
+    //         float alpha = acos(  p[id].f.head<3>().dot(t)  /t_norm); // dot product
+    //         float beta = acos( a.dot(-t) / (t_norm*a_norm)); // dot product
+    //         float beta_plus = beta + px_error_angle;
+    //         float gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
+    //         float z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
+    //         float tau= (z_plus - z); // tau
+    //         float tau_inverse = 0.5 * (1.0f/glm::max(0.0000001f, z-tau) - 1.0/(z+tau));
+    //
+    //         // update the estimate--------------------------------------------------
+    //         float x=1.0/z;
+    //         float tau2=tau_inverse*tau_inverse;
+    //         // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
+    //         float norm_scale = sqrt(p[id].sigma2 + tau2);
+    //         float s2 = 1./(1./p[id].sigma2 + 1./tau2);
+    //         float m = s2*(p[id].mu/p[id].sigma2 + x/tau2);
+    //         float C1 = p[id].a/(p[id].a+p[id].b) * gaus_pdf(p[id].mu, norm_scale, x);
+    //         float C2 = p[id].b/(p[id].a+p[id].b) * 1./p[id].z_range;
+    //         float normalization_constant = C1 + C2;
+    //         C1 /= normalization_constant;
+    //         C2 /= normalization_constant;
+    //         float f = C1*(p[id].a+1.)/(p[id].a+p[id].b+1.) + C2*p[id].a/(p[id].a+p[id].b+1.);
+    //         float e = C1*(p[id].a+1.)*(p[id].a+2.)/((p[id].a+p[id].b+1.)*(p[id].a+p[id].b+2.))
+    //                   + C2*p[id].a*(p[id].a+1.0f)/((p[id].a+p[id].b+1.0f)*(p[id].a+p[id].b+2.0f));
+    //         // update parameters
+    //         float mu_new = C1*m+C2*p[id].mu;
+    //         p[id].sigma2 = C1*(s2 + m*m) + C2*(p[id].sigma2 + p[id].mu*p[id].mu) - mu_new*mu_new;
+    //         p[id].mu = mu_new;
+    //         p[id].a = (e-f)/(f-e/f);
+    //         // memoryBarrier();
+    //         // barrier();
+    //         // memoryBarrier();
+    //         p[id].b = p[id].a*(1.0f-f)/f;
+    //         // memoryBarrier();
+    //         // barrier(); //TODO add again the barrier
+    //         // memoryBarrier();
+    //
+    //         // // not implemented in opengl
+    //         const float eta_inlier = .6f;
+    //         const float eta_outlier = .05f;
+    //         if( ((p[id].a / (p[id].a + p[id].b)) > eta_inlier) && (sqrt(p[id].sigma2) < p[id].z_range/m_params.convergence_sigma2_thresh)) {
+    //             p[id].is_outlier = 0; // The seed converged
+    //         }else if((p[id].a-1) / (p[id].a + p[id].b - 2) < eta_outlier){ // The seed failed to converge
+    //             p[id].is_outlier = 1;
+    //             // it->reinit();
+    //             //TODO do a better reinit inside a point class
+    //             p[id].a = 10;
+    //             p[id].b = 10;
+    //             p[id].mu = (1.0/m_mean_starting_depth);
+    //             p[id].z_range = (1.0/0.1);
+    //             p[id].sigma2 = (p[id].z_range*p[id].z_range/36);
+    //         }
+    //         // if the seed has converged, we initialize a new candidate point and remove the seed
+    //         if(sqrt(p[id].sigma2) < p[id].z_range/m_params.convergence_sigma2_thresh){
+    //             p[id].converged = 1;
+    //         }
+    //     }
+    //
+    // }
+    //
+    // denoise_cpu(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
+    //
+    // std::cout << "create mesh" << '\n';
+    // m_mesh=create_mesh(immature_points, m_frames);
+    // m_points=immature_points; //save the points in the class in case we need them for later saving to a file
+    //
+    // m_scene_is_modified=true;
+    //
+    // TIME_END_GL("update_depth");
 }
 
 Mesh DepthEstimatorGL::get_mesh(){
@@ -887,13 +887,13 @@ std::vector<Point> DepthEstimatorGL::create_immature_points (const Frame& frame)
                 Point point;
                 point.u=j;
                 point.v=i;
-                // point.gradH=glm::make_mat2x2(gradient_hessian.data());
-                point.gradH=gradient_hessian;
+                point.gradH=glm::make_mat2x2(gradient_hessian.data());
+                // point.gradH=gradient_hessian;
 
                 //Seed::Seed
                 Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.u,point.v,1)).normalized();
-                // point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
-                point.f=Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+                point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+                // point.f=Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
 
                 //start at an initial value for depth at around 4 meters (depth_filter->Seed::reinit)
                 // float mean_starting_depth=4.0;
@@ -1245,8 +1245,8 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
         // float depth=1.0;
         float depth=1/immature_points[i].mu;
 
-        // if(std::isfinite(immature_points[i].mu) && immature_points[i].mu>=0.1 && immature_points[i].converged==1 && immature_points[i].is_outlier==0 ){
-        if(true){
+        if(std::isfinite(immature_points[i].mu) && immature_points[i].mu>=0.1 && immature_points[i].converged==1 && immature_points[i].is_outlier==0 ){
+        // if(true){
 
             // float outlier_measure=immature_points[i].a/(immature_points[i].a+immature_points[i].b);
             // if(outlier_measure<0.7){

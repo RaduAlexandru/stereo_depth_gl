@@ -42,7 +42,7 @@ struct Params {
     // float pad_2;
     //until here it's paded correctly to 16 bytes-----
 
-    int denoise_nr_iterations=0;
+    int denoise_nr_iterations=200;
     float denoise_depth_range=5.0;
     float denoise_lambda=0.5;
     float denoise_L=sqrt(8.0f);
@@ -76,8 +76,8 @@ struct Point{
     float quality;
     //-----------------up until here we have 48 bytes so it's padded correctly to 16 bytes
 
-    // glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
-    Eigen::Vector4f f;
+    glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
+    // Eigen::Vector4f f;
     PointStatus lastTraceStatus;
     int32_t converged;
     int32_t is_outlier;
@@ -95,7 +95,8 @@ struct Point{
     float pad_3;
 
     //Stuff that may be to be removed
-    Eigen::Matrix2f gradH;
+    glm::mat2 gradH;
+    // Eigen::Matrix2f gradH;
 
 
     //for denoising (indexes iinto the array of points of each of the 8 neighbours)
