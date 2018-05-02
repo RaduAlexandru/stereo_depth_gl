@@ -196,9 +196,15 @@ public:
     //gl shaders
     GLuint m_update_depth_prog_id;
     GLuint m_denoise_depth_prog_id;
+    //used for doing a denoising when immature points are laid as a texture
     GLuint m_copy_to_texture_prog_id;
     GLuint m_denoise_texture_prog_id;
     GLuint m_copy_from_texture_prog_id;
+    //use denoising when the immature points are laid as a texture but have pvec, mu and mu_denoised in a frembuffer for fast write
+    GLuint m_copy_to_texture_fbo_prog_id;
+    GLuint m_denoise_fbo_prog_id;
+    GLuint m_copy_from_texture_fbo_prog_id;
+
 
 
     //databasse
@@ -235,6 +241,7 @@ private:
     void denoise_cpu( std::vector<Point>& immature_points, const int frame_width, const int frame_height);
     void denoise_gpu_vector(std::vector<Point>& immature_points);
     void denoise_gpu_texture(std::vector<Point>& immature_points,  const int frame_width, const int frame_height);
+    void denoise_gpu_framebuffer(std::vector<Point>& immature_points,  const int frame_width, const int frame_height);
     Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames);
 
 };

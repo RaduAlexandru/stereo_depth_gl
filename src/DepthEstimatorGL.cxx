@@ -16,6 +16,7 @@
 #include "UtilsGL.h"
 #include "Shader.h"
 #include "Texture2DArray.h"
+#include "Texture2D.h"
 
 //Libigl
 #include <igl/opengl/glfw/Viewer.h>
@@ -90,6 +91,12 @@ void DepthEstimatorGL::compile_shaders(){
 
     m_copy_from_texture_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/copy_from_texture.glsl");
 
+    m_copy_to_texture_fbo_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_copy_to_texture_fbo.glsl");
+
+    m_copy_from_texture_fbo_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/copy_from_texture_fbo.glsl");
+
+    m_denoise_fbo_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/update_TVL1_primal_dual_fbo_vert.glsl", "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/update_TVL1_primal_dual_fbo_frag.glsl");
+
 }
 
 //https://www.boost.org/doc/libs/1_47_0/libs/math/doc/sf_and_dist/html/math_toolkit/dist/dist_ref/dists/normal_dist.html
@@ -99,7 +106,7 @@ float DepthEstimatorGL::gaus_pdf(float mean, float sd, float x){
 
 void DepthEstimatorGL::init_data(){
     //----------------------------------------------------------------------------------------------------
-    int num_images_to_read=60;
+    int num_images_to_read=100;
     bool use_modified=false;
     m_frames.clear();
     if(m_use_rgbd_tum){
@@ -266,9 +273,10 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
 
 
     //GPU---------------------------------------------------------------------------------------------------------
+    // denoise_cpu(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
     // denoise_gpu_vector(immature_points);
     denoise_gpu_texture(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
-
+    // denoise_gpu_framebuffer(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
 
 
     TIME_END_GL("compute_depth");
@@ -338,6 +346,8 @@ void DepthEstimatorGL::denoise_gpu_vector(std::vector<Point>& immature_points){
 
 void DepthEstimatorGL::denoise_gpu_texture(std::vector<Point>& immature_points,  const int frame_width, const int frame_height){
 
+    TIME_START_GL("denoise_gpu_texture");
+
     //set some stuff on the cpu that is needed for denoising
     int depth_range=m_params.denoise_depth_range;
     float lambda=m_params.denoise_lambda;
@@ -393,11 +403,12 @@ void DepthEstimatorGL::denoise_gpu_texture(std::vector<Point>& immature_points, 
     TIME_START_GL("depth_denoise_kernel");
     std::cout << "running for "<< m_params.denoise_nr_iterations << '\n';
     for (size_t i = 0; i < m_params.denoise_nr_iterations; i++) {
-        std::cout << "denoise iter " << i << '\n';
+        // std::cout << "denoise iter " << i << '\n';
         glDispatchCompute(frame_width/32, frame_height/32, 1); //TODO adapt the local size to better suit the gpu
-        // glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
     }
     TIME_END_GL("depth_denoise_kernel");
+    std::cout << "finished denoise kernel" << '\n';
 
 
     //copy from texture to vector with another compute shader AND APPLIED THE MU DENOISED
@@ -417,8 +428,243 @@ void DepthEstimatorGL::denoise_gpu_texture(std::vector<Point>& immature_points, 
     //     point.mu=point.mu_denoised;
     // }
 
+    TIME_END_GL("denoise_gpu_texture");
 
 
+}
+
+void DepthEstimatorGL::denoise_gpu_framebuffer(std::vector<Point>& immature_points,  const int frame_width, const int frame_height){
+    TIME_START_GL("denoise_gpu_texture");
+
+    //set some stuff on the cpu that is needed for denoising
+    int depth_range=m_params.denoise_depth_range;
+    float lambda=m_params.denoise_lambda;
+    int iterations=m_params.denoise_nr_iterations;
+    const float large_sigma2 = depth_range * depth_range / 72.f;
+    // computeWeightsAndMu( )
+    for ( auto &point : immature_points){
+        const float E_pi = point.a / ( point.a + point.b);
+        point.g = std::max<float> ( (E_pi * point.sigma2 + (1.0f-E_pi) * large_sigma2) / large_sigma2, 1.0f );
+        point.mu_denoised = point.mu;
+        point.mu_head = point.u;
+        point.p.setZero();
+    }
+
+
+    //make a framebuffer of 4 channels to store mu_head, mu denosied and pvec
+    GLuint fbo;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    //rgb output
+    GLuint fbo_rgba_tex;
+    glGenTextures(1, &fbo_rgba_tex);
+    glBindTexture(GL_TEXTURE_2D, fbo_rgba_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, frame_width, frame_height, 0, GL_RGBA, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); //the poor filtering is needed
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    //configure
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fbo_rgba_tex, 0);
+    GLenum DrawBuffers[1] = {GL_COLOR_ATTACHMENT0};
+    glDrawBuffers(1, DrawBuffers); // "1" is the size of DrawBuffers
+    // Always check that our framebuffer is ok
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE){
+       LOG(FATAL) << "something went wrong with the framebuffer creation";
+       return;
+    }
+    // set back as rendering to screen
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+
+    //make a 2d texture to store mu and gval
+    gl::Texture2D tex;
+    tex.set_wrap_mode(GL_CLAMP_TO_EDGE);
+    tex.set_filter_mode(GL_NEAREST);
+    tex.allocate_tex_storage_inmutable(GL_RG32F, frame_width, frame_height); // 6 channels (because we need 6 members for each immature point)
+
+    //clear the texture to -1 so that we know it's uninitilzied
+    std::vector<float> clear(2,-1);
+    glClearTexImage(tex.get_tex_id(), 0, GL_RG, GL_FLOAT, clear.data());
+
+    //copy stuff into both fbo texture and this tex
+    //copy the immature points to the texture using a compute shader
+
+    //upload to gpu the inmature points
+    std::cout << "copying to texture" << '\n';
+    glUseProgram(m_copy_to_texture_fbo_prog_id);
+    TIME_START_GL("upload_immature_points");
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, immature_points.size() * sizeof(Point), immature_points.data(), GL_DYNAMIC_COPY);
+    TIME_END_GL("upload_immature_points");
+    TIME_START_GL("upload_params"); //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
+    glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
+    glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
+    glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_copy_to_texture_fbo_prog_id,"params_block"), m_ubo_params );
+    TIME_END_GL("upload_params");
+    //do the copy
+
+    TIME_START_GL("copy_to_texture_kernel");
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_points_gl_buf);
+    glBindImageTexture(0, fbo_rgba_tex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+    glBindImageTexture(1, tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG32F);
+    glDispatchCompute(immature_points.size()/256, 1, 1);
+    TIME_END_GL("copy_to_texture_kernel");
+    std::cout << "finished copying to texture" << '\n';
+
+
+
+
+    //make a buffer of vertices (2D points which correspond to the immature points)
+    GLuint VertexArrayID;
+    glGenVertexArrays(1, &VertexArrayID);
+    glBindVertexArray(VertexArrayID);
+    GLuint vertexbuffer;
+    glGenBuffers(1, &vertexbuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+    glBufferData(GL_ARRAY_BUFFER, immature_points.size()*sizeof(float)*3, NULL, GL_STATIC_DRAW);
+    float* ptr_vert = (float*)glMapBuffer(GL_ARRAY_BUFFER, GL_READ_WRITE);
+    for (size_t i = 0; i < immature_points.size()*3; i=i+3) {
+        int idx_immature_point=i/3;
+        ptr_vert[i]  = lerp(immature_points[idx_immature_point].u, 0, frame_width, -1, 1);  //need to be in range [-1,1]
+        ptr_vert[i+1]= lerp(immature_points[idx_immature_point].v, 0, frame_height, -1, 1);
+        ptr_vert[i+2]= 0.0; //just a negative value so we are sure it's in front of the camera and we can see it
+        // std::cout << "written " << ptr_vert[i] << " " << ptr_vert[i+1] << " " << ptr_vert[i+2] << '\n';
+    }
+    glUnmapBuffer(GL_ARRAY_BUFFER);
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+    glVertexAttribPointer(
+       0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
+       3,                  // size
+       GL_FLOAT,           // type
+       GL_FALSE,           // normalized?
+       0,                  // stride
+       (void*)0            // array buffer offset
+    );
+
+    //start rendering with those points DOES THE UPDATE
+    glUseProgram(m_denoise_fbo_prog_id);
+    TIME_START_GL("iter update");
+    TIME_START_GL("upload_params"); //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
+    glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
+    glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
+    glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_denoise_fbo_prog_id,"params_block"), m_ubo_params );
+    TIME_END_GL("upload_params");
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glViewport(0,0,frame_width,frame_height);
+    glDisable(GL_DEPTH_TEST); //don't perfor depth testing
+    glDepthMask(GL_FALSE);    //don't write to depth buffer
+    glPointSize(1.0);
+    glBindImageTexture(0, fbo_rgba_tex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); //cuz may need to read stuff from the neighbours
+    glBindImageTexture(1, tex.get_tex_id(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_RG32F);
+    glBindFragDataLocation(m_denoise_fbo_prog_id, 0, "color");
+    for (size_t i = 0; i < m_params.denoise_nr_iterations; i++) {
+        glDrawArrays(GL_POINTS, 0, immature_points.size());
+    }
+    TIME_END_GL("iter update");
+
+
+
+
+
+
+    //copy from texture to vector with another compute shader AND APPLIED THE MU DENOISED
+    std::cout << "copying from texture" << '\n';
+    glUseProgram(m_copy_from_texture_fbo_prog_id);
+    glBindImageTexture(0, fbo_rgba_tex, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);  //stores val_mu_denoised mu_head amd p_vec
+    glDispatchCompute(immature_points.size()/256, 1, 1);
+
+    //Read to cpu
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    Point* ptr = (Point*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+    for (size_t i = 0; i < immature_points.size(); i++) {
+        immature_points[i]=ptr[i];
+    }
+
+
+
+    // set back as rendering to screen
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+
+
+
+
+
+
+
+
+
+
+    // //make a 2d texture array of 6 channels (because we need 6 members for each point)
+    // gl::Texture2DArray tex;
+    // tex.set_wrap_mode(GL_CLAMP_TO_EDGE);
+    // tex.set_filter_mode(GL_NEAREST);
+    // tex.allocate_tex_storage_inmutable(GL_R32F, frame_width, frame_height, 6); // 6 channels (because we need 6 members for each immature point)
+    //
+    // //clear the texture to -1 so that we know it's uninitilzied
+    // const float clear=-1;
+    // glClearTexImage(tex.get_tex_id(), 0, GL_RED, GL_FLOAT, &clear);
+    //
+    // //copy the immature points to the texture using a compute shader
+    // glUseProgram(m_copy_to_texture_prog_id);
+    //
+    // //upload to gpu the inmature points
+    // TIME_START_GL("upload_immature_points");
+    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    // glBufferData(GL_SHADER_STORAGE_BUFFER, immature_points.size() * sizeof(Point), immature_points.data(), GL_DYNAMIC_COPY);
+    // TIME_END_GL("upload_immature_points");
+    //
+    //
+    // TIME_START_GL("upload_params"); //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
+    // glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
+    // glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
+    // glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_copy_to_texture_prog_id,"params_block"), m_ubo_params );
+    // TIME_END_GL("upload_params");
+    //
+    //
+    // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_points_gl_buf);
+    // TIME_START_GL("copy_to_texture_kernel");
+    // glBindImageTexture(0, tex.get_tex_id(), 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    // glDispatchCompute(immature_points.size()/256, 1, 1);
+    // TIME_END_GL("copy_to_texture_kernel");
+    //
+    //
+    // //denoise the texture
+    // glUseProgram(m_denoise_texture_prog_id);
+    // glBindImageTexture(0, tex.get_tex_id(), 0, GL_TRUE, 0, GL_READ_WRITE, GL_R32F);
+    //
+    // TIME_START_GL("depth_denoise_kernel");
+    // std::cout << "running for "<< m_params.denoise_nr_iterations << '\n';
+    // for (size_t i = 0; i < m_params.denoise_nr_iterations; i++) {
+    //     // std::cout << "denoise iter " << i << '\n';
+    //     glDispatchCompute(frame_width/32, frame_height/32, 1); //TODO adapt the local size to better suit the gpu
+    //     glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    // }
+    // TIME_END_GL("depth_denoise_kernel");
+    // std::cout << "finished denoise kernel" << '\n';
+    //
+    //
+    // //copy from texture to vector with another compute shader AND APPLIED THE MU DENOISED
+    // glUseProgram(m_copy_from_texture_prog_id);
+    // glDispatchCompute(immature_points.size()/256, 1, 1);
+    //
+    //
+    // //Read to cpu AND APPLY THE DENOISED VALUES
+    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    // Point* ptr = (Point*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+    // for (size_t i = 0; i < immature_points.size(); i++) {
+    //     immature_points[i]=ptr[i];
+    // }
+    // // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+    // // for (auto &point : immature_points) {
+    // //     // std::cout << "changin mu depth from " << point.mu  << " to " << point.mu_denoised << '\n';
+    // //     point.mu=point.mu_denoised;
+    // // }
+
+    TIME_END_GL("denoise_gpu_texture");
 }
 
 void DepthEstimatorGL::compute_depth_and_create_mesh_cpu(){

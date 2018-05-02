@@ -126,6 +126,12 @@ void main(void) {
     ivec2 pos_left=ivec2(  id.x-1, id.y );
     ivec2 pos_above=ivec2(  id.x, id.y+1 );
 
+    //check if the current pixel is valid
+    float check_curr=imageLoad(tex_volume, ivec3(pos_xy, G_VAL_DEPTH) ).x;
+    if(check_curr==-1){
+        return;
+    }
+
     // //debug just write a value of 1 in the mu denoised
     // imageStore(tex_volume, ivec3(pos_xy, VAL_MU_DENOISED_DEPTH) , vec4( 1 ,0,0,0) );
     // return;
