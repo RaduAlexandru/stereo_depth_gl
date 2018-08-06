@@ -173,7 +173,10 @@ void main(void) {
     imageStore(tex_volume, ivec3(pos_xy, P_VEC_DEPTH+1) , vec4(current_p_vec.y,0,0,0) );
 
 
-    // update primal:
+    // memoryBarrier();
+    // barrier();
+    //
+    // // update primal:
     const float old_u = imageLoad(tex_volume, ivec3(pos_xy, VAL_MU_DENOISED_DEPTH) ).x;
     //check left and above for pvec
     vec2 left_p;
@@ -208,6 +211,7 @@ void main(void) {
     float mu_head = val_mu_denoised + params.denoise_theta * (val_mu_denoised - old_u);
     imageStore(tex_volume, ivec3(pos_xy, MU_HEAD_DEPTH) , vec4( mu_head ,0,0,0) );
     imageStore(tex_volume, ivec3(pos_xy, VAL_MU_DENOISED_DEPTH) , vec4( val_mu_denoised ,0,0,0) );
+
 
 
 
