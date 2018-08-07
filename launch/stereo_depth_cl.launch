@@ -1,13 +1,5 @@
 <launch>
 
-  <node pkg="velodyne_pointcloud" type="cloud_node" name="cloud_node" output="screen">
-    <param name="calibration" value="/media/alex/Data/Master/SHK/c_ws/src/velodyne/velodyne_pointcloud/params/VLP16db.yaml" />
-    <param name="organize_cloud" value="true"/>
-    <param name="view_direction" value="3.07"/>
-    <param name="view_width" value="6.031"/>
-  </node>
-
-
     <arg name="path" default="/media/alex/Data/Master/Thesis/data/janis_data/" />
     <arg name="file_1" default="2017-08-24-17-10-10" />
     <arg name="start_time" default="35" />

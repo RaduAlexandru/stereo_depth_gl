@@ -30,4 +30,4 @@ Also it uses organized point clouds processed using the modified [velodyne drive
    [Loguru]: <https://github.com/emilk/loguru>
    [velodyne drivers]: <https://github.com/RaduAlexandru/velodyne_drivers>
 # laser_mesher_rbf
-# stereo_depth_cl
+# stereo_depth_gl

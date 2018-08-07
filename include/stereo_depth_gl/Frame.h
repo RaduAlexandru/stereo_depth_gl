@@ -12,6 +12,7 @@ public:
     cv::Mat rgb_small;
     cv::Mat grad_x;
     cv::Mat grad_y;
+
     cv::Mat classes;
     cv::Mat probs;
     cv::Mat mask;
@@ -23,5 +24,5 @@ public:
     Eigen::Affine3f tf_cam_world;
 
     int cam_id; //id of the camera depending on how many cameras we have (it gos from 0 to 1 in the case of stereo)
-    int frame_id;
+    int frame_idx; //frame idx monotonically increasing
 };

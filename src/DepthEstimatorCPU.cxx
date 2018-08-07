@@ -180,7 +180,7 @@ Mesh DepthEstimatorCPU::compute_depth_simplified(){
 
 
             //point is visible
-            point.last_visible_frame=frames[i].frame_id;
+            point.last_visible_frame=frames[i].frame_idx;
 
             //update inverse depth coordinates for min and max
             point.idepth_min = point.mu + sqrt(point.sigma2);
@@ -410,7 +410,7 @@ std::vector<Frame> DepthEstimatorCPU::loadDataFromICLNUIM ( const std::string & 
          cur_frame.tf_cam_world=pose_cw;
          cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
          cur_frame.K=K;
-         cur_frame.frame_id=imagesRead;
+         cur_frame.frame_idx=imagesRead;
 
          frames.push_back(cur_frame);
          VLOG(1) << "read img " << imagesRead << " " << colorFileName;

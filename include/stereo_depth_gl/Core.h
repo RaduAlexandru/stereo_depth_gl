@@ -33,6 +33,7 @@ class DepthEstimatorGL;
 class Profiler;
 class RosBagPlayer;
 class DataLoader;
+class DataLoaderPNG;
 // class SurfelSplatter;
 namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
 
@@ -75,6 +76,7 @@ public:
     std::shared_ptr<DepthEstimatorGL> m_depth_estimator_cl;
     // std::shared_ptr<DepthEstimatorGL2> m_depth_estimator_gl2;
     std::shared_ptr<DataLoader> m_loader;
+    std::shared_ptr<DataLoaderPNG> m_loader_png;
     std::shared_ptr<RosBagPlayer> m_player;
     // std::shared_ptr<SurfelSplatter> m_splatter;
     emilib::DelayedDirWatcher dir_watcher;

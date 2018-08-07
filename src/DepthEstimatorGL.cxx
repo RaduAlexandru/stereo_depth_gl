@@ -1038,7 +1038,7 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & d
          cur_frame.tf_cam_world=pose_cw;
          cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
          cur_frame.K=K;
-         cur_frame.frame_id=imagesRead;
+         cur_frame.frame_idx=imagesRead;
 
          frames.push_back(cur_frame);
          VLOG(1) << "read img " << imagesRead << " " << colorFileName;
@@ -1157,7 +1157,7 @@ std::vector<Frame> DepthEstimatorGL::loadDataFromRGBD_TUM ( const std::string & 
         cv::Scharr( cur_frame.gray, cur_frame.grad_y, CV_32F, 0, 1);
         cur_frame.tf_cam_world=pose_cw;
         cur_frame.K=K;
-        cur_frame.frame_id=images_read;
+        cur_frame.frame_idx=images_read;
 
         frames.push_back(cur_frame);
 

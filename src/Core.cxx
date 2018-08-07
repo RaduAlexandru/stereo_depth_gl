@@ -13,6 +13,7 @@
 #include "stereo_depth_gl/DepthEstimatorGL.h"
 // #include "stereo_depth_gl/DepthEstimatorGL2.h"
 #include "stereo_depth_gl/DataLoader.h"
+#include "stereo_depth_gl/DataLoaderPNG.h"
 // #include "stereo_depth_gl/SurfelSplatter.h"
 
 //libigl
@@ -44,11 +45,13 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
         m_depth_estimator_cl(new DepthEstimatorGL),
         // m_depth_estimator_gl2(new DepthEstimatorGL2),
         m_loader(new DataLoader),
+        m_loader_png(new DataLoaderPNG),
         // m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
         dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5),
         m_surfel_rendering(false){
 
+    init_params();
     m_view = view;
     m_profiler=profiler;
     m_depth_estimator->m_profiler=profiler;
@@ -60,22 +63,22 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
     // m_depth_estimator_gl2->m_profiler=profiler;
     // m_depth_estimator_gl2->m_view=m_view;
     // m_splatter->m_view=m_view;
-    m_loader->m_profiler=profiler;
-    m_loader->m_player=m_player;
-    for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
-        m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_"+std::to_string(i)+".png", i);
-
-    }
+    // m_loader->m_profiler=profiler;
+    // m_loader->m_player=m_player;
+    // for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
+    //     m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_"+std::to_string(i)+".png", i);
+    //
+    // }
     // m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_1.png", 1);
     m_scene.m_view=m_view;
 
-    init_params();
 
 
-    m_player->play(m_bag_args); //the bag seems to need to be started from the main thread therwise it segment faults when starting playing..
+
+    // m_player->play(m_bag_args); //the bag seems to need to be started from the main thread therwise it segment faults when starting playing..
 
 
-     boost::thread t(&DataLoader::load_data, m_loader);
+     // boost::thread t(&DataLoader::load_data, m_loader);
 
      // m_depth_estimator->run_speed_test();
 
@@ -240,60 +243,6 @@ void Core::init_params() {
     m_bag_args = getParamElseThrow<std::string>(private_nh, "bag_args");
 
     //TODO read all the other parameters from the launch file
-}
-
-
-void Core::display_frame(const Frame& frame){
-    int max_size=400;
-
-    //resize to a reasonable size
-    cv::Mat rgb_vis, classes_vis, probs_vis;
-    double scale = static_cast<double>(max_size) / std::max(frame.rgb.rows, frame.rgb.cols);
-    cv::Size size(frame.rgb.cols*scale, frame.rgb.rows*scale);
-    cv::resize(frame.rgb, rgb_vis, size );
-    cv::resize(frame.classes_original_size, classes_vis, size, 0, 0, cv::INTER_NEAREST );
-    cv::resize(frame.probs_original_size, probs_vis, size, 0, 0, cv::INTER_NEAREST);
-
-    //color them
-    cv::Mat classes_vis_colored;
-
-
-    //display
-    cv::imshow("rgb", rgb_vis);
-    // cv::imshow("probs", probs_vis);
-    cv::waitKey(10);
-
-
-}
-
-
-
-Mesh Core::split_mesh_from_uv(const Mesh& mesh, const Mesh& uv_mesh){
-    Mesh mesh_with_seams;
-
-    Eigen::MatrixXd V_new(uv_mesh.V.rows(),3);  //need to duplicate points to account for the seams int the uv
-    for (size_t i = 0; i < uv_mesh.V.rows(); i++) {
-        int original_point_idx = (int)std::round(uv_mesh.V(i,2));
-        V_new.row(i) = mesh.V.row(original_point_idx);
-    }
-    //also the faces
-    Eigen::MatrixXi F_new=uv_mesh.F;
-
-    //get the uv map
-    Eigen::MatrixXd UV= uv_mesh.V.leftCols(2);
-
-    // VLOG(1) << "min max x " << UV.col(0).minCoeff() << " " << UV.col(0).maxCoeff();
-    // VLOG(1) << "min max y " << UV.col(1).minCoeff() << " " << UV.col(1).maxCoeff();
-    UV.array()/=UV.maxCoeff();
-    // UV.array()/=10.0f;
-
-
-    mesh_with_seams.V=V_new;
-    mesh_with_seams.F=F_new;
-    mesh_with_seams.UV=UV;
-
-    return mesh_with_seams;
-
 }
 
 Mesh Core::read_mesh_from_file(std::string file_path) {
