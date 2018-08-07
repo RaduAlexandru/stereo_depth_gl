@@ -27,9 +27,9 @@
 #include <loguru.hpp>
 
 //My stuff
-#include "stereo_depth_cl/Gui.h"
-#include "stereo_depth_cl/Core.h"
-#include "stereo_depth_cl/Profiler.h"
+#include "stereo_depth_gl/Gui.h"
+#include "stereo_depth_gl/Core.h"
+#include "stereo_depth_gl/Profiler.h"
 
 void switch_callbacks(
         std::shared_ptr<igl::opengl::glfw::Viewer> view); //Need to switch the callbacks so that the input goes to either libigl or imgui
@@ -73,11 +73,11 @@ int main(int argc, char *argv[]) {
 
         gui->update();
         core->update();
-//        if (core->m_viewer_initialized) {
-//            view->draw();
-//        } else {
-//            view->core.clear_framebuffers(); //if there is no mesh to draw then just put the color of the background
-//        }
+        if (core->m_viewer_initialized) {
+           view->draw();
+        } else {
+           view->core.clear_framebuffers(); //if there is no mesh to draw then just put the color of the background
+        }
 
 
 

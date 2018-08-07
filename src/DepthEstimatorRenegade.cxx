@@ -1,4 +1,4 @@
-#include "stereo_depth_cl/DepthEstimatorRenegade.h"
+#include "stereo_depth_gl/DepthEstimatorRenegade.h"
 
 //c++
 #include <cmath>
@@ -9,8 +9,8 @@
 #include <fstream>
 
 //My stuff
-#include "stereo_depth_cl/Profiler.h"
-#include "stereo_depth_cl/MiscUtils.h"
+#include "stereo_depth_gl/Profiler.h"
+#include "stereo_depth_gl/MiscUtils.h"
 
 //Libigl
 #include <igl/opengl/glfw/Viewer.h>

@@ -1,4 +1,4 @@
-#include "stereo_depth_cl/DepthEstimatorCPU.h"
+#include "stereo_depth_gl/DepthEstimatorCPU.h"
 
 //c++
 #include <cmath>
@@ -8,8 +8,8 @@
 #include <cstdio>
 
 //My stuff
-#include "stereo_depth_cl/Profiler.h"
-#include "stereo_depth_cl/MiscUtils.h"
+#include "stereo_depth_gl/Profiler.h"
+#include "stereo_depth_gl/MiscUtils.h"
 #include "cv_interpolation.h"
 
 //Libigl
@@ -52,7 +52,7 @@ DepthEstimatorCPU::DepthEstimatorCPU():
         {
 
     // init_opencl();
-    std::string pattern_filepath="/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/pattern_1.png";
+    std::string pattern_filepath="/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/pattern_1.png";
     m_pattern.init_pattern(pattern_filepath);
 
     //sanity check the pattern

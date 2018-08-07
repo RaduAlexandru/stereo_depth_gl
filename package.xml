@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>stereo_depth_cl</name>
+  <name>stereo_depth_gl</name>
   <version>0.0.0</version>
   <description>Node to create textured mesh from the a series of RGB images of the scene.</description>
 

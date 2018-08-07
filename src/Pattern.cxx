@@ -1,10 +1,10 @@
-#include "stereo_depth_cl/Pattern.h"
+#include "stereo_depth_gl/Pattern.h"
 
 //c++
 #include <iostream>
 
 //My stuff
-#include "stereo_depth_cl/MiscUtils.h"
+#include "stereo_depth_gl/MiscUtils.h"
 
 //loguru
 #include <loguru.hpp>

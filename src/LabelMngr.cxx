@@ -1,4 +1,4 @@
-#include "stereo_depth_cl/LabelMngr.h"
+#include "stereo_depth_gl/LabelMngr.h"
 
 //c++
 #include <iostream>

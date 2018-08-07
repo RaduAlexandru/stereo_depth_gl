@@ -1,4 +1,4 @@
-#include "stereo_depth_cl/Gui.h"
+#include "stereo_depth_gl/Gui.h"
 
 //c++
 #include <iostream>
@@ -6,12 +6,12 @@
 #include <iomanip> // setprecision
 
 //My stuff
-#include "stereo_depth_cl/Core.h"
-#include "stereo_depth_cl/Profiler.h"
-#include "stereo_depth_cl/RosBagPlayer.h"
-#include "stereo_depth_cl/MiscUtils.h"
-#include "stereo_depth_cl/SurfelSplatter.h"
-#include "stereo_depth_cl/DepthEstimatorGL.h"
+#include "stereo_depth_gl/Core.h"
+#include "stereo_depth_gl/Profiler.h"
+#include "stereo_depth_gl/RosBagPlayer.h"
+#include "stereo_depth_gl/MiscUtils.h"
+// #include "stereo_depth_gl/SurfelSplatter.h"
+#include "stereo_depth_gl/DepthEstimatorGL.h"
 
 //imgui
 #include "imgui_impl_glfw_gl3.h"
@@ -144,9 +144,9 @@ void Gui::update() {
 
 
 
-    if (ImGui::CollapsingHeader("Surfel Splatter")) {
-        ImGui::PlotLines("Point cloud to mesh distances", m_core->m_splatter->m_nr_points_in_bucket.data(), m_core->m_splatter->m_nr_points_in_bucket.size());
-    }
+    // if (ImGui::CollapsingHeader("Surfel Splatter")) {
+    //     ImGui::PlotLines("Point cloud to mesh distances", m_core->m_splatter->m_nr_points_in_bucket.data(), m_core->m_splatter->m_nr_points_in_bucket.size());
+    // }
 
 
     if (ImGui::CollapsingHeader("Depth Estimation")) {

@@ -11,7 +11,7 @@
     <arg name="path" default="/media/alex/Data/Master/Thesis/data/janis_data/" />
     <arg name="file_1" default="2017-08-24-17-10-10" />
     <arg name="start_time" default="35" />
-  <node pkg="stereo_depth_cl" type="stereo_depth_cl" name="stereo_depth_cl" output="screen">
+  <node pkg="stereo_depth_gl" type="stereo_depth_gl" name="stereo_depth_gl" output="screen">
     <param name="world_frame" value="world" />
     <param name="nr_cams" value="1" />
 

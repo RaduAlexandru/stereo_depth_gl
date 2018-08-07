@@ -9,10 +9,10 @@
 #include <opencv2/highgui/highgui.hpp>
 
 //My stuff
-#include "stereo_depth_cl/Mesh.h"
-#include "stereo_depth_cl/Scene.h"
-#include "stereo_depth_cl/DataLoader.h"
-#include "stereo_depth_cl/LabelMngr.h"
+#include "stereo_depth_gl/Mesh.h"
+#include "stereo_depth_gl/Scene.h"
+#include "stereo_depth_gl/DataLoader.h"
+#include "stereo_depth_gl/LabelMngr.h"
 #include "Texture2D.h"
 #include "Texture2DArray.h"
 

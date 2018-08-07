@@ -71,6 +71,10 @@ namespace gl{
 
         //allocate inmutable texture storage
         void allocate_tex_storage_inmutable(GLenum internal_format,  GLsizei width, GLsizei height){
+            std::cout << "we are binding" << '\n';
+            glBindTexture(GL_TEXTURE_2D, m_tex_id);
+            std::cout << "m_tex_id " << m_tex_id << '\n';
+            std::cout << "we are allocating widthxheight" << width << " " << height << " with format " <<  internal_format << '\n';
             glTexStorage2D(GL_TEXTURE_2D, 1, internal_format, width, height);
             m_tex_storage_initialized=true;
         }

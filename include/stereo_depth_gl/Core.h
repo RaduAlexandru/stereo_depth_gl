@@ -7,18 +7,18 @@
 #include <memory>
 
 //My stuff
-#include "stereo_depth_cl/Mesh.h"
-#include "stereo_depth_cl/Scene.h"
-#include "stereo_depth_cl/Frame.h"
+#include "stereo_depth_gl/Mesh.h"
+#include "stereo_depth_gl/Scene.h"
+#include "stereo_depth_gl/Frame.h"
 
 
 //ROS
 #include <ros/ros.h>
-#include <pcl_ros/point_cloud.h>
-#include <sensor_msgs/PointCloud2.h>
+// #include <pcl_ros/point_cloud.h>
+// #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/CompressedImage.h>
-#include "stereo_depth_cl/point_types.h"
+// #include "stereo_depth_gl/point_types.h"
 
 //dir watcher
 #include "dir_watcher.hpp"
@@ -33,7 +33,7 @@ class DepthEstimatorGL;
 class Profiler;
 class RosBagPlayer;
 class DataLoader;
-class SurfelSplatter;
+// class SurfelSplatter;
 namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
 
 
@@ -72,11 +72,11 @@ public:
     std::shared_ptr<Profiler> m_profiler;
     std::shared_ptr<DepthEstimatorCPU> m_depth_estimator; //does a cpu implementation
     std::shared_ptr<DepthEstimatorRenegade> m_depth_estimator_renegade; //just reads the file written by renegade
-    std::shared_ptr<DepthEstimatorGL> m_depth_estimator_cl;  
+    std::shared_ptr<DepthEstimatorGL> m_depth_estimator_cl;
     // std::shared_ptr<DepthEstimatorGL2> m_depth_estimator_gl2;
     std::shared_ptr<DataLoader> m_loader;
     std::shared_ptr<RosBagPlayer> m_player;
-    std::shared_ptr<SurfelSplatter> m_splatter;
+    // std::shared_ptr<SurfelSplatter> m_splatter;
     emilib::DelayedDirWatcher dir_watcher;
 
 

@@ -4,16 +4,16 @@
 #include <Eigen/Dense>
 
 //My stuff
-#include "stereo_depth_cl/Core.h"
-#include "stereo_depth_cl/MiscUtils.h"
-#include "stereo_depth_cl/Profiler.h"
-#include "stereo_depth_cl/RosBagPlayer.h"
-#include "stereo_depth_cl/DepthEstimatorCPU.h"
-#include "stereo_depth_cl/DepthEstimatorRenegade.h"
-#include "stereo_depth_cl/DepthEstimatorGL.h"
-// #include "stereo_depth_cl/DepthEstimatorGL2.h"
-#include "stereo_depth_cl/DataLoader.h"
-#include "stereo_depth_cl/SurfelSplatter.h"
+#include "stereo_depth_gl/Core.h"
+#include "stereo_depth_gl/MiscUtils.h"
+#include "stereo_depth_gl/Profiler.h"
+#include "stereo_depth_gl/RosBagPlayer.h"
+#include "stereo_depth_gl/DepthEstimatorCPU.h"
+#include "stereo_depth_gl/DepthEstimatorRenegade.h"
+#include "stereo_depth_gl/DepthEstimatorGL.h"
+// #include "stereo_depth_gl/DepthEstimatorGL2.h"
+#include "stereo_depth_gl/DataLoader.h"
+// #include "stereo_depth_gl/SurfelSplatter.h"
 
 //libigl
 #include <igl/opengl/glfw/Viewer.h>
@@ -26,7 +26,7 @@
 // #include <igl/embree/EmbreeIntersector.h>
 
 //ROS
-#include "stereo_depth_cl/RosTools.h"
+#include "stereo_depth_gl/RosTools.h"
 
 //gl
 #include "UtilsGL.h"
@@ -44,9 +44,9 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
         m_depth_estimator_cl(new DepthEstimatorGL),
         // m_depth_estimator_gl2(new DepthEstimatorGL2),
         m_loader(new DataLoader),
-        m_splatter(new SurfelSplatter),
+        // m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
-        dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/",5),
+        dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5),
         m_surfel_rendering(false){
 
     m_view = view;
@@ -59,14 +59,14 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
     m_depth_estimator_cl->m_view=m_view;
     // m_depth_estimator_gl2->m_profiler=profiler;
     // m_depth_estimator_gl2->m_view=m_view;
-    m_splatter->m_view=m_view;
+    // m_splatter->m_view=m_view;
     m_loader->m_profiler=profiler;
     m_loader->m_player=m_player;
     for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
-        m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/mask_cam_"+std::to_string(i)+".png", i);
+        m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_"+std::to_string(i)+".png", i);
 
     }
-    // m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/mask_cam_1.png", 1);
+    // m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_1.png", 1);
     m_scene.m_view=m_view;
 
     init_params();
@@ -209,22 +209,22 @@ void Core::update() {
     TIME_END("set_mesh");
 
 
-    if(m_player->is_paused() &&  m_player->m_player_should_continue_after_step){
-        m_player->m_player_should_do_one_step=true; //so that when it starts the callback it puts the bag back into pause
-        m_player->pause(); //starts the bag
-    }
+    // if(m_player->is_paused() &&  m_player->m_player_should_continue_after_step){
+    //     m_player->m_player_should_do_one_step=true; //so that when it starts the callback it puts the bag back into pause
+    //     m_player->pause(); //starts the bag
+    // }
 
 
     //render
-    if(m_surfel_rendering){
-        m_splatter->render(m_scene.get_mesh_with_name("few_scans"));
-    }else{
-        if (m_viewer_initialized) {
-            m_view->draw();
-        } else {
-            m_view->core.clear_framebuffers(); //if there is no mesh to draw then just put the color of the background
-        }
-    }
+    // if(m_surfel_rendering){
+    //     m_splatter->render(m_scene.get_mesh_with_name("few_scans"));
+    // }else{
+    // if (m_viewer_initialized) {
+    //     m_view->draw();
+    // } else {
+    //     m_view->core.clear_framebuffers(); //if there is no mesh to draw then just put the color of the background
+    // }
+    // }
 
 
 }

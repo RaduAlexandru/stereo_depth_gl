@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stereo_depth_cl/Mesh.h"
+#include "stereo_depth_gl/Mesh.h"
 
 #include <vector>
 #include <memory>

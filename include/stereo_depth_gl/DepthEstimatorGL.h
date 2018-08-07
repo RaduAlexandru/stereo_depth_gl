@@ -9,10 +9,10 @@
 
 
 //My stuff
-#include "stereo_depth_cl/Mesh.h"
-#include "stereo_depth_cl/Scene.h"
-#include "stereo_depth_cl/DataLoader.h"
-#include "stereo_depth_cl/Pattern.h"
+#include "stereo_depth_gl/Mesh.h"
+#include "stereo_depth_gl/Scene.h"
+#include "stereo_depth_gl/DataLoader.h"
+#include "stereo_depth_gl/Pattern.h"
 #include "Texture2D.h"
 
 //ceres
@@ -216,6 +216,7 @@ public:
 
     //params
     bool m_gl_profiling_enabled;
+    bool m_debug_enabled;
     bool m_show_images;
     bool m_use_rgbd_tum;
     int m_start_frame;
@@ -261,6 +262,7 @@ private:
     TIME_END_2(name,m_profiler);
 
 #define TIME_START_GL(name)\
+    if (m_debug_enabled) std::cout<<name<<std::endl;\
     if (m_gl_profiling_enabled) glFinish();\
     TIME_START_2(name,m_profiler);
 

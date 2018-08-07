@@ -1,4 +1,4 @@
-#include "stereo_depth_cl/DepthEstimatorGL.h"
+#include "stereo_depth_gl/DepthEstimatorGL.h"
 
 //c++
 #include <cmath>
@@ -10,8 +10,8 @@
 #include <sstream>
 
 //My stuff
-#include "stereo_depth_cl/Profiler.h"
-#include "stereo_depth_cl/MiscUtils.h"
+#include "stereo_depth_gl/Profiler.h"
+#include "stereo_depth_gl/MiscUtils.h"
 #include "cv_interpolation.h"
 #include "UtilsGL.h"
 #include "Shader.h"
@@ -35,14 +35,15 @@
 DepthEstimatorGL::DepthEstimatorGL():
         m_scene_is_modified(false),
         m_gl_profiling_enabled(true),
+        m_debug_enabled(false),
         m_show_images(false),
-        m_use_rgbd_tum(true),
+        m_use_rgbd_tum(false),
         m_start_frame(0),
         m_mean_starting_depth(4.0)
         {
 
     init_opengl();
-    std::string pattern_filepath="/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/pattern_1.png";
+    std::string pattern_filepath="/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/pattern_1.png";
     m_pattern.init_pattern(pattern_filepath);
 
     // //sanity check the pattern
@@ -81,21 +82,21 @@ void DepthEstimatorGL::init_opengl(){
 
 void DepthEstimatorGL::compile_shaders(){
 
-    m_update_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_update_depth.glsl");
+    m_update_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
 
-    m_denoise_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/update_TVL1_primal_dual.glsl");
+    m_denoise_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/update_TVL1_primal_dual.glsl");
 
-    m_copy_to_texture_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_copy_to_texture.glsl");
+    m_copy_to_texture_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_copy_to_texture.glsl");
 
-    m_denoise_texture_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/update_TVL1_primal_dual_texture.glsl");
+    m_denoise_texture_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/update_TVL1_primal_dual_texture.glsl");
 
-    m_copy_from_texture_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/copy_from_texture.glsl");
+    m_copy_from_texture_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/copy_from_texture.glsl");
 
-    m_copy_to_texture_fbo_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_copy_to_texture_fbo.glsl");
+    m_copy_to_texture_fbo_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_copy_to_texture_fbo.glsl");
 
-    m_copy_from_texture_fbo_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/copy_from_texture_fbo.glsl");
+    m_copy_from_texture_fbo_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/copy_from_texture_fbo.glsl");
 
-    m_denoise_fbo_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/update_TVL1_primal_dual_fbo_vert.glsl", "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/update_TVL1_primal_dual_fbo_frag.glsl");
+    m_denoise_fbo_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/update_TVL1_primal_dual_fbo_vert.glsl", "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/update_TVL1_primal_dual_fbo_frag.glsl");
 
 }
 
@@ -168,7 +169,7 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
         //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
         glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
         glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
-        glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_update_depth_prog_id,"params_block"), m_ubo_params );
+        GL_C( glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_update_depth_prog_id,"params_block"), m_ubo_params ) );
         TIME_END_GL("upload_params");
 
         // //upload the image
@@ -211,10 +212,13 @@ void DepthEstimatorGL::compute_depth_and_create_mesh(){
         cv::Mat img_with_gradients;
         cv::merge(channels, img_with_gradients);
 
+
         int size_bytes=img_with_gradients.step[0] * img_with_gradients.rows; //allocate 4 channels because gpu likes multiples of 4
         if(!m_cur_frame.get_tex_storage_initialized()){
-            m_cur_frame.allocate_tex_storage_inmutable(GL_RGBA32F,img_with_gradients.cols, img_with_gradients.rows);
+            std::cout << "allocating " << img_with_gradients.cols << "x" << img_with_gradients.rows << '\n';
+            GL_C( m_cur_frame.allocate_tex_storage_inmutable(GL_RGBA32F,img_with_gradients.cols, img_with_gradients.rows) );
         }
+        std::cout << "uploading" << '\n';
         m_cur_frame.upload_without_pbo(0,0,0, img_with_gradients.cols, img_with_gradients.rows, GL_RGBA, GL_FLOAT, img_with_gradients.ptr());
         TIME_END_GL("upload_gray_img");
 
@@ -1192,7 +1196,7 @@ void DepthEstimatorGL::undistort_image(cv::Mat gray_img, const Eigen::Matrix3f K
 }
 
 void DepthEstimatorGL::save_depth_image(){
-    std::ofstream f ( "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/results/depth_image.txt" );
+    std::ofstream f ( "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/results/depth_image.txt" );
     for ( const Point & point : m_points ){
         const float idepth = point.mu;
         f << point.u << " " << point.v << " " << idepth << " " << std::endl;

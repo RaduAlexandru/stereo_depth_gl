@@ -1,10 +1,10 @@
-#include "stereo_depth_cl/Texturer.h"
+#include "stereo_depth_gl/Texturer.h"
 
 
 //My stuff
-#include "stereo_depth_cl/Profiler.h"
-#include "stereo_depth_cl/MiscUtils.h"
-#include "stereo_depth_cl/LabelMngr.h"
+#include "stereo_depth_gl/Profiler.h"
+#include "stereo_depth_gl/MiscUtils.h"
+#include "stereo_depth_gl/LabelMngr.h"
 #include "UtilsGL.h"
 #include "Shader.h"
 
@@ -51,7 +51,7 @@ Texturer::Texturer():
 
         {
 
-        m_label_mngr.init("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/classes.txt");
+        m_label_mngr.init("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/classes.txt");
 
         m_bake_view_size=std::max(m_rgb_global_tex_size,m_semantics_global_tex_size);
 }
@@ -381,8 +381,8 @@ void Texturer::init_opengl(){
     m_classes_probs_local_tex.set_filter_mode(GL_NEAREST);
 
     //global textures
-    cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/solid_aqua.jpg");
-    // cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/UVMap.png");
+    cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/solid_aqua.jpg");
+    // cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/UVMap.png");
     cv::Size size(m_rgb_global_tex_size, m_rgb_global_tex_size);
     cv::resize(dummy_img, dummy_img, size);
     //needs to be an image with alpha channel becaset image_load and image_store only work with that kind of data
@@ -512,9 +512,9 @@ void Texturer::init_opengl(){
 
 
     //default_classes_colored
-    // cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/muse_uv_01-01-1024x1024.jpg");
-    // cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/solid_aqua.jpg");
-    // // cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/data/UVMap.png");
+    // cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/muse_uv_01-01-1024x1024.jpg");
+    // cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/solid_aqua.jpg");
+    // // cv::Mat dummy_img=cv::imread("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/UVMap.png");
     // cv::Size size(m_tex_size, m_tex_size);
     // cv::resize(dummy_img, dummy_img, size);
     // //needs to be an image with alpha channel becaset image_load and image_store only work with that kind of data
@@ -688,24 +688,24 @@ void Texturer::init_fbo_uv_baking(const int width, const int height ){
 }
 
 void Texturer::compile_shaders(){
-    m_light_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/light_vert_shader.glsl", "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/light_frag_shader.glsl");
+    m_light_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/light_vert_shader.glsl", "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/light_frag_shader.glsl");
     // m_light_mvp_id=glGetUniformLocation(m_light_prog_id, "MVP");
 
-    m_uv_fuse_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/uv_fuse_vert_shader.glsl", "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/uv_fuse_frag_shader.glsl");
+    m_uv_fuse_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/uv_fuse_vert_shader.glsl", "/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/uv_fuse_frag_shader.glsl");
     glProgramUniform1i(m_uv_fuse_prog_id, glGetUniformLocation(m_uv_fuse_prog_id, "rgb_global_tex_size"), m_rgb_global_tex_size);
     glProgramUniform1i(m_uv_fuse_prog_id, glGetUniformLocation(m_uv_fuse_prog_id, "semantics_global_tex_size"), m_semantics_global_tex_size);
     glProgramUniform1i(m_uv_fuse_prog_id, glGetUniformLocation(m_uv_fuse_prog_id, "page_size_x"), m_page_size.x);
     glProgramUniform1i(m_uv_fuse_prog_id, glGetUniformLocation(m_uv_fuse_prog_id, "page_size_y"), m_page_size.y);
 
-    m_normalize_argmax_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_normalize_argmax.glsl");
+    m_normalize_argmax_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_normalize_argmax.glsl");
     glProgramUniform1i(m_normalize_argmax_prog_id, glGetUniformLocation(m_normalize_argmax_prog_id, "page_size_x"), m_page_size.x);
     glProgramUniform1i(m_normalize_argmax_prog_id, glGetUniformLocation(m_normalize_argmax_prog_id, "page_size_y"), m_page_size.y);
 
-    m_fill_rgb_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_fill_rgb.glsl");
+    m_fill_rgb_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_fill_rgb.glsl");
 
-    m_color_map_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_color_map.glsl");
+    m_color_map_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_color_map.glsl");
 
-    m_prob_one_class_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_cl/shaders/compute_one_class_prob.glsl");
+    m_prob_one_class_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_one_class_prob.glsl");
     glProgramUniform1i(m_prob_one_class_prog_id, glGetUniformLocation(m_prob_one_class_prog_id, "page_size_x"), m_page_size.x);
     glProgramUniform1i(m_prob_one_class_prog_id, glGetUniformLocation(m_prob_one_class_prog_id, "page_size_y"), m_page_size.y);
 

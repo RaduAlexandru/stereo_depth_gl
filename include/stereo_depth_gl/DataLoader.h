@@ -21,8 +21,8 @@
 #include <tf/transform_listener.h>
 
 //My stuff
-#include "stereo_depth_cl/Frame.h"
-#include "stereo_depth_cl/ringbuffer.h"
+#include "stereo_depth_gl/Frame.h"
+#include "stereo_depth_gl/ringbuffer.h"
 
 //GL
 

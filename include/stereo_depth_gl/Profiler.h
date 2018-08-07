@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "stereo_depth_cl/scope_exit.h"
-#include "stereo_depth_cl/ringbuffer.h"
+#include "stereo_depth_gl/scope_exit.h"
+#include "stereo_depth_gl/ringbuffer.h"
 
 
 class Timer{

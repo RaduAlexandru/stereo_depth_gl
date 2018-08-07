@@ -10,7 +10,7 @@
 #define LOGURU_REPLACE_GLOG 1
 #include <loguru.hpp>
 
-#include "stereo_depth_cl/MiscUtils.h"
+#include "stereo_depth_gl/MiscUtils.h"
 
 #define HORIZONTAL_FOV 360.0
 #define VERTICAL_FOV 30.0

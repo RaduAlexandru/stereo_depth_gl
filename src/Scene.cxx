@@ -1,9 +1,9 @@
-#include "stereo_depth_cl/Scene.h"
+#include "stereo_depth_gl/Scene.h"
 
 //c++
 
 //my stuff
-#include "stereo_depth_cl/MiscUtils.h"
+#include "stereo_depth_gl/MiscUtils.h"
 
 //loguru
 #include <loguru.hpp>

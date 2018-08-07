@@ -9,9 +9,9 @@
 
 
 //My stuff
-#include "stereo_depth_cl/Mesh.h"
-#include "stereo_depth_cl/Scene.h"
-#include "stereo_depth_cl/DataLoader.h"
+#include "stereo_depth_gl/Mesh.h"
+#include "stereo_depth_gl/Scene.h"
+#include "stereo_depth_gl/DataLoader.h"
 
 
 //forward declarations

@@ -1,4 +1,4 @@
-#include "stereo_depth_cl/DataLoader.h"
+#include "stereo_depth_gl/DataLoader.h"
 
 //c++
 #include <iostream>
@@ -11,15 +11,15 @@
 #include <loguru.hpp>
 
 //My stuff
-#include "stereo_depth_cl/Profiler.h"
-#include "stereo_depth_cl/RosBagPlayer.h"
-#include "stereo_depth_cl/MiscUtils.h"
+#include "stereo_depth_gl/Profiler.h"
+#include "stereo_depth_gl/RosBagPlayer.h"
+#include "stereo_depth_gl/MiscUtils.h"
 
 //cv
 #include <cv_bridge/cv_bridge.h>
 
 //ros
-#include "stereo_depth_cl/RosTools.h"
+#include "stereo_depth_gl/RosTools.h"
 
 //boost
 #include <boost/bind.hpp>

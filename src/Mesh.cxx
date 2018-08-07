@@ -1,11 +1,11 @@
-#include "stereo_depth_cl/Mesh.h"
+#include "stereo_depth_gl/Mesh.h"
 
 //c++
 #include <iostream>
 #include <algorithm>
 
 //my stuff
-#include "stereo_depth_cl/MiscUtils.h"
+#include "stereo_depth_gl/MiscUtils.h"
 
 
 Mesh::Mesh():

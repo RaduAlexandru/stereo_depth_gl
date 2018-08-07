@@ -1,4 +1,4 @@
-#include "stereo_depth_cl/RosBagPlayer.h"
+#include "stereo_depth_gl/RosBagPlayer.h"
 
 //c++
 #include<iostream>
