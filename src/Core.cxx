@@ -36,6 +36,12 @@
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
 
+// //configuru
+// #define CONFIGURU_WITH_EIGEN 1
+// #define CONFIGURU_IMPLICIT_CONVERSIONS 1
+// #include <configuru.hpp>
+using namespace configuru;
+
 
 Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Profiler> profiler) :
         m_viewer_initialized(false),
@@ -234,13 +240,15 @@ void Core::update() {
 
 
 void Core::init_params() {
-    //read the parameters from the launch file
+    //get the config filename
     ros::NodeHandle private_nh("~");
+    std::string config_file= getParamElseThrow<std::string>(private_nh, "config_file");
 
-    //verbosity
-    loguru::g_stderr_verbosity = getParamElseDefault<int>(private_nh, "loguru_verbosity", -1);
+    //read all the parameters
+    Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
+    Config core_cfg = cfg["core"];
+    loguru::g_stderr_verbosity = core_cfg["loguru_verbosity"];
 
-    m_bag_args = getParamElseThrow<std::string>(private_nh, "bag_args");
 
     //TODO read all the other parameters from the launch file
 }

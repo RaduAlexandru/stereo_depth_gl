@@ -23,11 +23,10 @@
 //ros
 #include "stereo_depth_gl/RosTools.h"
 
-//configuru
-#define CONFIGURU_IMPLEMENTATION 1
-#define CONFIGURU_WITH_EIGEN 1
-#define CONFIGURU_IMPLICIT_CONVERSIONS 1
-#include <configuru.hpp>
+// //configuru
+// #define CONFIGURU_WITH_EIGEN 1
+// #define CONFIGURU_IMPLICIT_CONVERSIONS 1
+// #include <configuru.hpp>
 using namespace configuru;
 
 
@@ -36,7 +35,7 @@ using namespace configuru;
 
 DataLoaderPNG::DataLoaderPNG(){
 
-    // init_params();
+    init_params();
     // init_data_reading();
     // read_pose_file();
     // create_transformation_matrices();
@@ -52,46 +51,46 @@ DataLoaderPNG::~DataLoaderPNG(){
 }
 
 void DataLoaderPNG::init_params(){
+    //get the config filename
     ros::NodeHandle private_nh("~");
+    std::string config_file= getParamElseThrow<std::string>(private_nh, "config_file");
 
-    //params
-    // m_do_live_segmentation=getParamElseThrow<bool>(private_nh, "do_live_segmentation");
+    //read all the parameters
+    Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
+    Config loader_config=cfg["loader"];
+    m_nr_cams = loader_config["nr_cams"];
 
 
-    //m_tf_worldGL_worldROS trasofmr params
-    m_tf_worldGL_worldROS_angle=getParamElseThrow<float>(private_nh, "tf_worldGL_worldROS_angle");
-    m_tf_worldGL_worldROS_axis=getParamElseThrow<std::string>(private_nh, "tf_worldGL_worldROS_axis");
-
-    //input for the images
-    m_rgb_subsample_factor=getParamElseThrow<float>(private_nh, "rgb_subsample_factor");
-    m_pose_file=getParamElseThrow<std::string>(private_nh, "pose_file");
-    m_nr_cams = getParamElseThrow<int>(private_nh, "nr_cams");
-    m_idx_img_to_read_per_cam.resize(m_nr_cams,0);
-    m_rgb_filenames_per_cam.resize(m_nr_cams);
-    // m_frames_buffer_per_cam.resize(m_nr_cams, moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
-    for (size_t i = 0; i < m_nr_cams; i++) {
-        m_rgb_imgs_path_per_cam.push_back( getParamElseThrow<std::string>(private_nh, "rgb_path_cam_"+std::to_string(i)  ) );
-        m_labels_imgs_path_per_cam.push_back( getParamElseThrow<std::string>(private_nh, "labels_path_cam_"+std::to_string(i)  ) );
-
-        // //get K
-        // std::string intrinsics_string=getParamElseThrow<std::string>(private_nh, "intrinsics_cam_"+std::to_string(i)  );
-        // std::vector<std::string> intrinsics_split=split(intrinsics_string," ");
-        // Eigen::Matrix3f K;
-        // K.setIdentity();
-        // K(0,0)=std::stof(intrinsics_split[0]); //fx
-        // K(1,1)=std::stof(intrinsics_split[1]); //fy
-        // K(0,2)=std::stof(intrinsics_split[2]); // cx
-        // K(1,2)=std::stof(intrinsics_split[3]); //cy
-        // K*=1.0/m_rgb_subsample_factor;
-        // m_intrinsics_per_cam.push_back(K);
-
-        m_frames_buffer_per_cam.push_back(moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
-    }
-
-    //params
-    m_imgs_to_skip=getParamElseDefault<int>(private_nh, "imgs_to_skip", 0);
-    m_nr_images_to_read=getParamElseThrow<int>(private_nh, "nr_images_to_read");
-    std::cout << "m_img_to_skip " << m_imgs_to_skip << '\n';
+    // //input for the images
+    // m_rgb_subsample_factor=getParamElseThrow<float>(private_nh, "rgb_subsample_factor");
+    // m_pose_file=getParamElseThrow<std::string>(private_nh, "pose_file");
+    // m_nr_cams = getParamElseThrow<int>(private_nh, "nr_cams");
+    // m_idx_img_to_read_per_cam.resize(m_nr_cams,0);
+    // m_rgb_filenames_per_cam.resize(m_nr_cams);
+    // // m_frames_buffer_per_cam.resize(m_nr_cams, moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
+    // for (size_t i = 0; i < m_nr_cams; i++) {
+    //     m_rgb_imgs_path_per_cam.push_back( getParamElseThrow<std::string>(private_nh, "rgb_path_cam_"+std::to_string(i)  ) );
+    //     m_labels_imgs_path_per_cam.push_back( getParamElseThrow<std::string>(private_nh, "labels_path_cam_"+std::to_string(i)  ) );
+    //
+    //     // //get K
+    //     // std::string intrinsics_string=getParamElseThrow<std::string>(private_nh, "intrinsics_cam_"+std::to_string(i)  );
+    //     // std::vector<std::string> intrinsics_split=split(intrinsics_string," ");
+    //     // Eigen::Matrix3f K;
+    //     // K.setIdentity();
+    //     // K(0,0)=std::stof(intrinsics_split[0]); //fx
+    //     // K(1,1)=std::stof(intrinsics_split[1]); //fy
+    //     // K(0,2)=std::stof(intrinsics_split[2]); // cx
+    //     // K(1,2)=std::stof(intrinsics_split[3]); //cy
+    //     // K*=1.0/m_rgb_subsample_factor;
+    //     // m_intrinsics_per_cam.push_back(K);
+    //
+    //     m_frames_buffer_per_cam.push_back(moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
+    // }
+    //
+    // //params
+    // m_imgs_to_skip=getParamElseDefault<int>(private_nh, "imgs_to_skip", 0);
+    // m_nr_images_to_read=getParamElseThrow<int>(private_nh, "nr_images_to_read");
+    // std::cout << "m_img_to_skip " << m_imgs_to_skip << '\n';
 
 
 
@@ -100,7 +99,7 @@ void DataLoaderPNG::init_params(){
 void DataLoaderPNG::init_params_configuru(){
     std::cout << "READINGCONFIGURU:............................................." << '\n';
 
-    configuru::Config cfg = configuru::parse_file("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/config/config.cfg", configuru::FORGIVING);
+    Config cfg = configuru::parse_file("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/config/config.cfg", FORGIVING);
     float alpha = cfg["alpha"];
     std::cout << "alpha is " << alpha  << '\n';
 
@@ -123,10 +122,14 @@ void DataLoaderPNG::init_params_configuru(){
     Eigen::Matrix< float , 2 , 1> vec_again= cfg["vec"];
     std::cout << "vec_again is " << vec_again << '\n';
     //
-    // std::cout << "reading mat " << '\n';
-    // Eigen::Affine3f mat= as<Eigen::Affine3f>( cfg["matrix"] );
-    // std::cout << "mat as matrix is \n" << mat.matrix() << '\n';
+    std::cout << "reading mat " << '\n';
+    Eigen::Affine3f mat= cfg["matrix"] ;
+    std::cout << "mat as matrix is \n" << mat.matrix() << '\n';
 
+    bool do_thing_true=cfg["do_thing_true"];
+    bool do_thing_false=cfg["do_thing_false"];
+
+    std::cout << "true and false " << do_thing_true << " " << do_thing_false << '\n';
 
 
 

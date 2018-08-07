@@ -1,0 +1,8 @@
+<launch>
+
+  <node pkg="stereo_depth_gl" type="stereo_depth_gl" name="stereo_depth_gl" output="screen">
+      <param name="config_file" value="config.cfg" />
+  </node>
+
+
+</launch>

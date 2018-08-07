@@ -14,6 +14,7 @@
 
 //ros
 #include <ros/ros.h>
+#include "stereo_depth_gl/RosTools.h"
 
 //ImGui
 #include <imgui.h>
@@ -25,6 +26,13 @@
 #define LOGURU_NO_UPTIME 1
 #define LOGURU_REPLACE_GLOG 1
 #include <loguru.hpp>
+
+//configuru
+#define CONFIGURU_IMPLEMENTATION 1
+#define CONFIGURU_WITH_EIGEN 1
+#define CONFIGURU_IMPLICIT_CONVERSIONS 1
+#include <configuru.hpp>
+using namespace configuru;
 
 //My stuff
 #include "stereo_depth_gl/Gui.h"
@@ -57,10 +65,11 @@ int main(int argc, char *argv[]) {
     view->core.background_color << 0.2, 0.2, 0.2, 1.0;
     view->data().show_lines = false; //start with the mesh not showing wirefrae
 
-
-    // Mesh mesh=core->read_mesh_from_file("data/maxsimple.obj");
-    // core->set_mesh(mesh);
-
+    //before starting with the main loop we check that none the parameters in the config file was left unchecked
+    ros::NodeHandle private_nh("~");
+    std::string config_file= getParamElseThrow<std::string>(private_nh, "config_file");
+    Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
+    cfg.check_dangling(); // Make sure we haven't forgot reading a key!
 
     while (true) {
         // std::this_thread::sleep_for(std::chrono::milliseconds(1));

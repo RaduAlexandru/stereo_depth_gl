@@ -8,19 +8,20 @@
 #include <Eigen/Geometry>
 
 #include "StringTools.h"
+#include <iostream>
 
 template <typename T>
 T getParamElseError ( ros::NodeHandle & nh, const std::string & paramName )
 {
    T out;
-   
+
    if ( ! nh.getParam( paramName, out ) )
    {
       ROS_ERROR_STREAM( "Parameter " << paramName << " could not be retrieved." );
    }
-   
+
    ROS_INFO_STREAM ( paramName << ": " << to_string ( out ) );
-   
+
    return out;
 }
 
@@ -31,9 +32,10 @@ T getParamElseThrow( ros::NodeHandle & nh, const std::string & paramName )
 
   if ( ! nh.getParam( paramName, out ) )
   {
+    std::cout << std::string("Parameter " + paramName + " could not be retrieved." ) << '\n';
     throw std::string("Parameter " + paramName + " could not be retrieved." );
   }
-    
+
   ROS_INFO_STREAM( paramName << ": " << to_string( out ) );
   return out;
 }
@@ -48,10 +50,10 @@ T getParamElseDefault( ros::NodeHandle & nh, const std::string & paramName, cons
     ROS_INFO_STREAM( paramName << ": Default value used (" << to_string( def ) << ")" );
     return def;
   };
-  
+
   ROS_INFO_STREAM( paramName << ": " << to_string( out ) );
 
-  return out; 
+  return out;
 }
 
 void addCamPoseToMarkers (visualization_msgs::Marker * markers,
@@ -69,12 +71,12 @@ template <typename T>
 void getSingleMsgFromTopic( T * msg, const std::string & topicName, ros::NodeHandle & nh = ros::NodeHandle(),  const int freq = 20 )
 {
   bool inited = false;
-  
+
   typedef boost::shared_ptr< T const > TConstPtr;
-  
+
   ros::Subscriber sub = nh.subscribe<T>(
     topicName, 1, [&] (const TConstPtr & m) { *msg = *m; inited = true; } );
-  
+
   ros::Rate r(freq);
 
   while ( ros::ok() && ! inited )
@@ -83,5 +85,5 @@ void getSingleMsgFromTopic( T * msg, const std::string & topicName, ros::NodeHan
     r.sleep();
   }
 }
-  
+
 #endif // ROS_TOOLS_H_INCLUDED

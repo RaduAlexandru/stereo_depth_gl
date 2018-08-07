@@ -154,4 +154,5 @@ target_link_libraries(stereo_depth_gl ${catkin_LIBRARIES}  ${OpenCV_LIBS}  TINY_
 )
 #definitions for cmake variables that are necesarry during runtime
 target_compile_definitions(stereo_depth_gl PRIVATE AWESOMEFONT_DIR="${CMAKE_SOURCE_DIR}/deps/imgui_ext/fontawesome-webfont.ttf")
+target_compile_definitions(stereo_depth_gl PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_compile_definitions(stereo_depth_gl PRIVATE -DTRILIBRARY -DANSI_DECLARATORS)

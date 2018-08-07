@@ -42,34 +42,34 @@ DataLoader::DataLoader():
 void DataLoader::init_params(){
     ros::NodeHandle private_nh("~");
     //ros
-    m_frame_world = getParamElseDefault<std::string>(private_nh, "world_frame", "world");
-    m_nr_cams = getParamElseThrow<int>(private_nh, "nr_cams");
-
-    for (size_t i = 0; i < m_nr_cams; i++) {
-        //read the frame and the image topics for the cameras
-        std::string frame_name= "cam_frame_" + std::to_string(i);
-        std::string topic_name= "/cam_img_" + std::to_string(i);
-        m_cam_frames.push_back(getParamElseDefault<std::string>(private_nh, frame_name, "camera"));
-        // m_cam_img_topics.push_back(getParamElseDefault<std::string>(private_nh, topic_name, "camera"));
-    }
-
-    //init the buffers for loading frames
-    m_cam_buffers_modified.resize(m_nr_cams,false);
-    m_frames_buffer_per_cam.resize(m_nr_cams);
-    for (size_t i = 0; i < m_nr_cams; i++) {
-        std::cout << "frame buffer " << i << " hass size " << m_frames_buffer_per_cam[i].max_size() << '\n';
-    }
-
-    //init ros subscribers, one for each cam
-    m_img_subs.resize(m_nr_cams);
-
-    //init the possible masks for the cams
-    m_masks.resize(m_nr_cams);
-
-    //init the access mutexes for each cams buffers so that we don't read with get frame and pushback at the same time
-    std::vector<std::mutex> new_mutex_vector(m_nr_cams); //the resizing needs to be done in two steps as mutexes are not movable
-    m_mutex_access_cam.swap(new_mutex_vector);
-    // m_mutex_access_cam.resize(m_nr_cams);
+    // m_frame_world = getParamElseDefault<std::string>(private_nh, "world_frame", "world");
+    // m_nr_cams = getParamElseThrow<int>(private_nh, "nr_cams");
+    //
+    // for (size_t i = 0; i < m_nr_cams; i++) {
+    //     //read the frame and the image topics for the cameras
+    //     std::string frame_name= "cam_frame_" + std::to_string(i);
+    //     std::string topic_name= "/cam_img_" + std::to_string(i);
+    //     m_cam_frames.push_back(getParamElseDefault<std::string>(private_nh, frame_name, "camera"));
+    //     // m_cam_img_topics.push_back(getParamElseDefault<std::string>(private_nh, topic_name, "camera"));
+    // }
+    //
+    // //init the buffers for loading frames
+    // m_cam_buffers_modified.resize(m_nr_cams,false);
+    // m_frames_buffer_per_cam.resize(m_nr_cams);
+    // for (size_t i = 0; i < m_nr_cams; i++) {
+    //     std::cout << "frame buffer " << i << " hass size " << m_frames_buffer_per_cam[i].max_size() << '\n';
+    // }
+    //
+    // //init ros subscribers, one for each cam
+    // m_img_subs.resize(m_nr_cams);
+    //
+    // //init the possible masks for the cams
+    // m_masks.resize(m_nr_cams);
+    //
+    // //init the access mutexes for each cams buffers so that we don't read with get frame and pushback at the same time
+    // std::vector<std::mutex> new_mutex_vector(m_nr_cams); //the resizing needs to be done in two steps as mutexes are not movable
+    // m_mutex_access_cam.swap(new_mutex_vector);
+    // // m_mutex_access_cam.resize(m_nr_cams);
 
 }
 
