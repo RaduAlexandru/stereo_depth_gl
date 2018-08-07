@@ -14,7 +14,8 @@ set(PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include
                         ${CMAKE_SOURCE_DIR}/deps/octree
                         ${CMAKE_SOURCE_DIR}/deps/dir_watcher
                         ${CMAKE_SOURCE_DIR}/deps/gl_lib
-                        ${CMAKE_SOURCE_DIR}/deps/cv_lib)		# Header folder
+                        ${CMAKE_SOURCE_DIR}/deps/cv_lib
+                        ${CMAKE_SOURCE_DIR}/deps/Configuru)		# Header folder
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11 -std=gnu++11 -fext-numeric-literals")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w") #supress all warnings

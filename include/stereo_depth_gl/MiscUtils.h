@@ -15,6 +15,8 @@
 #define LOGURU_REPLACE_GLOG 1
 #include <loguru.hpp>
 
+#include <configuru.hpp>
+
 
 typedef std::vector<float> row_type_f;
 typedef std::vector<row_type_f> matrix_type_f;
@@ -535,4 +537,60 @@ static inline std::string rtrim_copy(std::string s) {
 static inline std::string trim_copy(std::string s) {
     trim(s);
     return s;
+}
+
+
+namespace configuru {
+    // template<>
+    // inline Eigen::Vector2f as(const configuru::Config& config)
+    // {
+    //     auto&& array = config.as_array();
+    //     config.check(array.size() == 2, "Expected Vector2f");
+    //     return {(float)array[0], (float)array[1]};
+    // }
+    //
+    // template<>
+    // inline Eigen::Affine3f as(const configuru::Config& config)
+    // {
+    //     auto&& array = config.as_array();
+    //     if(array.size()!= 12 && array.size()!=16){
+    //         config.on_error("Expected matrix of size 3x4 or 4x4");
+    //     }
+    //
+    //     //if we have 16 elements, the last 4 of them should be row containing 0,0,0,1
+    //     if(array.size()==16){
+    //         bool bad=false;
+    //         bad |= array[12]!=0.0;
+    //         bad |= array[13]!=0.0;
+    //         bad |= array[14]!=0.0;
+    //         bad |= array[15]!=1.0;
+    //         if(bad){
+    //             std::cout << " last row is "<< array[12] << " " << array[13] << " " << array[14] << " " << array[15] << '\n';
+    //             config.on_error("For an affine matrix of size 4x4 the last row should be 0,0,0,1");
+    //         }
+    //     }
+    //
+    //     Eigen::Affine3f mat;
+    //     mat.matrix()<< (float)array[0], (float)array[1], (float)array[2], (float)array[3],
+    //     (float)array[4], (float)array[5], (float)array[6], (float)array[7],
+    //     (float)array[8], (float)array[9], (float)array[10], (float)array[11];
+    //     return mat;
+    //     // return {(float)array[0], (float)array[1]};
+    // }
+
+
+    // template<typename T>
+    // explicit operator Eigen::Matrix< T , 2 , 1> const
+    // {
+    //     const auto& array = as_array();
+    //     // Eigen::Matrix< T , 2 , 1> vec;
+    //     config.check(array.size() == 2, "Expected vector of 2 elements");
+    //     return {(float)array[0], (float)array[1]};
+    //     // std::vector<T> ret;
+    //     // ret.reserve(array.size());
+    //     // for (auto&& config : array) {
+    //     //     ret.push_back(static_cast<T>(config));
+    //     // }
+    //     // return ret;
+    // }
 }

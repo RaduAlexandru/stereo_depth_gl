@@ -23,6 +23,12 @@
 //ros
 #include "stereo_depth_gl/RosTools.h"
 
+//configuru
+#define CONFIGURU_IMPLEMENTATION 1
+#define CONFIGURU_WITH_EIGEN 1
+#define CONFIGURU_IMPLICIT_CONVERSIONS 1
+#include <configuru.hpp>
+using namespace configuru;
 
 
 
@@ -93,6 +99,37 @@ void DataLoaderPNG::init_params(){
 
 void DataLoaderPNG::init_params_configuru(){
     std::cout << "READINGCONFIGURU:............................................." << '\n';
+
+    configuru::Config cfg = configuru::parse_file("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/config/config.cfg", configuru::FORGIVING);
+    float alpha = cfg["alpha"];
+    std::cout << "alpha is " << alpha  << '\n';
+
+    if (cfg["matrix"].is_array()) {
+    	std::cout << "First element: " << cfg["matrix"][0];
+    	for (const configuru::Config& element : cfg["matrix"].as_array()) {
+    		std::cout << element << std::endl;
+    	}
+    }
+
+    // std::cout << "reading vector2f" << '\n';
+    // Eigen::Vector2f vec= as<Eigen::Vector2f>(cfg["vec"]);
+    // std::cout << "vec is " << vec << '\n';
+    //
+    std::cout << "reading vector2f as stdvec" << '\n';
+    std::vector<float> vec_std= cfg["vec"];
+    std::cout << "vec_std has size is " << vec_std.size() << '\n';
+    //
+    std::cout << "reading vector2f again" << '\n';
+    Eigen::Matrix< float , 2 , 1> vec_again= cfg["vec"];
+    std::cout << "vec_again is " << vec_again << '\n';
+    //
+    // std::cout << "reading mat " << '\n';
+    // Eigen::Affine3f mat= as<Eigen::Affine3f>( cfg["matrix"] );
+    // std::cout << "mat as matrix is \n" << mat.matrix() << '\n';
+
+
+
+
 }
 
 void DataLoaderPNG::init_data_reading(){
