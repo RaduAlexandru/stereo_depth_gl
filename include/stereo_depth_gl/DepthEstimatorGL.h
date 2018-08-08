@@ -52,7 +52,7 @@ struct Params {
     float pad_2;
 };
 
-enum PointStatus {
+enum SeedStatus {
     STATUS_GOOD=0,					// traced well and good
     STATUS_OOB,					// OOB: end tracking & marginalize!
     STATUS_OUTLIER,				// energy too high: if happens again: outlier!
@@ -62,7 +62,7 @@ enum PointStatus {
     STATUS_UNINITIALIZED};			// not even traced once.
 
 //needs to be 16 bytes aligned as explained by john conor here https://www.opengl.org/discussion_boards/showthread.php/199303-How-to-get-Uniform-Block-Buffers-to-work-correctly
-struct Point{
+struct Seed{
     int32_t idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
     float u,v; //position in host frame of the point
     float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
@@ -78,7 +78,7 @@ struct Point{
 
     glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
     // Eigen::Vector4f f;
-    PointStatus lastTraceStatus;
+    SeedStatus lastTraceStatus;
     int32_t converged;
     int32_t is_outlier;
     int32_t pad_1;
@@ -172,61 +172,38 @@ public:
     DepthEstimatorGL();
     ~DepthEstimatorGL(); //needed so that forward declarations work
 
-    void init_data(); //Reads the images for the depth estimation and prepares the gl context
-    void compute_depth_and_create_mesh(); //from all the immature points created triangulate depth for them, updates the mesh
-    void compute_depth_and_create_mesh_cpu();
-    void save_depth_image();
-    Mesh get_mesh();
-
+    // void compute_depth_and_create_mesh(); //from all the immature points created triangulate depth for them, updates the mesh
+    // void compute_depth_and_create_mesh_cpu();
+    // void save_depth_image();
+    // Mesh get_mesh();
 
     void upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
 
-    // Scene get_scene();
-    bool is_modified(){return m_scene_is_modified;};
-
 
     //objects
     std::shared_ptr<Profiler> m_profiler;
-    std::shared_ptr<igl::opengl::glfw::Viewer> m_view;
 	Pattern m_pattern;
 
     //gl stuff
-    GLuint m_points_gl_buf; //stores all the immature points
+    GLuint m_seeds_gl_buf; //stores all the depth_seeds
     GLuint m_ubo_params; //stores all parameters that may be needed inside the shader
-    gl::Texture2D m_cur_frame; //stored the gray image and the grad_x and grad_y in the other channels, the 4th channel is unused
-    gl::Texture2D m_cur_frame_stereo; //the right camera, same as above
-    gl::Texture2D m_frame_gray_tex; //mostly for visualization purposes we upload here the gray image
-    gl::Texture2D m_frame_gray_stereo_tex;
+    gl::Texture2D m_frame_left; //stored the gray image and the grad_x and grad_y in the other channels, the 4th channel is unused
+    gl::Texture2D m_frame_right; //the right camera, same as above
+    gl::Texture2D m_frame_rgb_left; //mostly for visualization purposes we upload here the gray image
+    gl::Texture2D m_frame_rgb_right;
 
 
     //gl shaders
     GLuint m_update_depth_prog_id;
-    GLuint m_denoise_depth_prog_id;
-    //used for doing a denoising when immature points are laid as a texture
-    GLuint m_copy_to_texture_prog_id;
-    GLuint m_denoise_texture_prog_id;
-    GLuint m_copy_from_texture_prog_id;
-    //use denoising when the immature points are laid as a texture but have pvec, mu and mu_denoised in a frembuffer for fast write
-    GLuint m_copy_to_texture_fbo_prog_id;
-    GLuint m_denoise_fbo_prog_id;
-    GLuint m_copy_from_texture_fbo_prog_id;
-
 
 
     //databasse
-    std::atomic<bool> m_scene_is_modified;
-    Mesh m_mesh;
-    std::vector<Frame> m_frames;
-    std::vector<Point> m_points;
-    Eigen::Vector2i m_frame_size; //xy
+    std::vector<Seed> m_seeds;
 
     //params
     bool m_gl_profiling_enabled;
     bool m_debug_enabled;
-    bool m_show_images;
-    bool m_use_rgbd_tum;
-    int m_start_frame;
     float m_mean_starting_depth;
     Params m_params; //parameters for depth estimation that may also be needed inside the gl shader
 
@@ -238,19 +215,18 @@ private:
     void compile_shaders();
 
     //start with everything
-    std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
-    std::vector<Frame> loadDataFromRGBD_TUM ( const std::string & dataset_path, const int num_images_to_read );
-    void undistort_image(cv::Mat gray_img, const Eigen::Matrix3f K, const Eigen::VectorXf distort_coeffs);
-    float gaus_pdf(float mean, float sd, float x);
-    std::vector<Point> create_immature_points (const Frame& frame);
-    Eigen::Vector2f estimate_affine(std::vector<Point>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
+    std::vector<Seed> create_seeds (const Frame& frame);
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
-    void assign_neighbours_for_points( std::vector<Point>& immature_points, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
-    void denoise_cpu( std::vector<Point>& immature_points, const int frame_width, const int frame_height);
-    void denoise_gpu_vector(std::vector<Point>& immature_points);
-    void denoise_gpu_texture(std::vector<Point>& immature_points,  const int frame_width, const int frame_height);
-    void denoise_gpu_framebuffer(std::vector<Point>& immature_points,  const int frame_width, const int frame_height);
-    Mesh create_mesh(const std::vector<Point>& immature_points, const std::vector<Frame>& frames);
+    void undistort_image(cv::Mat gray_img, const Eigen::Matrix3f K, const Eigen::VectorXf distort_coeffs);
+    Eigen::Vector2f estimate_affine(std::vector<Seed>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
+
+
+    // void assign_neighbours_for_points( std::vector<Seed>& immature_points, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
+    // void denoise_cpu( std::vector<Seed>& immature_points, const int frame_width, const int frame_height);
+    // void denoise_gpu_vector(std::vector<Seed>& immature_points);
+    // void denoise_gpu_texture(std::vector<Seed>& immature_points,  const int frame_width, const int frame_height);
+    // void denoise_gpu_framebuffer(std::vector<Seed>& immature_points,  const int frame_width, const int frame_height);
+    // Mesh create_mesh(const std::vector<Seed>& immature_points, const std::vector<Frame>& frames);
 
 };
 

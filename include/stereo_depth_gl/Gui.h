@@ -61,7 +61,7 @@ private:
 
     ImVec2 foo[10];
 
-    void show_gray_textures();
+    void show_rgb_textures();
 
 
 };

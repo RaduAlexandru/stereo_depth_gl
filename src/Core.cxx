@@ -68,7 +68,6 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
     // m_depth_estimator_renegade->m_profiler=profiler;
     // m_depth_estimator_renegade->m_view=m_view;
     m_depth_estimator_gl->m_profiler=profiler;
-    m_depth_estimator_gl->m_view=m_view;
     // m_depth_estimator_gl2->m_profiler=profiler;
     // m_depth_estimator_gl2->m_view=m_view;
     // m_splatter->m_view=m_view;

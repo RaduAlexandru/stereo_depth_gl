@@ -154,62 +154,57 @@ void Gui::update() {
 
     if (ImGui::CollapsingHeader("Depth Estimation")) {
         ImGui::Checkbox("Enable gl profiling", &m_core->m_depth_estimator_gl->m_gl_profiling_enabled);
-        if(ImGui::SliderInt("search_epi_method", &m_core->m_depth_estimator_gl->m_params.search_epi_method, 0, 1)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("mean_starting_depth", &m_core->m_depth_estimator_gl->m_mean_starting_depth, 0.5, 6)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("gradH_th", &m_core->m_depth_estimator_gl->m_params.gradH_th, 100000, 800000000)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("outlierTH", &m_core->m_depth_estimator_gl->m_params.outlierTH, 1, 300)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("overallEnergyTHWeight", &m_core->m_depth_estimator_gl->m_params.overallEnergyTHWeight, 0.1, 50)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("outlierTHSumComponent", &m_core->m_depth_estimator_gl->m_params.outlierTHSumComponent, 5, 500)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("huberTH", &m_core->m_depth_estimator_gl->m_params.huberTH, 0.1, 50)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("convergence_sigma2_thresh", &m_core->m_depth_estimator_gl->m_params.convergence_sigma2_thresh, 0.1, 300)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("eta", &m_core->m_depth_estimator_gl->m_params.eta, 0.1, 200)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
+        // if(ImGui::SliderInt("search_epi_method", &m_core->m_depth_estimator_gl->m_params.search_epi_method, 0, 1)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("mean_starting_depth", &m_core->m_depth_estimator_gl->m_mean_starting_depth, 0.5, 6)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("gradH_th", &m_core->m_depth_estimator_gl->m_params.gradH_th, 100000, 800000000)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("outlierTH", &m_core->m_depth_estimator_gl->m_params.outlierTH, 1, 300)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("overallEnergyTHWeight", &m_core->m_depth_estimator_gl->m_params.overallEnergyTHWeight, 0.1, 50)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("outlierTHSumComponent", &m_core->m_depth_estimator_gl->m_params.outlierTHSumComponent, 5, 500)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("huberTH", &m_core->m_depth_estimator_gl->m_params.huberTH, 0.1, 50)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("convergence_sigma2_thresh", &m_core->m_depth_estimator_gl->m_params.convergence_sigma2_thresh, 0.1, 300)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("eta", &m_core->m_depth_estimator_gl->m_params.eta, 0.1, 200)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        //
+        // //denoise things
+        // if(ImGui::SliderInt("denoise_nr_iterations", &m_core->m_depth_estimator_gl->m_params.denoise_nr_iterations, 0, 400)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("denoise_depth_range", &m_core->m_depth_estimator_gl->m_params.denoise_depth_range, 1.0, 10.0)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("denoise_lambda", &m_core->m_depth_estimator_gl->m_params.denoise_lambda, 0.1, 10)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("denoise_L", &m_core->m_depth_estimator_gl->m_params.denoise_L, 0.1, 20)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("denoise_tau", &m_core->m_depth_estimator_gl->m_params.denoise_tau, 0.00001, 5)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
+        // if(ImGui::SliderFloat("denoise_theta", &m_core->m_depth_estimator_gl->m_params.denoise_theta, 0.00001, 20)){
+        //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
+        // }
 
-        //denoise things
-        if(ImGui::SliderInt("denoise_nr_iterations", &m_core->m_depth_estimator_gl->m_params.denoise_nr_iterations, 0, 400)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("denoise_depth_range", &m_core->m_depth_estimator_gl->m_params.denoise_depth_range, 1.0, 10.0)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("denoise_lambda", &m_core->m_depth_estimator_gl->m_params.denoise_lambda, 0.1, 10)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("denoise_L", &m_core->m_depth_estimator_gl->m_params.denoise_L, 0.1, 20)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("denoise_tau", &m_core->m_depth_estimator_gl->m_params.denoise_tau, 0.00001, 5)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-        if(ImGui::SliderFloat("denoise_theta", &m_core->m_depth_estimator_gl->m_params.denoise_theta, 0.00001, 20)){
-            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
-        }
-
-
-
-        if (ImGui::Button("Write_depth_image_to_file")) {
-            m_core->m_depth_estimator_gl->save_depth_image();
-        }
 
     }
-    show_gray_textures();
+    show_rgb_textures();
 
 
 
@@ -345,24 +340,24 @@ void Gui::update() {
 }
 
 
-void Gui::show_gray_textures(){
+void Gui::show_rgb_textures(){
     //show the rgb image from each camera
 
     //show camera left
-    if(m_core->m_depth_estimator_gl->m_frame_gray_tex.get_tex_id()==-1){
+    if(m_core->m_depth_estimator_gl->m_frame_rgb_left.get_tex_id()==-1){
         return;
     }
     ImGuiWindowFlags gray_window_flags = 0;
     ImGui::Begin("cam_left", nullptr, gray_window_flags);
-    ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_frame_gray_tex.get_tex_id(), ImGui::GetContentRegionAvail());
+    ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_frame_rgb_left.get_tex_id(), ImGui::GetContentRegionAvail());
     ImGui::End();
 
     //show camera right
-    if(m_core->m_depth_estimator_gl->m_frame_gray_stereo_tex.get_tex_id()==-1){
+    if(m_core->m_depth_estimator_gl->m_frame_rgb_right.get_tex_id()==-1){
         return;
     }
     ImGui::Begin("cam_right", nullptr, gray_window_flags);
-    ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_frame_gray_stereo_tex.get_tex_id(), ImGui::GetContentRegionAvail());
+    ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_frame_rgb_right.get_tex_id(), ImGui::GetContentRegionAvail());
     ImGui::End();
 
 }
