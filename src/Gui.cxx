@@ -128,6 +128,8 @@ void Gui::update() {
        ImGui::Checkbox("Show faceid", &m_view->data().show_faceid);
        ImGui::Checkbox("Invert_normals", &m_view->data().invert_normals);
        ImGui::SliderFloat("shininess", &m_view->data().shininess, 0.001f, 2.0f);
+       ImGui::SliderFloat("point_size", &m_view->data().point_size, 1.0, 7.0);
+       ImGui::SliderFloat("Line_width", &m_view->data().line_width, 0.6f, 5.0f);
 
 
        //global params applied to all meshes

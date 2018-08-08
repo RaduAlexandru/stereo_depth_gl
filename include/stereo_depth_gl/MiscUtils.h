@@ -481,22 +481,7 @@ inline cv::Mat_<cv::Vec4b> create_alpha_mat(const cv::Mat& mat){
     return out;
 }
 
-inline std::string file_to_string (const std::string &filename){
-    std::ifstream t(filename);
-    return std::string((std::istreambuf_iterator<char>(t)),
-            std::istreambuf_iterator<char>());
-}
 
-//sometimes you want to allocate memory that is multiple of 64 bytes, so therefore you want to allocate more memory but you need a nr that is divisible by 64
-inline int round_up_to_nearest_multiple(const int number, const int divisor){
- return number - number % divisor + divisor * !!(number % divisor);
-}
-
-//clamp a value between a min and a max
-template <class T>
-inline T clamp(const T val, const T min, const T max){
-    return std::min(std::max(val, min),max);
-}
 //https://stackoverflow.com/a/217605
 #include <algorithm>
 #include <functional>
@@ -537,6 +522,39 @@ static inline std::string rtrim_copy(std::string s) {
 static inline std::string trim_copy(std::string s) {
     trim(s);
     return s;
+}
+
+//https://stackoverflow.com/a/37454181
+inline std::vector<std::string> split(const std::string& str, const std::string& delim){
+    std::vector<std::string> tokens;
+    size_t prev = 0, pos = 0;
+    do{
+        pos = str.find(delim, prev);
+        if (pos == std::string::npos) pos = str.length();
+        std::string token = str.substr(prev, pos-prev);
+        if (!token.empty()) tokens.push_back(token);
+        prev = pos + delim.length();
+    }
+    while (pos < str.length() && prev < str.length());
+    return tokens;
+}
+
+
+inline std::string file_to_string (const std::string &filename){
+    std::ifstream t(filename);
+    return std::string((std::istreambuf_iterator<char>(t)),
+            std::istreambuf_iterator<char>());
+}
+
+//sometimes you want to allocate memory that is multiple of 64 bytes, so therefore you want to allocate more memory but you need a nr that is divisible by 64
+inline int round_up_to_nearest_multiple(const int number, const int divisor){
+ return number - number % divisor + divisor * !!(number % divisor);
+}
+
+//clamp a value between a min and a max
+template <class T>
+inline T clamp(const T val, const T min, const T max){
+    return std::min(std::max(val, min),max);
 }
 
 

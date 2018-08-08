@@ -21,6 +21,7 @@ public:
     cv::Mat classes_original_size;
     cv::Mat probs_original_size;
     Eigen::Matrix3f K;
+    Eigen::Matrix<float, 5, 1> distort_coeffs; 
     Eigen::Affine3f tf_cam_world;
 
     int cam_id; //id of the camera depending on how many cameras we have (it gos from 0 to 1 in the case of stereo)

@@ -72,6 +72,8 @@ public:
     Eigen::MatrixXd UV; //normals of each face
     Eigen::MatrixXd V_radius; //for surfel rendering each vertex has a radius
     uint64_t t; //timestamp;
+    Eigen::Vector3f m_edge_color;
+    double m_line_width;
 
 
     Eigen::Affine3d sensor_pose;  //mapping from baselink to world coordinates

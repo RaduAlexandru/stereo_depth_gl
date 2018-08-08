@@ -65,7 +65,7 @@ public:
     void write_ply();
     void write_obj();
 
-    void compute_camera_frustum_mesh(Mesh& frustum_mesh, const Frame& frame);
+    Mesh compute_camera_frustum_mesh(const Frame& frame, const float scale_multiplier);
 
 
     //objects dependencies
@@ -88,20 +88,11 @@ public:
     char m_exported_filename[32] = "./scene";
     uint64_t m_last_timestamp;
     int m_nr_callbacks;
-
-
-    //ros
-    std::string m_bag_args;
-
-
-
     bool m_viewer_initialized;
-    std::mutex m_mutex_recon;
-    bool m_surfel_rendering;
 
 
     //visualizer params
-
+    float m_frustum_scale_multiplier;
     bool m_show_sensor_poses;
     const char* m_color_types_desc[8] =
       {
@@ -115,6 +106,11 @@ public:
               "Gold"
       };
 
+
+      //params
+      bool m_do_transform_mesh_to_worlGL;
+      bool m_preload_mesh;
+      std::string m_preload_mesh_path;
 
 
 

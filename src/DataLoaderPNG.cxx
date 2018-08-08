@@ -37,8 +37,12 @@ DataLoaderPNG::DataLoaderPNG(){
 
     init_params();
     init_data_reading();
+    create_transformation_matrices();
+    if(m_dataset_type==DatasetType::ETH){
+        read_pose_file_eth();
+    }
     // read_pose_file();
-    // create_transformation_matrices();
+
 
     // init_params_configuru();
 
@@ -67,7 +71,15 @@ void DataLoaderPNG::init_params(){
         m_rgb_imgs_path_per_cam.push_back( (std::string)loader_config["rgb_path_cam_"+std::to_string(i)] );
         m_frames_buffer_per_cam.push_back( moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
     }
+    std::string dataset_type_string=(std::string)loader_config["dataset_type"];
+    if(dataset_type_string=="eth") m_dataset_type=DatasetType::ETH;
+    else LOG(FATAL) << " Dataset type is not known " << dataset_type_string;
+    m_pose_file=(std::string)loader_config["pose_file"];
 
+
+    Config vis_config=cfg["visualization"];
+    m_tf_worldGL_worldROS_angle=vis_config["tf_worldGL_worldROS_angle"];
+    m_tf_worldGL_worldROS_axis=(std::string)vis_config["tf_worldGL_worldROS_axis"];
 
     // //input for the images
     // m_rgb_subsample_factor=getParamElseThrow<float>(private_nh, "rgb_subsample_factor");
@@ -252,15 +264,14 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             uint64_t timestamp=std::stoull(rgb_filename.stem().string());
             frame.timestamp=timestamp; //store the unrounded one because when we check for the labels we check for the same filename
 
+            //POSE---
+            if (!get_pose_at_timestamp(frame.tf_cam_world, timestamp, cam_id )){
+                LOG(WARNING) << "Not found any pose at timestamp " << timestamp << " Discarding";
+                continue;
+            }
 
-
-            // //TODO---------------parametrize this depending on the dataset because the pose may be to a different frame and so on
-            // //POSE---
-            // Eigen::Affine3f sensor_pose;  //maps from baselink to world ros
-            // if (!get_pose_at_timestamp(sensor_pose, timestamp)){
-            //     // LOG(WARNING) << "Not found any pose at timestamp " << timestamp << " Discarding";
-            //     continue;
-            // }
+            //intrinsics
+            get_intrinsics(frame.K, frame.distort_coeffs, cam_id);
 
             // std::cout << "we got pose for image " << m_idx_img_to_read_per_cam[cam_id] << '\n';
 
@@ -469,47 +480,15 @@ void DataLoaderPNG::clear_buffers(){
 
 
 
-void DataLoaderPNG::read_pose_file(){
-    std::ifstream infile( m_pose_file );
-    if(!infile.is_open()){
-        LOG(FATAL) << "Could not open pose file " << m_pose_file;
-    }
-    uint64_t scan_nr;
-    uint64_t timestamp;
-    Eigen::Vector3f position;
-    Eigen::Quaternionf quat;
-
-
-    std::string line;
-    while (std::getline(infile, line)) {
-        std::istringstream iss(line);
-        iss >> scan_nr >> timestamp
-            >> position(0) >> position(1) >> position(2)
-            >> quat.w() >> quat.x() >> quat.y() >> quat.z();
-//        std::cout << "input is \n" << scan_nr << " " << timestamp << " " << position << " " << quat.matrix()  << "\n";
-        Eigen::Affine3f pose;
-        pose.matrix().block<3,3>(0,0)=quat.toRotationMatrix();
-        pose.matrix().block<3,1>(0,3)=position;
-        // if(m_do_timestamp_rounding_when_reading_file){
-        //     timestamp=(uint64_t)std::round(timestamp/100000.0); ////TODO this is a dirty hack to reduce the discretization of time because the timestamps don't exactly match
-        // }
-       // VLOG(2) << "recorded tmestamp is " << timestamp;
-//        VLOG(2) << "recorded scan_nr is " << scan_nr;
-        m_worldROS_baselink_map[timestamp]=pose;
-        m_worldROS_baselink_vec.push_back ( std::pair<uint64_t, Eigen::Affine3f>(timestamp,pose) );
-    }
-
-}
-
-// void DataLoaderPNG::read_pose_file_semantic_fusion(){
+// void DataLoaderPNG::read_pose_file(){
 //     std::ifstream infile( m_pose_file );
-// if(!infile.is_open()){
-//     LOG(FATAL) << "Could not open pose file " << m_pose_file;
-// }
+//     if(!infile.is_open()){
+//         LOG(FATAL) << "Could not open pose file " << m_pose_file;
+//     }
 //     uint64_t scan_nr;
 //     uint64_t timestamp;
 //     Eigen::Vector3f position;
-//     Eigen::Quaterniond quat;
+//     Eigen::Quaternionf quat;
 //
 //
 //     std::string line;
@@ -522,119 +501,156 @@ void DataLoaderPNG::read_pose_file(){
 //         Eigen::Affine3f pose;
 //         pose.matrix().block<3,3>(0,0)=quat.toRotationMatrix();
 //         pose.matrix().block<3,1>(0,3)=position;
-// //        VLOG(2) << "recorded tmestamp is " << timestamp;
+//         // if(m_do_timestamp_rounding_when_reading_file){
+//         //     timestamp=(uint64_t)std::round(timestamp/100000.0); ////TODO this is a dirty hack to reduce the discretization of time because the timestamps don't exactly match
+//         // }
+//        // VLOG(2) << "recorded tmestamp is " << timestamp;
 // //        VLOG(2) << "recorded scan_nr is " << scan_nr;
 //         m_worldROS_baselink_map[timestamp]=pose;
+//         m_worldROS_baselink_vec.push_back ( std::pair<uint64_t, Eigen::Affine3f>(timestamp,pose) );
 //     }
 //
 // }
 
-bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp){
+void DataLoaderPNG::read_pose_file_eth(){
+    std::ifstream infile( m_pose_file );
+    if(!infile.is_open()){
+        LOG(FATAL) << "Could not open pose file " << m_pose_file;
+    }
+    VLOG(1) << "Reading pose file for ETH mav dataset";
 
-    auto got = m_worldROS_baselink_map.find (timestamp);
+    uint64_t scan_nr;
+    uint64_t timestamp;
+    Eigen::Vector3f position;
+    Eigen::Quaternionf quat;
 
-//     if ( got == m_worldROS_baselink_map.end() ){
-//         LOG(WARNING) << "get_pose: pose query for the scan does not exist at timestamp" << timestamp;
-//         return false;
-//     }else{
-//         pose = got->second;
-// //        VLOG(2) << "returning pose at scan_nr  \n" << pose.matrix();
-//         return true;
-//     }
+    std::string line;
+    while (std::getline(infile, line)) {
+        std::istringstream iss(line);
+
+        //skip comments
+        if(line.at(0)=='#'){
+            continue;
+        }
+
+        std::vector<std::string> tokens=split(line,",");
+        timestamp=stod(tokens[0]);
+        position(0)=stod(tokens[1]);
+        position(1)=stod(tokens[2]);
+        position(2)=stod(tokens[3]);
+        quat.w()=stod(tokens[4]);
+        quat.x()=stod(tokens[5]);
+        quat.y()=stod(tokens[6]);
+        quat.z()=stod(tokens[7]);
+
+        // std::cout << "input is \n" << " " << timestamp << " " << position << " " << quat.matrix()  << "\n";
+        Eigen::Affine3f pose;
+        pose.matrix().block<3,3>(0,0)=quat.toRotationMatrix();
+        pose.matrix().block<3,1>(0,3)=position;
+
+        m_worldROS_baselink_map[timestamp]=pose;
+        m_worldROS_baselink_vec.push_back ( std::pair<uint64_t, Eigen::Affine3f>(timestamp,pose) );
+    }
+
+}
+
+bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp, const uint64_t cam_id){
 
 
     //return the closest one
     uint64_t closest_idx=-1;
     double smallest_timestamp_diff=std::numeric_limits<double>::max();
-    double smallest_timestamp_diff_no_abs=std::numeric_limits<double>::max();
     for (size_t i = 0; i < m_worldROS_baselink_vec.size(); i++) {
         uint64_t recorded_timestamp=m_worldROS_baselink_vec[i].first;
         Eigen::Affine3f pose=m_worldROS_baselink_vec[i].second;
         // std::cout << "comparing recorded_timestamp to timestmp \n" << recorded_timestamp << "\n" << timestamp << '\n';
-        if (  abs((double)timestamp- (double)recorded_timestamp) < smallest_timestamp_diff){
+        double diff=fabs((double)timestamp- (double)recorded_timestamp);
+        if (  diff < smallest_timestamp_diff){
             closest_idx=i;
-            smallest_timestamp_diff=abs(timestamp-recorded_timestamp);
-            smallest_timestamp_diff_no_abs=(double)timestamp - (double)recorded_timestamp;
+            smallest_timestamp_diff=diff;
+            // std::cout << "smallest_timestamp_diff " << smallest_timestamp_diff << '\n';
         }
     }
-    if ( smallest_timestamp_diff > 1e7 )
-    {
-        LOG(WARNING) << "time difference for pose is way too large! " << (smallest_timestamp_diff/1e6) << "s." << '\n';
-        return false;
-    }
+    // if ( smallest_timestamp_diff > 1e7 )
+    // {
+    //     LOG(WARNING) << "time difference for pose is way too large! " << (smallest_timestamp_diff/1e6) << "s." << '\n';
+    //     return false;
+    // }
     // std::cout << "smallest_timestamp_diff is " << smallest_timestamp_diff << '\n';
     // std::cout << "smallest_timestamp_diff_no_abs is " << smallest_timestamp_diff_no_abs << '\n';
     // std::cout << "deviation_ms is " << deviation_ms << '\n';
-    pose=m_worldROS_baselink_vec[closest_idx].second;
+    Eigen::Affine3f pose_from_file=m_worldROS_baselink_vec[closest_idx].second;
+
+
+    //this pose may be already the correct one or it may be transfromed ot another frame depending on the dataset type
+    if(m_dataset_type==DatasetType::ETH){
+        // pose_from_file is only the transformation from base to world
+        if(cam_id==0){
+            // camera to base link
+            Eigen::Matrix4f tf_baselink_cam;
+            tf_baselink_cam.row(0) << 0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975;
+            tf_baselink_cam.row(1) << 0.999557249008, 0.0149672133247, 0.025715529948, -0.064676986768;
+            tf_baselink_cam.row(2) << -0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949;
+            tf_baselink_cam.row(3) <<  0.0, 0.0, 0.0, 1.0;
+
+            //pose is only from base to world but we need to return a pose that is tf_cam_world (so from world to cam)
+            pose= Eigen::Affine3f(tf_baselink_cam).inverse() *  pose_from_file.inverse(); //world to base and base to cam
+        }else if(cam_id==1){
+            // camera to base link
+            Eigen::Matrix4f tf_baselink_cam;
+            tf_baselink_cam.row(0) << 0.0125552670891, -0.999755099723, 0.0182237714554, -0.0198435579556;
+            tf_baselink_cam.row(1) << 0.999598781151, 0.0130119051815, 0.0251588363115, 0.0453689425024;
+            tf_baselink_cam.row(2) << -0.0253898008918, 0.0179005838253, 0.999517347078, 0.00786212447038;
+            tf_baselink_cam.row(3) << 0.0, 0.0, 0.0, 1.0;
+
+            //pose is only from base to world but we need to return a pose that is tf_cam_world (so from world to cam)
+            pose= Eigen::Affine3f(tf_baselink_cam).inverse() *  pose_from_file.inverse(); //world to base and base to cam
+        }else{
+            LOG(FATAL) << "Now a known cam_id at " << cam_id;
+        }
+
+    }
+
+    // std::cout << "closest idx is " << closest_idx << '\n';
+    // std::cout << " timestamp is " << timestamp << " closest timestamp is " << m_worldROS_baselink_vec[closest_idx].first << '\n';
+    // std::cout << "returning cam pose \n" << pose.matrix()  << '\n';
+
+
     return true;
 
 
 }
 
+void DataLoaderPNG::get_intrinsics(Eigen::Matrix3f& K, Eigen::Matrix<float, 5, 1>& distort_coeffs, const uint64_t cam_id){
+    if(m_dataset_type==DatasetType::ETH){
+        K.setIdentity();
+        if(cam_id==0){
+            K(0,0) = 458.654;
+            K(1,1) = 457.296;
+            K(0,2) = 367.215;
+            K(1,2) = 248.375;
+            distort_coeffs(0) = -0.28340811;
+            distort_coeffs(1) = 0.07395907;
+            distort_coeffs(2) = 0.00019359;
+            distort_coeffs(3) = 1.76187114e-05;
+            distort_coeffs(4) = 0.;
+        }else if(cam_id==1){
+            K(0,0) = 457.587;
+            K(1,1) = 456.134;
+            K(0,2) = 379.999;
+            K(1,2) = 255.238;
+            distort_coeffs(0) = -0.28368365;
+            distort_coeffs(1) = 0.07451284;
+            distort_coeffs(2) = -0.00010473;
+            distort_coeffs(3) = -3.55590700e-05;
+            distort_coeffs(4) = 0.;
+        }
+    }
+}
+
+
+
 void DataLoaderPNG::create_transformation_matrices(){
-
-
-    /*
-     *  All frames are right handed systems
-     *  The gap of the laser is always on the far side of the camera, somewhere on the negative Z axis in the alg frame
-     *
-     *                                                                                  Y
-     *                                                                                  |
-     *                                                                                  |
-     *                                                                                  |
-     *                                                                                  |
-     *                                                                                  |
-     *  Y-------                                        --->                            ---------- X
-     *         /|                                                                      /
-     *       /  |                                                                    /
-     *     /    |                                                                  /
-     *    X     |                                                                 Z
-     *          |
-     *          Z
-     * Velodyne frame represented in the odom frame                             Algorithm frame (and also how the GL frame looks like)
-     * This is what we see in rviz                                              Frame which the algorithms in the Mesher use to create the mesh
-     * X looking towards camera
-     * Z downwards
-     * Y to the left
-     *
-     * The transformation between these two is what the function called fix_cloud_orientation was doing:
-     *  Reminder:
-     *  cloud->points[idx].x = -y;
-     *  cloud->points[idx].y = -z;
-     *  cloud->points[idx].z = x;
-     *
-     * The matrix correspinding to the transformation will be only a rotation matrix
-     *  since we only rotate around the origin and don't do any translation
-     *
-     * Positives angles of rotiation here:
-     *   https://stackoverflow.com/questions/31191752/right-handed-euler-angles-xyz-to-left-handed-euler-angles-xyz
-     *
-     * */
-
-    m_tf_alg_vel.setIdentity();
-    Eigen::Matrix3f alg_vel_rot;
-    // rot = Eigen::AngleAxisf(-0.5*M_PI, Eigen::Vector3f::UnitZ())  //this rotation is done second and rotates around the Z axis of the velodyne frame but after it was rotated by the first rotation.
-    //   * Eigen::AngleAxisf(0.5*M_PI, Eigen::Vector3f::UnitY());   //this rotation is done first. Performed on the Y axis of the velodyne frame (after this the y is pointing left, x is up and z is towards the camera)
-    // // m_tf_alg_vel.matrix().block<3,3>(0,0)=rot.transpose();
-
-    alg_vel_rot = Eigen::AngleAxisf(-0.5*M_PI+M_PI, Eigen::Vector3f::UnitY())  //this rotation is done second and rotates around the Y axis of alg frame
-                  * Eigen::AngleAxisf(0.5*M_PI, Eigen::Vector3f::UnitX());   //this rotation is done first. Performed on the X axis of alg frame (after this the y is pointing towards camera, x is right and z is down)
-    m_tf_alg_vel.matrix().block<3,3>(0,0)=alg_vel_rot;
-
-
-
-    m_tf_baselink_vel.setIdentity();
-    Eigen::Vector3f baselink_vel_t(-0.000, -0.000, -0.177);
-    // Eigen::Quaterniond baselink_vel_quat(-0.692, 0.722, -0.000, -0.000);
-
-    //TODO the quaternion didn't quite work here
-    Eigen::AngleAxisf rollAngle(-3.142, Eigen::Vector3f::UnitX());
-    Eigen::AngleAxisf yawAngle(0.0, Eigen::Vector3f::UnitY());
-    Eigen::AngleAxisf pitchAngle(-1.614, Eigen::Vector3f::UnitZ());
-    Eigen::Quaternion<float> baselink_vel_quat = pitchAngle * yawAngle * rollAngle;
-
-    m_tf_baselink_vel.matrix().block<3,3>(0,0)=baselink_vel_quat.toRotationMatrix();
-    m_tf_baselink_vel.matrix().block<3,1>(0,3)=baselink_vel_t;
 
 
 

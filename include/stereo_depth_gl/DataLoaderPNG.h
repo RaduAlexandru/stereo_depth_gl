@@ -35,6 +35,19 @@ struct file_timestamp_comparator
     }
 };
 
+enum DatasetType
+{
+    ICL = 0, // Icl nuim
+    RPG, //
+    TUM, // tum rgbd
+    TUM3,
+    NTS, // new tsukuba
+    ETH, // euroc mav dataset
+    BFS, // our bfs with small base line
+    WBFS, // our bfs with wide base line + thermal
+};
+
+
 
 //forward declarations
 class Profiler;
@@ -66,8 +79,6 @@ public:
     std::shared_ptr<Profiler> m_profiler;
 
     //transforms
-    Eigen::Affine3f m_tf_alg_vel; //transformation from velodyne frame to the algorithm frame
-    Eigen::Affine3f m_tf_baselink_vel;
     Eigen::Affine3f m_tf_worldGL_worldROS;
     std::unordered_map<uint64_t, Eigen::Affine3f> m_worldROS_baselink_map;
     std::vector<std::pair<uint64_t, Eigen::Affine3f> >m_worldROS_baselink_vec;
@@ -96,6 +107,8 @@ private:
     //params
     float m_tf_worldGL_worldROS_angle;
     std::string m_tf_worldGL_worldROS_axis;
+    // std::string m_dataset_type;
+    DatasetType m_dataset_type;
     std::string m_pose_file;
     std::vector<Frame> m_last_frame_per_cam; //stores the last frame for each of the cameras
     std::vector<bool> m_get_last_published_frame_for_cam; //if we shoudl return the last published frame or not
@@ -108,7 +121,18 @@ private:
     void init_params();
     void init_params_configuru();
     void init_data_reading();
-    void read_pose_file();
+    // void read_pose_file();
+
+    //read pose files
+    void read_pose_file_eth();
+
+    //get poses depending on the datset
+    bool get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp, const uint64_t cam_id);
+
+    //get the intrinsics depending on the dataset
+    void get_intrinsics(Eigen::Matrix3f& K, Eigen::Matrix<float, 5, 1>& distort_coeffs, const uint64_t cam_id);
+
+
     void read_data_for_cam(const int cam_id);
     // void read_pose_file_semantic_fusion();
     bool get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp);

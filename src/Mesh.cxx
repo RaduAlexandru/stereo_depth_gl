@@ -17,7 +17,9 @@ Mesh::Mesh():
         m_color_type(6),
         m_is_visible(true),
         m_mesh_color(1.0, 215.0/255.0, 85.0/255.0),
-        m_visualization_should_change(true)
+        m_visualization_should_change(true),
+        m_edge_color(-1, -1, -1),
+        m_line_width(-1)
 {
     clear();
 }

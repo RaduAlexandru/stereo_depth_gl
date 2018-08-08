@@ -54,8 +54,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
         m_loader_png(new DataLoaderPNG),
         // m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
-        dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5),
-        m_surfel_rendering(false){
+        dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5){
 
     init_params();
     m_view = view;
@@ -110,6 +109,24 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
      // m_scene.add_mesh(depth_mesh, "depth_mesh");
 
 
+     // //add a mesh for the camera frustum (WORKS FOR THE BAG LOADER AND MULTIPLE CAMERAS)
+     for (size_t i = 0; i < m_loader_png->get_nr_cams(); i++) {
+         Mesh mesh_cam_frustum;
+         mesh_cam_frustum.m_show_edges=true;
+         std::string cam_name="cam_" + std::to_string(i);
+         m_scene.add_mesh(mesh_cam_frustum, cam_name);
+     }
+
+
+     //add also a preloaded mesh if needed
+     if(m_preload_mesh){
+         Mesh mesh=read_mesh_from_file(m_preload_mesh_path);
+         std::cout << "Mesh is " << mesh << '\n';
+         mesh.m_show_points=true;
+         mesh.m_color_type=0; //jetcolor
+         // mesh.m_color_type=1; //graysclae
+         m_scene.add_mesh(mesh,"geom");
+     }
 
 }
 
@@ -140,9 +157,27 @@ void Core::update() {
 
     if ( m_loader_png->has_data_for_all_cams() ) {
         Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
-        Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
+        // Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
         // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
-        m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.rgb, frame_right.rgb);
+        // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.rgb, frame_right.rgb);
+        m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.rgb, frame_left.rgb);
+
+        //update camera frustum mesh
+        for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
+            std::string cam_name= "cam_"+std::to_string(cam_id);
+            Mesh new_frustum_mesh;
+            // if(cam_id==0){
+            //     new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+            // }else if( cam_id==1){
+            //     new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
+            // }
+            new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+
+            new_frustum_mesh.name=cam_name;
+            m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
+            m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
+        }
+
 
 
         // for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
@@ -204,20 +239,24 @@ void Core::update() {
             m_view->selected_data_index=i;
             m_view->data().clear();
 
-            if(m_scene.get_mesh_with_idx(i).m_is_visible){
-                if (m_scene.get_mesh_with_idx(i).m_show_mesh) {
-                    set_mesh(m_scene.get_mesh_with_idx(i));  // the scene is internally broken down into various independent meshes
+            Mesh& mesh=m_scene.get_mesh_with_idx(i);
+            if(mesh.m_is_visible){
+                if(m_do_transform_mesh_to_worlGL){
+                   mesh.apply_transform(m_loader_png->m_tf_worldGL_worldROS.cast<double>());
                 }
-                if (m_scene.get_mesh_with_idx(i).m_show_points) {
-                    set_points(m_scene.get_mesh_with_idx(i));
+                if (mesh.m_show_mesh) {
+                    set_mesh(mesh);  // the scene is internally broken down into various independent meshes
                 }
-                if (m_scene.get_mesh_with_idx(i).m_show_edges) {
-                    set_edges(m_scene.get_mesh_with_idx(i));
+                if (mesh.m_show_points) {
+                    set_points(mesh);
+                }
+                if (mesh.m_show_edges) {
+                    set_edges(mesh);
                 }
             }
 
 
-            m_scene.get_mesh_with_idx(i).m_visualization_should_change=false;
+            mesh.m_visualization_should_change=false;
         }
     }
     TIME_END("set_mesh");
@@ -249,10 +288,17 @@ void Core::init_params() {
     ros::NodeHandle private_nh("~");
     std::string config_file= getParamElseThrow<std::string>(private_nh, "config_file");
 
-    //read all the parameters
+    //read core the parameters
     Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
     Config core_cfg = cfg["core"];
     loguru::g_stderr_verbosity = core_cfg["loguru_verbosity"];
+
+    //read visualziation params
+    Config vis_cfg = cfg["visualization"];
+    m_frustum_scale_multiplier=vis_cfg["frustum_scale_multiplier"];
+    m_preload_mesh=vis_cfg["preload_mesh"];
+    m_preload_mesh_path=(std::string)vis_cfg["preload_mesh_path"];
+    m_do_transform_mesh_to_worlGL=vis_cfg["do_transform_mesh_to_worlGL"];
 
 
     //TODO read all the other parameters from the launch file
@@ -266,7 +312,8 @@ Mesh Core::read_mesh_from_file(std::string file_path) {
    if (fileExt == "off") {
        igl::readOFF(file_path, mesh.V, mesh.F);
    } else if (fileExt == "ply") {
-       igl::readPLY(file_path, mesh.V, mesh.F, mesh.NV, mesh.UV);
+       igl::readPLY(file_path, mesh.V, mesh.F, mesh.NV, mesh.UV, mesh.C);
+       mesh.C/=255.0;
    } else if (fileExt == "obj") {
        igl::readOBJ(file_path, mesh.V, mesh.F);
    }
@@ -454,10 +501,11 @@ void Core::write_obj(){
 }
 
 
-void Core::compute_camera_frustum_mesh(Mesh& frustum_mesh, const Frame& frame){
+Mesh Core::compute_camera_frustum_mesh(const Frame& frame, const float scale_multiplier){
     // https://gamedev.stackexchange.com/questions/29999/how-do-i-create-a-bounding-frustum-from-a-view-projection-matrix
+    Mesh frustum_mesh;
 
-    Eigen::Matrix4f proj=intrinsics_to_opengl_proj(frame.K.cast<double>(), frame.rgb.cols, frame.rgb.rows, 0.5, 2.5);
+    Eigen::Matrix4f proj=intrinsics_to_opengl_proj(frame.K, frame.rgb.cols, frame.rgb.rows, 0.5*scale_multiplier, 2.5*scale_multiplier);
     Eigen::Matrix4f view= frame.tf_cam_world.matrix().cast<float>();
     Eigen::Matrix4f view_projection= proj*view;
     Eigen::Matrix4f view_projection_inv=view_projection.inverse();
@@ -473,6 +521,7 @@ void Core::compute_camera_frustum_mesh(Mesh& frustum_mesh, const Frame& frame){
         -1, 1, 1,
         -1, -1, 1,
         1, -1, 1;
+
 
     //edges
     Eigen::MatrixXi E(12,2);
@@ -509,8 +558,11 @@ void Core::compute_camera_frustum_mesh(Mesh& frustum_mesh, const Frame& frame){
 
     frustum_mesh.V=frustrum_in_world_postw.cast<double>();
     frustum_mesh.E=E;
+    frustum_mesh.m_show_mesh=false;
+    frustum_mesh.m_show_edges=true;
 
     // std::cout << "frustum mesh is " <<  frustum_mesh << '\n';
 
+    return frustum_mesh;
 
 }

@@ -17,7 +17,7 @@
 #include <loguru.hpp>
 
 //https://blog.noctua-software.com/opencv-opengl-projection-matrix.html
-inline Eigen::Matrix4f intrinsics_to_opengl_proj(const Eigen::Matrix3d& K, const int width, const int height, float znear=0.1f, float zfar=100.0f){
+inline Eigen::Matrix4f intrinsics_to_opengl_proj(const Eigen::Matrix3f& K, const int width, const int height, float znear=0.1f, float zfar=100.0f){
     //apllying glscale like here solves the flipping issue https://www.opengl.org/discussion_boards/showthread.php/144492-Flip-entire-framebuffer-upside-down
     //effectivelly we flip m(1,1) and m(2,1)
 
