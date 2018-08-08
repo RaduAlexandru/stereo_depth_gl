@@ -9,19 +9,15 @@ public:
 
     cv::Mat rgb;
     cv::Mat gray;
-    cv::Mat rgb_small;
     cv::Mat grad_x;
     cv::Mat grad_y;
+    cv::Mat gray_with_gradients; //gray image and grad_x and grad_y into one RGB32F image, ready to be uploaded to opengl
 
-    cv::Mat classes;
-    cv::Mat probs;
     cv::Mat mask;
     cv::Mat depth;
     unsigned long long int timestamp;
-    cv::Mat classes_original_size;
-    cv::Mat probs_original_size;
     Eigen::Matrix3f K;
-    Eigen::Matrix<float, 5, 1> distort_coeffs; 
+    Eigen::Matrix<float, 5, 1> distort_coeffs;
     Eigen::Affine3f tf_cam_world;
 
     int cam_id; //id of the camera depending on how many cameras we have (it gos from 0 to 1 in the case of stereo)

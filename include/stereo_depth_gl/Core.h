@@ -66,6 +66,7 @@ public:
     void write_obj();
 
     Mesh compute_camera_frustum_mesh(const Frame& frame, const float scale_multiplier);
+    Mesh subsample_point_cloud(const Mesh& mesh);
 
 
     //objects dependencies
@@ -111,6 +112,7 @@ public:
       bool m_do_transform_mesh_to_worlGL;
       bool m_preload_mesh;
       std::string m_preload_mesh_path;
+      int m_preload_mesh_subsample_factor; //keep only a 1/subsample factor of the points in the preload mesh 
       bool m_player_paused;
       bool m_player_should_do_one_step;
 

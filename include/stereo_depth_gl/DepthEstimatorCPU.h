@@ -11,8 +11,8 @@
 //My stuff
 #include "stereo_depth_gl/Mesh.h"
 #include "stereo_depth_gl/Scene.h"
-#include "stereo_depth_gl/DataLoader.h"
 #include "stereo_depth_gl/Pattern.h"
+#include "stereo_depth_gl/Frame.h"
 
 //ceres
 #include "ceres/ceres.h"

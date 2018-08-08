@@ -11,8 +11,8 @@
 //My stuff
 #include "stereo_depth_gl/Mesh.h"
 #include "stereo_depth_gl/Scene.h"
-#include "stereo_depth_gl/DataLoader.h"
 #include "stereo_depth_gl/Pattern.h"
+#include "stereo_depth_gl/Frame.h"
 #include "Texture2D.h"
 
 //ceres
@@ -179,7 +179,8 @@ public:
     Mesh get_mesh();
 
 
-    void upload_gray_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
+    void upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
+    void upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
 
     // Scene get_scene();
     bool is_modified(){return m_scene_is_modified;};

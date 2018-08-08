@@ -11,8 +11,8 @@
 //My stuff
 #include "stereo_depth_gl/Mesh.h"
 #include "stereo_depth_gl/Scene.h"
-#include "stereo_depth_gl/DataLoader.h"
 #include "stereo_depth_gl/LabelMngr.h"
+#include "stereo_depth_gl/Frame.h"
 #include "Texture2D.h"
 #include "Texture2DArray.h"
 

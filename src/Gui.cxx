@@ -153,6 +153,7 @@ void Gui::update() {
 
 
     if (ImGui::CollapsingHeader("Depth Estimation")) {
+        ImGui::Checkbox("Enable gl profiling", &m_core->m_depth_estimator_gl->m_gl_profiling_enabled);
         if(ImGui::SliderInt("search_epi_method", &m_core->m_depth_estimator_gl->m_params.search_epi_method, 0, 1)){
             m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }

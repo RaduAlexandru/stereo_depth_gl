@@ -46,8 +46,6 @@ DataLoaderPNG::DataLoaderPNG(){
 
     // init_params_configuru();
 
-    start_reading();
-
 }
 
 DataLoaderPNG::~DataLoaderPNG(){
@@ -243,11 +241,6 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             continue;
         }
 
-        // if( (int)m_rgb_filenames_per_cam[cam_id].size()- (int)m_idx_img_to_read_per_cam[cam_id] < 60){
-        //     m_idx_img_to_read_per_cam[cam_id]++;
-        //     continue;
-        // }
-
         // std::cout << "size approx is " << m_queue.size_approx() << '\n';
         // std::cout << "m_idx_img_to_read is " << m_idx_img_to_read << '\n';
         if(m_frames_buffer_per_cam[cam_id].size_approx()<BUFFER_SIZE-1){ //there is enough space
@@ -273,109 +266,30 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             //intrinsics
             get_intrinsics(frame.K, frame.distort_coeffs, cam_id);
 
-            // std::cout << "we got pose for image " << m_idx_img_to_read_per_cam[cam_id] << '\n';
-
-            // if(m_poses_from_courtyard_data){
-            //     sensor_pose=m_tf_worldGL_worldROS*sensor_pose; // from baselink to world ros and from world ros to worlf_gl (now sensor pose maps from baselink to world_gl)
-            //     //TODO
-            //     Eigen::Affine3f tf_cam_baselink;
-            //     tf_cam_baselink.setIdentity();
-            //     if(cam_id==0){
-            //         //rosrun tf tf_echo /cam_left /base_link
-            //         Eigen::Vector3f cam_baselink_t(-0.050, -0.100, -0.100);
-            //         // Eigen::Quaterniond cam_baselink_quat(0.707, 0.000, 0.000, 0.707);
-            //         //TODO the quaternion didn't quite work here
-            //         Eigen::AngleAxisf rollAngle(1.571, Eigen::Vector3f::UnitX());
-            //         Eigen::AngleAxisf yawAngle(0.0, Eigen::Vector3f::UnitY());
-            //         Eigen::AngleAxisf pitchAngle(0.0, Eigen::Vector3f::UnitZ());
-            //         Eigen::Quaternion<float> cam_baselink_quat = pitchAngle * yawAngle * rollAngle;
-            //         tf_cam_baselink.matrix().block<3,3>(0,0)=cam_baselink_quat.toRotationMatrix();
-            //         tf_cam_baselink.matrix().block<3,1>(0,3)=cam_baselink_t;
-            //     }else if(cam_id==1){
-            //         //rosrun tf tf_echo /cam_right /base_link
-            //         Eigen::Vector3f cam_baselink_t(0.050, -0.100, -0.100);
-            //         // Eigen::Quaterniond cam_baselink_quat(0.707, 0.000, 0.000, 0.707);
-            //         //TODO the quaternion didn't quite work here
-            //         Eigen::AngleAxisf rollAngle(-1.571, Eigen::Vector3f::UnitX());
-            //         Eigen::AngleAxisf yawAngle(0.0, Eigen::Vector3f::UnitY());
-            //         Eigen::AngleAxisf pitchAngle(-3.142, Eigen::Vector3f::UnitZ());
-            //         Eigen::Quaternion<float> cam_baselink_quat = pitchAngle * yawAngle * rollAngle;
-            //         tf_cam_baselink.matrix().block<3,3>(0,0)=cam_baselink_quat.toRotationMatrix();
-            //         tf_cam_baselink.matrix().block<3,1>(0,3)=cam_baselink_t;
-            //     }
-            //
-            //     sensor_pose= tf_cam_baselink *sensor_pose.inverse(); //from world_gl to baselink and from baselink to cam
-            // }else if(m_poses_from_semantic_fusion) {
-            //     sensor_pose=m_tf_worldGL_worldROS*sensor_pose; // from baselink to world ros and from world ros to worlf_gl (now sensor pose maps from baselink to world_gl)
-            //     sensor_pose=sensor_pose.inverse();
-            // }else if(m_poses_from_synthia){
-            //     sensor_pose=sensor_pose.inverse(); //nothing else to do
-            //     //TODO for some reason the camera is pointing backwards so we rotate it
-            //     Eigen::Affine3f rot;
-            //     Eigen::AngleAxisf rollAngle(3.1415, Eigen::Vector3f::UnitX());
-            //     Eigen::AngleAxisf yawAngle(0.0, Eigen::Vector3f::UnitY());
-            //     Eigen::AngleAxisf pitchAngle(0.0, Eigen::Vector3f::UnitZ());
-            //     Eigen::Quaternion<float> rot_quat = pitchAngle * yawAngle * rollAngle;
-            //     rot.matrix().block<3,3>(0,0)=rot_quat.toRotationMatrix();
-            //     rot.matrix().block<3,1>(0,3)  << 0.0, 0.0, 0.0;
-            //     sensor_pose= rot *sensor_pose; //from world_gl to baselink and from baselink to cam
-            // }
 
 
-            //Get rgb
-            // TIME_START("read_rgb_img");
+
+            //Get images, rgb, gradients etc
+            TIME_START("read_imgs");
             frame.rgb=cv::imread(rgb_filename.string());
-            // cv::resize(frame.rgb, frame.rgb, cv::Size(), 1.0/m_rgb_subsample_factor, 1.0/m_rgb_subsample_factor);
+
+            //gray
             cv::cvtColor ( frame.rgb, frame.gray, CV_BGR2GRAY );
             frame.gray.convertTo(frame.gray, CV_32F);
             // frame.gray/=255.0;
-            // cv::imshow("wda",frame.gray);
 
+            //gradients
+            cv::Scharr( frame.gray, frame.grad_x, CV_32F, 1, 0);
+            cv::Scharr( frame.gray, frame.grad_y, CV_32F, 0, 1);
 
+            //merge the gray image and the gradients into one 3 channel image
+            std::vector<cv::Mat> channels;
+            channels.push_back(frame.gray);
+            channels.push_back(frame.grad_x);
+            channels.push_back(frame.grad_y);
+            cv::merge(channels, frame.gray_with_gradients);
+            TIME_END("read_imgs");
 
-
-
-
-
-
-            // TIME_END("read_rgb_img");
-            // if(m_poses_from_synthia){
-            //     cv::Mat flipped;
-            //     cv::flip(frame.rgb, flipped, 0);
-            //     frame.rgb=flipped;
-            // }
-
-
-
-
-
-
-
-            //first few frames will not be good because the spline is not initialized completely
-            // if(frame.frame_idx<=50){
-            //     nr_frames_read_for_cam++;
-            //     continue;
-            // }
-
-
-            // frame.K=m_intrinsics_per_cam[cam_id].cast<float>();
-            // frame.tf_cam_world=sensor_pose;
-
-
-            //correct the pose with the spline
-            // VLOG(1) << "before pose is : \n" << frame.tf_cam_world.matrix() << std::endl;
-            // if(m_do_spline_correction){
-            //     VLOG(2) << "Correcting with spline";
-            //     double offset_global_and_local=m_spline_global_offset_ms+(-100)*frame.deviation_ms;
-            //     frame.tf_cam_world_not_corrected=frame.tf_cam_world;
-            //     update_pose_with_spline(frame,offset_global_and_local, m_extrinsic_vector_cam0_baselink.cast<double>(),m_extrinsic_vector_cam1_baselink.cast<double>() );
-            // }
-            // VLOG(1) << "after pose is : \n" << frame.tf_cam_world.matrix() << std::endl;
-            //if the pose was not valid then we will get a nan. TODO make it a bit nicer, maybe return a bool for success or check why id fails in the first place
-            // if(!std::isfinite(frame.tf_cam_world.matrix()(0,0))){
-            //     LOG(WARNING) << "Spline pose not valid" ;
-            //     continue;
-            // }
 
             m_frames_buffer_per_cam[cam_id].enqueue(frame);
             nr_frames_read_for_cam++;

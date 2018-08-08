@@ -1,5 +1,6 @@
 //C++
 #include <iostream>
+#include <random>
 
 #include <Eigen/Dense>
 
@@ -56,7 +57,8 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
         m_nr_callbacks(0),
         dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5),
         m_player_paused(true),
-        m_player_should_do_one_step(false){
+        m_player_should_do_one_step(false),
+        m_preload_mesh_subsample_factor(1){
 
     init_params();
     m_view = view;
@@ -73,6 +75,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
     // m_loader->m_profiler=profiler;
     // m_loader->m_player=m_player;
     m_loader_png->m_profiler=profiler;
+    m_loader_png->start_reading(); //can only do it from here because only now we have linked with the profiler
     // for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
     //     m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_"+std::to_string(i)+".png", i);
     //
@@ -124,6 +127,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
      if(m_preload_mesh){
          Mesh mesh=read_mesh_from_file(m_preload_mesh_path);
          std::cout << "Mesh is " << mesh << '\n';
+         mesh=subsample_point_cloud(mesh);
          mesh.m_show_points=true;
          mesh.m_color_type=0; //jetcolor
          // mesh.m_color_type=1; //graysclae
@@ -161,22 +165,21 @@ void Core::update() {
     if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
         m_player_should_do_one_step=false;
         Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
-        // Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
+        Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
         // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
-        // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.rgb, frame_right.rgb);
-        m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.rgb, frame_left.rgb);
+        m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
+        // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.rgb, frame_left.rgb);
 
         //update camera frustum mesh
         for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
             std::string cam_name= "cam_"+std::to_string(cam_id);
             Mesh new_frustum_mesh;
-            // if(cam_id==0){
-            //     new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-            // }else if( cam_id==1){
-            //     new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
-            // }
-            new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-
+            if(cam_id==0){
+                new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+            }else if( cam_id==1){
+                new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
+            }
+            // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
             new_frustum_mesh.name=cam_name;
             m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
             m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
@@ -236,7 +239,7 @@ void Core::update() {
     }
 
 
-    TIME_START("set_mesh");
+
     for (size_t i = 0; i < m_scene.get_nr_meshes(); i++) {
         if(m_scene.get_mesh_with_idx(i).m_visualization_should_change){
             LOG_F(INFO, "Core:: saw that the scene was modified");
@@ -244,6 +247,7 @@ void Core::update() {
             m_view->data().clear();
 
             Mesh& mesh=m_scene.get_mesh_with_idx(i);
+            TIME_START("set_mesh");
             if(mesh.m_is_visible){
                 if(m_do_transform_mesh_to_worlGL){
                    mesh.apply_transform(m_loader_png->m_tf_worldGL_worldROS.cast<double>());
@@ -258,12 +262,13 @@ void Core::update() {
                     set_edges(mesh);
                 }
             }
+            TIME_END("set_mesh");
 
 
             mesh.m_visualization_should_change=false;
         }
     }
-    TIME_END("set_mesh");
+
 
 
     // if(m_player->is_paused() &&  m_player->m_player_should_continue_after_step){
@@ -302,7 +307,10 @@ void Core::init_params() {
     m_frustum_scale_multiplier=vis_cfg["frustum_scale_multiplier"];
     m_preload_mesh=vis_cfg["preload_mesh"];
     m_preload_mesh_path=(std::string)vis_cfg["preload_mesh_path"];
+    m_preload_mesh_subsample_factor=vis_cfg["preload_mesh_subsample_factor"];
     m_do_transform_mesh_to_worlGL=vis_cfg["do_transform_mesh_to_worlGL"];
+
+
 
 
     //TODO read all the other parameters from the launch file
@@ -568,5 +576,39 @@ Mesh Core::compute_camera_frustum_mesh(const Frame& frame, const float scale_mul
     // std::cout << "frustum mesh is " <<  frustum_mesh << '\n';
 
     return frustum_mesh;
+
+}
+
+Mesh Core::subsample_point_cloud(const Mesh& mesh){
+
+    Mesh mesh_subsampled;
+    if(m_preload_mesh_subsample_factor==1){
+        mesh_subsampled=mesh;
+    }else{
+        int nr_points_to_keep=mesh.V.rows()/m_preload_mesh_subsample_factor;
+        mesh_subsampled.V.resize(nr_points_to_keep,3);
+        mesh_subsampled.V.setZero();
+        mesh_subsampled.C.resize(nr_points_to_keep,3);
+        mesh_subsampled.C.setZero();
+
+        std::random_device rd;     // only used once to initialise (seed) engine
+        std::mt19937 rng(rd());    // random-number engine used (Mersenne-Twister in this case)
+        std::uniform_int_distribution<int> uni(0,mesh.V.rows()-1); // guaranteed unbiased
+
+
+
+        for (size_t i = 0; i < nr_points_to_keep; i++) {
+            //get random point
+            int random_idx = uni(rng);
+
+            //copy it into the mesh_subsampled
+            mesh_subsampled.V.row(i)=mesh.V.row(random_idx);
+            mesh_subsampled.C.row(i)=mesh.C.row(random_idx);
+        }
+    }
+
+
+
+    return mesh_subsampled;
 
 }
