@@ -36,11 +36,13 @@ using namespace configuru;
 DataLoaderPNG::DataLoaderPNG(){
 
     init_params();
-    // init_data_reading();
+    init_data_reading();
     // read_pose_file();
     // create_transformation_matrices();
 
-    init_params_configuru();
+    // init_params_configuru();
+
+    start_reading();
 
 }
 
@@ -59,6 +61,12 @@ void DataLoaderPNG::init_params(){
     Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
     Config loader_config=cfg["loader"];
     m_nr_cams = loader_config["nr_cams"];
+    m_imgs_to_skip=loader_config["imgs_to_skip"];
+    m_nr_images_to_read=loader_config["nr_images_to_read"];
+    for (size_t i = 0; i < m_nr_cams; i++) {
+        m_rgb_imgs_path_per_cam.push_back( (std::string)loader_config["rgb_path_cam_"+std::to_string(i)] );
+        m_frames_buffer_per_cam.push_back( moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
+    }
 
 
     // //input for the images
@@ -137,13 +145,16 @@ void DataLoaderPNG::init_params_configuru(){
 
 void DataLoaderPNG::init_data_reading(){
     std::cout << "init data reading" << '\n';
-    //look into m_imgs_path insithe there should be 2 folders: rgb, labels, possibly also the labels_colored and depth
+
+    m_idx_img_to_read_per_cam.resize(m_nr_cams,0);
+    m_rgb_filenames_per_cam.resize(m_nr_cams);
+    m_last_frame_per_cam.resize(m_nr_cams);
+    m_get_last_published_frame_for_cam.resize(m_nr_cams,false);
+
+
     for (size_t i = 0; i < m_nr_cams; i++) {
         if(!fs::is_directory(m_rgb_imgs_path_per_cam[i])) {
             LOG(FATAL) << "No directory " << m_rgb_imgs_path_per_cam[i];
-        }
-        if(!fs::is_directory(m_labels_imgs_path_per_cam[i])) {
-            LOG(FATAL) << "No directory " << m_labels_imgs_path_per_cam[i];
         }
 
         //see how many images we have and read the files paths into a vector
@@ -177,8 +188,7 @@ void DataLoaderPNG::init_data_reading(){
         // std::cout << "stem is " << m_rgb_filenames_per_cam[i][0].stem().string() << '\n';
     }
 
-    m_last_frame_per_cam.resize(m_nr_cams);
-    m_get_last_published_frame_for_cam.resize(m_nr_cams,false);
+
 
 
     // //get the same nr of images from both cams (drop the ones that have more) so we get images in pairs more easily
@@ -218,7 +228,6 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
         //we finished reading so we wait here for a reset
         if(m_idx_img_to_read_per_cam[cam_id]>=m_rgb_filenames_per_cam[cam_id].size()){
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            // std::cout << "waiting" << '\n';
             continue;
         }
 
@@ -245,13 +254,13 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
 
 
 
-            //TODO---------------parametrize this depending on the dataset because the pose may be to a different frame and so on
-            //POSE---
-            Eigen::Affine3f sensor_pose;  //maps from baselink to world ros
-            if (!get_pose_at_timestamp(sensor_pose, timestamp)){
-                // LOG(WARNING) << "Not found any pose at timestamp " << timestamp << " Discarding";
-                continue;
-            }
+            // //TODO---------------parametrize this depending on the dataset because the pose may be to a different frame and so on
+            // //POSE---
+            // Eigen::Affine3f sensor_pose;  //maps from baselink to world ros
+            // if (!get_pose_at_timestamp(sensor_pose, timestamp)){
+            //     // LOG(WARNING) << "Not found any pose at timestamp " << timestamp << " Discarding";
+            //     continue;
+            // }
 
             // std::cout << "we got pose for image " << m_idx_img_to_read_per_cam[cam_id] << '\n';
 
@@ -305,7 +314,11 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             //Get rgb
             // TIME_START("read_rgb_img");
             frame.rgb=cv::imread(rgb_filename.string());
-            cv::resize(frame.rgb, frame.rgb, cv::Size(), 1.0/m_rgb_subsample_factor, 1.0/m_rgb_subsample_factor);
+            // cv::resize(frame.rgb, frame.rgb, cv::Size(), 1.0/m_rgb_subsample_factor, 1.0/m_rgb_subsample_factor);
+            cv::cvtColor ( frame.rgb, frame.gray, CV_BGR2GRAY );
+            frame.gray.convertTo(frame.gray, CV_32F);
+            // frame.gray/=255.0;
+            // cv::imshow("wda",frame.gray);
 
 
 
@@ -334,8 +347,8 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             // }
 
 
-            frame.K=m_intrinsics_per_cam[cam_id].cast<float>();
-            frame.tf_cam_world=sensor_pose;
+            // frame.K=m_intrinsics_per_cam[cam_id].cast<float>();
+            // frame.tf_cam_world=sensor_pose;
 
 
             //correct the pose with the spline
@@ -348,17 +361,13 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             // }
             // VLOG(1) << "after pose is : \n" << frame.tf_cam_world.matrix() << std::endl;
             //if the pose was not valid then we will get a nan. TODO make it a bit nicer, maybe return a bool for success or check why id fails in the first place
-            if(!std::isfinite(frame.tf_cam_world.matrix()(0,0))){
-                LOG(WARNING) << "Spline pose not valid" ;
-                continue;
-            }
+            // if(!std::isfinite(frame.tf_cam_world.matrix()(0,0))){
+            //     LOG(WARNING) << "Spline pose not valid" ;
+            //     continue;
+            // }
 
             m_frames_buffer_per_cam[cam_id].enqueue(frame);
             nr_frames_read_for_cam++;
-
-
-
-
 
         }
     }
@@ -428,9 +437,6 @@ Frame DataLoaderPNG::get_next_frame_for_cam(const int cam_id){
 
         // VLOG(1) << "after pose is : \n" << frame.tf_cam_world.matrix() << std::endl;
         //if the pose was not valid then we will get a nan. TODO make it a bit nicer, maybe return a bool for success or check why id fails in the first place
-        if(!std::isfinite(frame.tf_cam_world.matrix()(0,0))){
-            LOG(WARNING) << "Spline pose not valid" ;
-        }
         return frame;
     }
 

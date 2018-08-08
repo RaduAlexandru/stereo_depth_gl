@@ -7,12 +7,12 @@
 #include "stereo_depth_gl/Core.h"
 #include "stereo_depth_gl/MiscUtils.h"
 #include "stereo_depth_gl/Profiler.h"
-#include "stereo_depth_gl/RosBagPlayer.h"
-#include "stereo_depth_gl/DepthEstimatorCPU.h"
-#include "stereo_depth_gl/DepthEstimatorRenegade.h"
+// #include "stereo_depth_gl/RosBagPlayer.h"
+// #include "stereo_depth_gl/DepthEstimatorCPU.h"
+// #include "stereo_depth_gl/DepthEstimatorRenegade.h"
 #include "stereo_depth_gl/DepthEstimatorGL.h"
 // #include "stereo_depth_gl/DepthEstimatorGL2.h"
-#include "stereo_depth_gl/DataLoader.h"
+// #include "stereo_depth_gl/DataLoader.h"
 #include "stereo_depth_gl/DataLoaderPNG.h"
 // #include "stereo_depth_gl/SurfelSplatter.h"
 
@@ -45,12 +45,12 @@ using namespace configuru;
 
 Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Profiler> profiler) :
         m_viewer_initialized(false),
-        m_player(new RosBagPlayer),
-        m_depth_estimator(new DepthEstimatorCPU),
-        m_depth_estimator_renegade(new DepthEstimatorRenegade),
-        m_depth_estimator_cl(new DepthEstimatorGL),
+        // m_player(new RosBagPlayer),
+        // m_depth_estimator(new DepthEstimatorCPU),
+        // m_depth_estimator_renegade(new DepthEstimatorRenegade),
+        m_depth_estimator_gl(new DepthEstimatorGL),
         // m_depth_estimator_gl2(new DepthEstimatorGL2),
-        m_loader(new DataLoader),
+        // m_loader(new DataLoader),
         m_loader_png(new DataLoaderPNG),
         // m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
@@ -60,17 +60,18 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
     init_params();
     m_view = view;
     m_profiler=profiler;
-    m_depth_estimator->m_profiler=profiler;
-    m_depth_estimator->m_view=m_view;
-    m_depth_estimator_renegade->m_profiler=profiler;
-    m_depth_estimator_renegade->m_view=m_view;
-    m_depth_estimator_cl->m_profiler=profiler;
-    m_depth_estimator_cl->m_view=m_view;
+    // m_depth_estimator->m_profiler=profiler;
+    // m_depth_estimator->m_view=m_view;
+    // m_depth_estimator_renegade->m_profiler=profiler;
+    // m_depth_estimator_renegade->m_view=m_view;
+    m_depth_estimator_gl->m_profiler=profiler;
+    m_depth_estimator_gl->m_view=m_view;
     // m_depth_estimator_gl2->m_profiler=profiler;
     // m_depth_estimator_gl2->m_view=m_view;
     // m_splatter->m_view=m_view;
     // m_loader->m_profiler=profiler;
     // m_loader->m_player=m_player;
+    m_loader_png->m_profiler=profiler;
     // for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
     //     m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_"+std::to_string(i)+".png", i);
     //
@@ -92,15 +93,15 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
      // Mesh depth_mesh=m_depth_estimator->compute_depth2(dummy_frame);
      // Mesh depth_mesh=m_depth_estimator->compute_depth_simplified();  // works on cpu
      // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth(dummy_frame);  //just reads the things that were written from RENEGADE
-     // // Mesh depth_mesh=m_depth_estimator_cl->compute_depth();
+     // // Mesh depth_mesh=m_depth_estimator_gl->compute_depth();
      // depth_mesh.m_show_points=true;
      // m_scene.add_mesh(depth_mesh, "depth_mesh");
 
 
      //good one
-     // m_depth_estimator_cl->init_data();
-     // m_depth_estimator_cl->compute_depth_and_create_mesh();
-     // m_depth_estimator_cl->compute_depth_and_create_mesh_cpu();
+     // m_depth_estimator_gl->init_data();
+     // m_depth_estimator_gl->compute_depth_and_create_mesh();
+     // m_depth_estimator_gl->compute_depth_and_create_mesh_cpu();
 
 
      std::cout << "finished computing depth-------------------" << '\n';
@@ -124,71 +125,75 @@ void Core::update() {
     // }
 
 
-    if(m_depth_estimator_cl->is_modified()){
-        std::string mesh_name="depth_mesh";
-        Mesh depth_mesh=m_depth_estimator_cl->get_mesh();
-        depth_mesh.m_show_points=true;
-        depth_mesh.name=mesh_name;
-        if(m_scene.does_mesh_with_name_exist(mesh_name)){
-            m_scene.get_mesh_with_name(mesh_name)=depth_mesh; //it exists, just assign to it
-        }else{
-            m_scene.add_mesh(depth_mesh, mesh_name); //doesn't exist, add it to the scene
-        }
-    }
+    // if(m_depth_estimator_gl->is_modified()){
+    //     std::string mesh_name="depth_mesh";
+    //     Mesh depth_mesh=m_depth_estimator_gl->get_mesh();
+    //     depth_mesh.m_show_points=true;
+    //     depth_mesh.name=mesh_name;
+    //     if(m_scene.does_mesh_with_name_exist(mesh_name)){
+    //         m_scene.get_mesh_with_name(mesh_name)=depth_mesh; //it exists, just assign to it
+    //     }else{
+    //         m_scene.add_mesh(depth_mesh, mesh_name); //doesn't exist, add it to the scene
+    //     }
+    // }
 
 
-    if (m_loader->is_modified()) {
-
-        int nr_cams_processed=0;
-        for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
-            if(m_loader->is_cam_modified(i)){
-                // m_texturer->commit_pages();
-                // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-                // // display_frame(frame);
-                // TIME_START("upload frame");
-                // m_texturer->upload_rgb_texture(frame.rgb);
-                // m_texturer->upload_mask_texture(frame.mask);
-                // m_texturer->upload_frame_classes_and_probs_texture(frame.classes, frame.probs);
-                // TIME_END("upload frame");
-                // m_texturer->texture_scene(m_scene.get_idx_for_name("geom"), frame);
-                //
-                // //update camera frustum mesh
-                // std::string cam_name= "cam_" + std::to_string(frame.cam_id);
-                // compute_camera_frustum_mesh(m_scene.get_mesh_with_name(cam_name), frame);
-                // m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
-
-                // //debug update the position of a certain debug point
-                // Eigen::Vector3d eye_pos=frame.tf_cam_world.inverse().translation();
-                // m_scene.get_mesh_with_name("debug_mesh").V=eye_pos.transpose();
-                // m_scene.get_mesh_with_name("debug_mesh").m_visualization_should_change=true;
+    if ( m_loader_png->has_data_for_all_cams() ) {
+        Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
+        Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
+        // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
+        m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.rgb, frame_right.rgb);
 
 
-                // // cl depth
-                // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-                // m_depth_estimator->compute_depth2(frame);
-                // // display_frame(frame);
-
-
-
-                // //renegade depth
-                // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-                // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth2(frame);
-                // m_scene.add_mesh(depth_mesh, "depth_mesh");
-                // display_frame(frame);
-
-                //----------the good one
-                // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-                // Mesh depth_mesh=m_depth_estimator->compute_depth2(frame);
-                // depth_mesh.m_show_points=true;
-                // m_scene.add_mesh(depth_mesh, "depth_mesh");
-                // display_frame(frame);
-
-
-
-                nr_cams_processed++;
-            }
-        }
-        VLOG(1) << "nr_cams_processed " << nr_cams_processed;
+        // for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
+        //     if(m_loader->is_cam_modified(i)){
+        //         // m_texturer->commit_pages();
+        //         // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
+        //         // // display_frame(frame);
+        //         // TIME_START("upload frame");
+        //         // m_texturer->upload_rgb_texture(frame.rgb);
+        //         // m_texturer->upload_mask_texture(frame.mask);
+        //         // m_texturer->upload_frame_classes_and_probs_texture(frame.classes, frame.probs);
+        //         // TIME_END("upload frame");
+        //         // m_texturer->texture_scene(m_scene.get_idx_for_name("geom"), frame);
+        //         //
+        //         // //update camera frustum mesh
+        //         // std::string cam_name= "cam_" + std::to_string(frame.cam_id);
+        //         // compute_camera_frustum_mesh(m_scene.get_mesh_with_name(cam_name), frame);
+        //         // m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
+        //
+        //         // //debug update the position of a certain debug point
+        //         // Eigen::Vector3d eye_pos=frame.tf_cam_world.inverse().translation();
+        //         // m_scene.get_mesh_with_name("debug_mesh").V=eye_pos.transpose();
+        //         // m_scene.get_mesh_with_name("debug_mesh").m_visualization_should_change=true;
+        //
+        //
+        //         // // cl depth
+        //         // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
+        //         // m_depth_estimator->compute_depth2(frame);
+        //         // // display_frame(frame);
+        //
+        //
+        //
+        //         // //renegade depth
+        //         // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
+        //         // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth2(frame);
+        //         // m_scene.add_mesh(depth_mesh, "depth_mesh");
+        //         // display_frame(frame);
+        //
+        //         //----------the good one
+        //         // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
+        //         // Mesh depth_mesh=m_depth_estimator->compute_depth2(frame);
+        //         // depth_mesh.m_show_points=true;
+        //         // m_scene.add_mesh(depth_mesh, "depth_mesh");
+        //         // display_frame(frame);
+        //
+        //
+        //
+        //         // nr_cams_processed++;
+        //     }
+        // }
+        // VLOG(1) << "nr_cams_processed " << nr_cams_processed;
     }
 
 

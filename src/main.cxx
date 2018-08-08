@@ -47,7 +47,8 @@ int main(int argc, char *argv[]) {
     loguru::init(argc, argv);
     loguru::g_stderr_verbosity = -1; //By default don't show any logs except warning, error and fatals
 
-    ros::init(argc, argv, "laser_mesher");
+    ros::init(argc, argv, "stereo_depth_gl");
+    ros::start(); //in order for the node to live otherwise it will die when the last node handle is killed
 
     LOG_S(INFO) << "Hello from main!";
 

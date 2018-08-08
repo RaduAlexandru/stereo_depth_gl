@@ -76,6 +76,13 @@ void DepthEstimatorGL::init_opengl(){
     m_cur_frame.set_wrap_mode(GL_CLAMP_TO_BORDER);
     m_cur_frame.set_filter_mode(GL_LINEAR);
 
+    //for visualization purposes we upload here the gray images
+    m_frame_gray_tex.set_wrap_mode(GL_CLAMP_TO_BORDER);
+    m_frame_gray_tex.set_filter_mode(GL_LINEAR);
+    m_frame_gray_stereo_tex.set_wrap_mode(GL_CLAMP_TO_BORDER);
+    m_frame_gray_stereo_tex.set_filter_mode(GL_LINEAR);
+
+
     compile_shaders();
 
 }
@@ -1753,4 +1760,15 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Point>& immature_points, co
 
 
     return mesh;
+}
+
+void DepthEstimatorGL::upload_gray_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right){
+    int size_bytes=image_left.step[0] * image_left.rows;
+    // m_frame_gray_tex.upload_data(GL_R32F, image_left.cols, image_left.rows, GL_RED, GL_FLOAT, image_left.ptr(), size_bytes);
+    m_frame_gray_tex.upload_data(GL_RGB, image_left.cols, image_left.rows, GL_BGR, GL_UNSIGNED_BYTE, image_left.ptr(), size_bytes);
+
+
+    size_bytes=image_right.step[0] * image_right.rows;
+    // m_frame_gray_stereo_tex.upload_data(GL_R32F, image_right.cols, image_right.rows, GL_RED, GL_FLOAT, image_right.ptr(), size_bytes);
+    m_frame_gray_stereo_tex.upload_data(GL_RGB, image_right.cols, image_right.rows, GL_BGR, GL_UNSIGNED_BYTE, image_right.ptr(), size_bytes);
 }

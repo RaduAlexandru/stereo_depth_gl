@@ -150,60 +150,62 @@ void Gui::update() {
 
 
     if (ImGui::CollapsingHeader("Depth Estimation")) {
-        if(ImGui::SliderInt("search_epi_method", &m_core->m_depth_estimator_cl->m_params.search_epi_method, 0, 1)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderInt("search_epi_method", &m_core->m_depth_estimator_gl->m_params.search_epi_method, 0, 1)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("mean_starting_depth", &m_core->m_depth_estimator_cl->m_mean_starting_depth, 0.5, 6)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("mean_starting_depth", &m_core->m_depth_estimator_gl->m_mean_starting_depth, 0.5, 6)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("gradH_th", &m_core->m_depth_estimator_cl->m_params.gradH_th, 100000, 800000000)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("gradH_th", &m_core->m_depth_estimator_gl->m_params.gradH_th, 100000, 800000000)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("outlierTH", &m_core->m_depth_estimator_cl->m_params.outlierTH, 1, 300)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("outlierTH", &m_core->m_depth_estimator_gl->m_params.outlierTH, 1, 300)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("overallEnergyTHWeight", &m_core->m_depth_estimator_cl->m_params.overallEnergyTHWeight, 0.1, 50)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("overallEnergyTHWeight", &m_core->m_depth_estimator_gl->m_params.overallEnergyTHWeight, 0.1, 50)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("outlierTHSumComponent", &m_core->m_depth_estimator_cl->m_params.outlierTHSumComponent, 5, 500)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("outlierTHSumComponent", &m_core->m_depth_estimator_gl->m_params.outlierTHSumComponent, 5, 500)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("huberTH", &m_core->m_depth_estimator_cl->m_params.huberTH, 0.1, 50)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("huberTH", &m_core->m_depth_estimator_gl->m_params.huberTH, 0.1, 50)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("convergence_sigma2_thresh", &m_core->m_depth_estimator_cl->m_params.convergence_sigma2_thresh, 0.1, 300)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("convergence_sigma2_thresh", &m_core->m_depth_estimator_gl->m_params.convergence_sigma2_thresh, 0.1, 300)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("eta", &m_core->m_depth_estimator_cl->m_params.eta, 0.1, 200)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("eta", &m_core->m_depth_estimator_gl->m_params.eta, 0.1, 200)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
 
         //denoise things
-        if(ImGui::SliderInt("denoise_nr_iterations", &m_core->m_depth_estimator_cl->m_params.denoise_nr_iterations, 0, 400)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderInt("denoise_nr_iterations", &m_core->m_depth_estimator_gl->m_params.denoise_nr_iterations, 0, 400)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("denoise_depth_range", &m_core->m_depth_estimator_cl->m_params.denoise_depth_range, 1.0, 10.0)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("denoise_depth_range", &m_core->m_depth_estimator_gl->m_params.denoise_depth_range, 1.0, 10.0)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("denoise_lambda", &m_core->m_depth_estimator_cl->m_params.denoise_lambda, 0.1, 10)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("denoise_lambda", &m_core->m_depth_estimator_gl->m_params.denoise_lambda, 0.1, 10)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("denoise_L", &m_core->m_depth_estimator_cl->m_params.denoise_L, 0.1, 20)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("denoise_L", &m_core->m_depth_estimator_gl->m_params.denoise_L, 0.1, 20)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("denoise_tau", &m_core->m_depth_estimator_cl->m_params.denoise_tau, 0.00001, 5)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("denoise_tau", &m_core->m_depth_estimator_gl->m_params.denoise_tau, 0.00001, 5)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
-        if(ImGui::SliderFloat("denoise_theta", &m_core->m_depth_estimator_cl->m_params.denoise_theta, 0.00001, 20)){
-            m_core->m_depth_estimator_cl->compute_depth_and_create_mesh();
+        if(ImGui::SliderFloat("denoise_theta", &m_core->m_depth_estimator_gl->m_params.denoise_theta, 0.00001, 20)){
+            m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         }
 
 
 
         if (ImGui::Button("Write_depth_image_to_file")) {
-            m_core->m_depth_estimator_cl->save_depth_image();
+            m_core->m_depth_estimator_gl->save_depth_image();
         }
+
     }
+    show_gray_textures();
 
 
 
@@ -282,48 +284,48 @@ void Gui::update() {
     }
 
 
-    if (m_show_player_window){
-        ImGuiWindowFlags player_window_flags = 0;
-        player_window_flags |=  ImGuiWindowFlags_NoTitleBar;
-        ImVec2 size(125,56);
-        ImGui::SetNextWindowSize(size);
-        ImGui::SetNextWindowPos(ImVec2(canvas_size.x -size.x , canvas_size.y -size.y ));
-        ImGui::Begin("Player", nullptr, player_window_flags);
-        ImGui::PushItemWidth(135);
-//        ImVec2 w_size= ImGui::GetWindowSize();
-//        ImVec2 pos= ImGui::GetWindowPos();
-//        std::cout << "size is " << w_size.x << " " << w_size.y << "\n";
-//        std::cout << "pos is " << pos.x << " " << pos.y << "\n";
-
-        ImVec2 button_size(25,25);
-        const char* icon_play = m_core->m_player->is_paused() ? ICON_FA_PLAY : ICON_FA_PAUSE;
-        if(ImGui::Button(icon_play,button_size)){
-            m_core->m_player->m_player_should_do_one_step=false;
-            m_core->m_player->pause();
-        }
-        ImGui::SameLine();
-        if(ImGui::Button(ICON_FA_STEP_FORWARD,button_size)){
-            m_core->m_player->m_player_should_do_one_step=true;
-            //if it's paused, then start it
-            if (m_core->m_player->is_paused()){
-                m_core->m_player->pause();
-            }
-        }
-        ImGui::SameLine();
-        const char* icon_should_continue = m_core->m_player->m_player_should_continue_after_step? ICON_FA_FAST_FORWARD : ICON_FA_STOP;
-        if(ImGui::Button(icon_should_continue,button_size)){
-            m_core->m_player->m_player_should_do_one_step=true;
-            //if it's paused, then start it
-            if (m_core->m_player->is_paused()){
-                m_core->m_player->pause();
-            }
-            m_core->m_player->m_player_should_continue_after_step ^= 1;
-        }
-
-
-
-        ImGui::End();
-    }
+//     if (m_show_player_window){
+//         ImGuiWindowFlags player_window_flags = 0;
+//         player_window_flags |=  ImGuiWindowFlags_NoTitleBar;
+//         ImVec2 size(125,56);
+//         ImGui::SetNextWindowSize(size);
+//         ImGui::SetNextWindowPos(ImVec2(canvas_size.x -size.x , canvas_size.y -size.y ));
+//         ImGui::Begin("Player", nullptr, player_window_flags);
+//         ImGui::PushItemWidth(135);
+// //        ImVec2 w_size= ImGui::GetWindowSize();
+// //        ImVec2 pos= ImGui::GetWindowPos();
+// //        std::cout << "size is " << w_size.x << " " << w_size.y << "\n";
+// //        std::cout << "pos is " << pos.x << " " << pos.y << "\n";
+//
+//         ImVec2 button_size(25,25);
+//         const char* icon_play = m_core->m_player->is_paused() ? ICON_FA_PLAY : ICON_FA_PAUSE;
+//         if(ImGui::Button(icon_play,button_size)){
+//             m_core->m_player->m_player_should_do_one_step=false;
+//             m_core->m_player->pause();
+//         }
+//         ImGui::SameLine();
+//         if(ImGui::Button(ICON_FA_STEP_FORWARD,button_size)){
+//             m_core->m_player->m_player_should_do_one_step=true;
+//             //if it's paused, then start it
+//             if (m_core->m_player->is_paused()){
+//                 m_core->m_player->pause();
+//             }
+//         }
+//         ImGui::SameLine();
+//         const char* icon_should_continue = m_core->m_player->m_player_should_continue_after_step? ICON_FA_FAST_FORWARD : ICON_FA_STOP;
+//         if(ImGui::Button(icon_should_continue,button_size)){
+//             m_core->m_player->m_player_should_do_one_step=true;
+//             //if it's paused, then start it
+//             if (m_core->m_player->is_paused()){
+//                 m_core->m_player->pause();
+//             }
+//             m_core->m_player->m_player_should_continue_after_step ^= 1;
+//         }
+//
+//
+//
+//         ImGui::End();
+//     }
 
 
 
@@ -337,6 +339,28 @@ void Gui::update() {
 
 }
 
+
+void Gui::show_gray_textures(){
+    //show the rgb image from each camera
+
+    //show camera left
+    if(m_core->m_depth_estimator_gl->m_frame_gray_tex.get_tex_id()==-1){
+        return;
+    }
+    ImGuiWindowFlags gray_window_flags = 0;
+    ImGui::Begin("cam_left", nullptr, gray_window_flags);
+    ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_frame_gray_tex.get_tex_id(), ImGui::GetContentRegionAvail());
+    ImGui::End();
+
+    //show camera right
+    if(m_core->m_depth_estimator_gl->m_frame_gray_stereo_tex.get_tex_id()==-1){
+        return;
+    }
+    ImGui::Begin("cam_right", nullptr, gray_window_flags);
+    ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_frame_gray_stereo_tex.get_tex_id(), ImGui::GetContentRegionAvail());
+    ImGui::End();
+
+}
 
 
 

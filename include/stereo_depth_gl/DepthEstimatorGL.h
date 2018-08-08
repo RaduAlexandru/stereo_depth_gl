@@ -179,6 +179,8 @@ public:
     Mesh get_mesh();
 
 
+    void upload_gray_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
+
     // Scene get_scene();
     bool is_modified(){return m_scene_is_modified;};
 
@@ -191,7 +193,11 @@ public:
     //gl stuff
     GLuint m_points_gl_buf; //stores all the immature points
     GLuint m_ubo_params; //stores all parameters that may be needed inside the shader
-    gl::Texture2D m_cur_frame;
+    gl::Texture2D m_cur_frame; //stored the gray image and the grad_x and grad_y in the other channels, the 4th channel is unused
+    gl::Texture2D m_cur_frame_stereo; //the right camera, same as above
+    gl::Texture2D m_frame_gray_tex; //mostly for visualization purposes we upload here the gray image
+    gl::Texture2D m_frame_gray_stereo_tex;
+
 
     //gl shaders
     GLuint m_update_depth_prog_id;
