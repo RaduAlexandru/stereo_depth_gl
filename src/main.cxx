@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
     Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
     cfg.check_dangling(); // Make sure we haven't forgot reading a key!
 
-    while (true) {
+    while (ros::ok()) {
         // std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         // LOG_SCOPE(INFO,"main_loop");
