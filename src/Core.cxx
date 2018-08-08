@@ -54,7 +54,9 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
         m_loader_png(new DataLoaderPNG),
         // m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
-        dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5){
+        dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5),
+        m_player_paused(true),
+        m_player_should_do_one_step(false){
 
     init_params();
     m_view = view;
@@ -155,7 +157,9 @@ void Core::update() {
     // }
 
 
-    if ( m_loader_png->has_data_for_all_cams() ) {
+    // if ( m_loader_png->has_data_for_all_cams() ) {
+    if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
+        m_player_should_do_one_step=false;
         Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
         // Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
         // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);

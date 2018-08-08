@@ -111,6 +111,8 @@ public:
       bool m_do_transform_mesh_to_worlGL;
       bool m_preload_mesh;
       std::string m_preload_mesh_path;
+      bool m_player_paused;
+      bool m_player_should_do_one_step;
 
 
 

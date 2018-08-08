@@ -11,6 +11,7 @@
 //forward declarations
 class Core;
 class Profiler;
+class DataLoaderPNG;
 namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
 
 //Since the source directory is not known we get it from the cmake variable {CMAKE_SOURCE_DIR} through target_compile_definitions

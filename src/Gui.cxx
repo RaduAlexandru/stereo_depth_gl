@@ -10,6 +10,7 @@
 #include "stereo_depth_gl/Profiler.h"
 #include "stereo_depth_gl/RosBagPlayer.h"
 #include "stereo_depth_gl/MiscUtils.h"
+#include "stereo_depth_gl/DataLoaderPNG.h"
 // #include "stereo_depth_gl/SurfelSplatter.h"
 #include "stereo_depth_gl/DepthEstimatorGL.h"
 
@@ -286,48 +287,65 @@ void Gui::update() {
     }
 
 
-//     if (m_show_player_window){
-//         ImGuiWindowFlags player_window_flags = 0;
-//         player_window_flags |=  ImGuiWindowFlags_NoTitleBar;
-//         ImVec2 size(125,56);
-//         ImGui::SetNextWindowSize(size);
-//         ImGui::SetNextWindowPos(ImVec2(canvas_size.x -size.x , canvas_size.y -size.y ));
-//         ImGui::Begin("Player", nullptr, player_window_flags);
-//         ImGui::PushItemWidth(135);
-// //        ImVec2 w_size= ImGui::GetWindowSize();
-// //        ImVec2 pos= ImGui::GetWindowPos();
-// //        std::cout << "size is " << w_size.x << " " << w_size.y << "\n";
-// //        std::cout << "pos is " << pos.x << " " << pos.y << "\n";
-//
-//         ImVec2 button_size(25,25);
-//         const char* icon_play = m_core->m_player->is_paused() ? ICON_FA_PLAY : ICON_FA_PAUSE;
-//         if(ImGui::Button(icon_play,button_size)){
-//             m_core->m_player->m_player_should_do_one_step=false;
-//             m_core->m_player->pause();
-//         }
-//         ImGui::SameLine();
-//         if(ImGui::Button(ICON_FA_STEP_FORWARD,button_size)){
-//             m_core->m_player->m_player_should_do_one_step=true;
-//             //if it's paused, then start it
-//             if (m_core->m_player->is_paused()){
-//                 m_core->m_player->pause();
-//             }
-//         }
-//         ImGui::SameLine();
-//         const char* icon_should_continue = m_core->m_player->m_player_should_continue_after_step? ICON_FA_FAST_FORWARD : ICON_FA_STOP;
-//         if(ImGui::Button(icon_should_continue,button_size)){
-//             m_core->m_player->m_player_should_do_one_step=true;
-//             //if it's paused, then start it
-//             if (m_core->m_player->is_paused()){
-//                 m_core->m_player->pause();
-//             }
-//             m_core->m_player->m_player_should_continue_after_step ^= 1;
-//         }
-//
-//
-//
-//         ImGui::End();
-//     }
+    if (m_show_player_window){
+        ImGuiWindowFlags player_window_flags = 0;
+        player_window_flags |=  ImGuiWindowFlags_NoTitleBar;
+        ImVec2 size(165,56);
+        ImGui::SetNextWindowSize(size);
+        ImGui::SetNextWindowPos(ImVec2(canvas_size.x -size.x , canvas_size.y -size.y ));
+        ImGui::Begin("Player", nullptr, player_window_flags);
+        ImGui::PushItemWidth(135);
+//        ImVec2 w_size= ImGui::GetWindowSize();
+//        ImVec2 pos= ImGui::GetWindowPos();
+//        std::cout << "size is " << w_size.x << " " << w_size.y << "\n";
+//        std::cout << "pos is " << pos.x << " " << pos.y << "\n";
+
+        ImVec2 button_size(25,25);
+        const char* icon_play = m_core->m_player_paused ? ICON_FA_PLAY : ICON_FA_PAUSE;
+        if(ImGui::Button(icon_play,button_size)){
+            m_core->m_player_paused^= 1;
+            // m_core->m_player->m_player_should_do_one_step=false;
+            // if(m_core->m_player->is_paused()){
+            //     m_core->m_player->play();
+            // }else{
+            //     m_core->m_player->pause();
+            // }
+
+        }
+        ImGui::SameLine();
+        if(ImGui::Button(ICON_FA_STEP_FORWARD,button_size)){
+            m_core->m_player_should_do_one_step=true;
+            // m_core->m_player->m_player_should_do_one_step=true;
+            // //if it's paused, then start it
+            // if (m_core->m_player->is_paused()){
+            //     m_core->m_player->play();
+            // }
+        }
+        // ImGui::SameLine();
+        // const char* icon_should_continue = m_core->m_player->m_player_should_continue_after_step? ICON_FA_STOP : ICON_FA_FAST_FORWARD;
+        // if(ImGui::Button(icon_should_continue,button_size)){
+        //     // //if it's paused, then start it
+        //     // if (m_core->m_player->is_paused()){
+        //     //     m_core->m_player->play();
+        //     //     m_core->m_player->m_player_should_continue_after_step =true;
+        //     //     m_core->m_player->m_player_should_do_one_step=true;
+        //     // }else{
+        //     //     m_core->m_player->pause();
+        //     //     m_core->m_player->m_player_should_continue_after_step =false;
+        //     //     m_core->m_player->m_player_should_do_one_step=false;
+        //     // }
+        //
+        // }
+        ImGui::SameLine();
+        if(ImGui::Button(ICON_FA_UNDO,button_size)){
+            // m_core->m_player->reset();
+            m_core->m_loader_png->reset();
+        }
+
+
+
+        ImGui::End();
+    }
 
 
 
