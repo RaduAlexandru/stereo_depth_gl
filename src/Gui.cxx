@@ -204,6 +204,7 @@ void Gui::update() {
 
 
     }
+    show_stereo_textures();
     show_rgb_textures();
 
 
@@ -339,6 +340,28 @@ void Gui::update() {
 
 }
 
+
+void Gui::show_stereo_textures(){
+    //show the gray image with the gradients from each camera
+
+    //show camera left
+    if(m_core->m_depth_estimator_gl->m_frame_left.get_tex_id()==-1){
+        return;
+    }
+    ImGuiWindowFlags gray_window_flags = 0;
+    ImGui::Begin("cam_left_gray_grad", nullptr, gray_window_flags);
+    ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_frame_left.get_tex_id(), ImGui::GetContentRegionAvail());
+    ImGui::End();
+
+    //show camera right
+    if(m_core->m_depth_estimator_gl->m_frame_right.get_tex_id()==-1){
+        return;
+    }
+    ImGui::Begin("cam_right_gray_grad", nullptr, gray_window_flags);
+    ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_frame_right.get_tex_id(), ImGui::GetContentRegionAvail());
+    ImGui::End();
+
+}
 
 void Gui::show_rgb_textures(){
     //show the rgb image from each camera

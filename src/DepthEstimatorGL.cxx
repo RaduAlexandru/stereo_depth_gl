@@ -514,3 +514,16 @@ void DepthEstimatorGL::upload_rgb_stereo_pair(const cv::Mat& image_left, const c
     m_frame_rgb_right.upload_data(GL_RGB, image_right.cols, image_right.rows, GL_BGR, GL_UNSIGNED_BYTE, image_right.ptr(), size_bytes);
     TIME_END_GL("upload_rgb_stereo_pair");
 }
+
+void DepthEstimatorGL::upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right){
+    TIME_START_GL("upload_rgb_stereo_pair");
+    int size_bytes=image_left.step[0] * image_left.rows;
+    // m_frame_gray_tex.upload_data(GL_R32F, image_left.cols, image_left.rows, GL_RED, GL_FLOAT, image_left.ptr(), size_bytes);
+    m_frame_left.upload_data(GL_RGB, image_left.cols, image_left.rows, GL_RGB, GL_FLOAT, image_left.ptr(), size_bytes);
+
+
+    size_bytes=image_right.step[0] * image_right.rows;
+    // m_frame_gray_stereo_tex.upload_data(GL_R32F, image_right.cols, image_right.rows, GL_RED, GL_FLOAT, image_right.ptr(), size_bytes);
+    m_frame_right.upload_data(GL_RGB, image_right.cols, image_right.rows, GL_RGB, GL_FLOAT, image_right.ptr(), size_bytes);
+    TIME_END_GL("upload_rgb_stereo_pair");
+}

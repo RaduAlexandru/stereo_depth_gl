@@ -167,6 +167,7 @@ void Core::update() {
         Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
         // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
         m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
+        m_depth_estimator_gl->upload_gray_and_grad_stereo_pair(frame_left.gray_with_gradients, frame_right.gray_with_gradients);
         // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.rgb, frame_left.rgb);
 
         //update camera frustum mesh
