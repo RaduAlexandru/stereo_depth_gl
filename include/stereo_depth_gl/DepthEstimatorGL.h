@@ -180,6 +180,7 @@ public:
 
     void upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
+    void compute_depth(const Frame& frame_left, const Frame& frame_right);
 
 
     //objects
@@ -187,8 +188,9 @@ public:
 	Pattern m_pattern;
 
     //gl stuff
-    GLuint m_seeds_gl_buf; //stores all the depth_seeds
     GLuint m_ubo_params; //stores all parameters that may be needed inside the shader
+    GLuint m_seeds_left_gl_buf; //stores all the depth_seeds
+    GLuint m_seeds_right_gl_buf; //stores all the depth_seeds
     gl::Texture2D m_frame_left; //stored the gray image and the grad_x and grad_y in the other channels, the 4th channel is unused
     gl::Texture2D m_frame_right; //the right camera, same as above
     gl::Texture2D m_frame_rgb_left; //mostly for visualization purposes we upload here the gray image
@@ -200,12 +202,14 @@ public:
 
 
     //databasse
-    std::vector<Seed> m_seeds;
+    // std::vector<Seed> m_seeds;
+
 
     //params
     bool m_gl_profiling_enabled;
     bool m_debug_enabled;
     float m_mean_starting_depth;
+    std::string m_pattern_file;
     Params m_params; //parameters for depth estimation that may also be needed inside the gl shader
 
 
@@ -218,7 +222,6 @@ private:
     //start with everything
     std::vector<Seed> create_seeds (const Frame& frame);
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
-    void undistort_image(cv::Mat gray_img, const Eigen::Matrix3f K, const Eigen::VectorXf distort_coeffs);
     Eigen::Vector2f estimate_affine(std::vector<Seed>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
 
 

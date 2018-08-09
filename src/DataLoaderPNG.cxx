@@ -160,6 +160,8 @@ void DataLoaderPNG::init_data_reading(){
     m_rgb_filenames_per_cam.resize(m_nr_cams);
     m_last_frame_per_cam.resize(m_nr_cams);
     m_get_last_published_frame_for_cam.resize(m_nr_cams,false);
+    m_undistort_map_x_per_cam.resize(m_nr_cams);
+    m_undistort_map_y_per_cam.resize(m_nr_cams);
 
 
     for (size_t i = 0; i < m_nr_cams; i++) {
@@ -276,6 +278,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             //gray
             cv::cvtColor ( frame.rgb, frame.gray, CV_BGR2GRAY );
             frame.gray.convertTo(frame.gray, CV_32F);
+            undistort_image(frame.gray, frame.K, frame.distort_coeffs, cam_id); //undistort only the gray image because rgb is only used for visualization
             // frame.gray/=255.0;
 
             //gradients
@@ -622,4 +625,30 @@ void DataLoaderPNG::republish_last_frame_all_cams(){
     for (size_t i = 0; i < m_nr_cams; i++) {
         m_get_last_published_frame_for_cam[i]=true;
     }
+}
+
+void DataLoaderPNG::undistort_image(cv::Mat& gray_img, const Eigen::Matrix3f& K, const Eigen::VectorXf& distort_coeffs, const int cam_id){
+
+    TIME_START("undistort");
+    //if we don't have the undistorsion maps yet, create them
+    if ( m_undistort_map_x_per_cam[cam_id].empty() ||  m_undistort_map_y_per_cam[cam_id].empty() ){
+        cv::Mat_<double> Kc = cv::Mat_<double>::eye( 3, 3 );
+        Kc (0,0) = K(0,0);
+        Kc (1,1) = K(1,1);
+        Kc (0,2) = K(0,2);
+        Kc (1,2) = K(1,2);
+        cv::Mat_<double> distortion ( 5, 1 );
+        distortion ( 0 ) = distort_coeffs(0);
+        distortion ( 1 ) = distort_coeffs(1);
+        distortion ( 2 ) = distort_coeffs(2);
+        distortion ( 3 ) = distort_coeffs(3);
+        distortion ( 4 ) = distort_coeffs(4);
+        cv::Mat_<double> Id = cv::Mat_<double>::eye ( 3, 3 );
+        cv::initUndistortRectifyMap ( Kc, distortion, Id, Kc, gray_img.size(), CV_32FC1, m_undistort_map_x_per_cam[cam_id], m_undistort_map_y_per_cam[cam_id] );
+    }
+
+    cv::Mat undistorted_img;
+    cv::remap ( gray_img, undistorted_img, m_undistort_map_x_per_cam[cam_id], m_undistort_map_y_per_cam[cam_id], cv::INTER_LINEAR );
+    gray_img=undistorted_img.clone(); //remap cannot function in-place so we copy the gray image back
+    TIME_END("undistort");
 }

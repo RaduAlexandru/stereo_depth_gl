@@ -24,6 +24,8 @@ void Pattern::init_pattern(const std::string& pattern_filepath){
        LOG(FATAL) << "Could not find pattern file on " << pattern_filepath;
    }
 
+   m_pattern_size << pattern_mat.cols , pattern_mat.rows;
+
     std::vector<int> offsets_x; //ofsets of the pattern points with repect to the central pixel
     std::vector<int> offsets_y;
 
@@ -92,4 +94,8 @@ Pattern Pattern::get_rotated_pattern(const Eigen::Matrix2f& rotation){
 //    rotated_pattern.m_offsets=rotation*m_offsets.transpose();
     return rotated_pattern;
 
+}
+
+Eigen::Vector2i Pattern::get_size(){
+    return m_pattern_size;
 }

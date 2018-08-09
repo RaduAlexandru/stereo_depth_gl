@@ -68,6 +68,7 @@ public:
     void set_mask_for_cam(const std::string mask_filename, const int cam_id); //set a mask which will cause parts of the rgb, classes and probs images to be ignored
     void republish_last_frame_from_cam(const int cam_id); //put the last frame back into the ringbuffer so we cna read it from the core
     void republish_last_frame_all_cams();
+    void undistort_image(cv::Mat& gray_img, const Eigen::Matrix3f& K, const Eigen::VectorXf& distort_coeffs, const int cam_id);
 
 
     // void read_data();
@@ -85,6 +86,8 @@ public:
 
     std::vector< std::vector<fs::path> > m_rgb_filenames_per_cam; //list of images paths for each cam to read
     std::vector<int> m_idx_img_to_read_per_cam;
+    std::vector<cv::Mat> m_undistort_map_x_per_cam; //vector containing the undistort map in x direction for each cam
+    std::vector<cv::Mat> m_undistort_map_y_per_cam; //vector containing the undistort map in x direction for each cam
 
 
 

@@ -44,8 +44,7 @@ DepthEstimatorGL::DepthEstimatorGL():
 
     init_params();
     init_opengl();
-    std::string pattern_filepath="/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/pattern_1.png";
-    m_pattern.init_pattern(pattern_filepath);
+    m_pattern.init_pattern(m_pattern_file);
 
     // //sanity check the pattern
     // std::cout << "pattern has nr of points " << m_pattern.get_nr_points() << '\n';
@@ -71,6 +70,7 @@ void DepthEstimatorGL::init_params(){
     Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
     Config depth_config=cfg["depth"];
     m_gl_profiling_enabled = depth_config["gl_profiling_enabled"];
+    m_pattern_file= (std::string)depth_config["pattern_file"];
 }
 
 void DepthEstimatorGL::init_opengl(){
@@ -81,7 +81,8 @@ void DepthEstimatorGL::init_opengl(){
     	glDebugMessageCallbackARB(debug_func, (void*)15);
 	}
 
-    glGenBuffers(1, &m_seeds_gl_buf);
+    glGenBuffers(1, &m_seeds_left_gl_buf);
+    glGenBuffers(1, &m_seeds_right_gl_buf);
     glGenBuffers(1, &m_ubo_params );
 
     //textures storing the gray image with the gradients in the other 2 channes
@@ -121,6 +122,206 @@ void DepthEstimatorGL::compile_shaders(){
 
 }
 
+void DepthEstimatorGL::compute_depth(const Frame& frame_left, const Frame& frame_right){
+    TIME_START_GL("create_all_seeds");
+    std::vector<Seed> seeds_left=create_seeds(frame_left);
+    std::vector<Seed> seeds_right=create_seeds(frame_right);
+    TIME_END_GL("create_all_seeds");
+}
+
+
+std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
+
+
+    TIME_START_GL("hessian_det_matrix");
+    std::vector<Seed> seeds;
+    seeds.reserve(200000);
+
+
+    // //multiply the gradx with grady to get a hessian for each point
+    // cv::Mat hessian_pointwise=frame.grad_x.mul(frame.grad_y);
+    // //the hessian at each point can be blurred a bit to get something from the neighbouring points too
+    // cv::Mat hessian;
+    // cv::boxFilter(hessian_pointwise,hessian,-1,cv::Size(3,3));
+
+
+    //hessian point wise is a 2x2 matrix obtained by multiplying [gx][gx,gy]
+    //                                                           [gy]
+    //the 2x2  hessian matrix will contain [ gx2 gxgy ]
+    //                                     [ gxgy gy2 ]
+    //can be stored as a cv mat with 4 channels, each channel will be the multiplication of gradx and gray
+    // summing the hessian over a small patch means summing this matrix, which means summing the elements
+    // it's the same as blurring each one of the 4 channels
+    //the determinant of the hessian is then
+    cv::Mat hessian_pointwise = cv::Mat(frame.gray.rows, frame.gray.cols, CV_32FC4);
+    for (size_t i = 0; i < hessian_pointwise.rows; i++) {
+        for (size_t j = 0; j < hessian_pointwise.cols; j++) {
+            cv::Vec4f& elem = hessian_pointwise.at<cv::Vec4f>(i,j);
+            float gx=frame.grad_x.at<float>(i,j);
+            float gy=frame.grad_y.at<float>(i,j);
+            //the 4 channels will store the 4 elements of the hessian in row major fashion
+            elem[0]=gx*gx;
+            elem[1]=gx*gy;
+            elem[2]=elem[1];
+            elem[3]=gy*gy;
+        }
+    }
+
+    //summing over an area the matrix means blurring it
+    cv::Mat hessian;
+    cv::boxFilter(hessian_pointwise,hessian,-1,cv::Size(3,3));
+
+    //determinant matrix
+    cv::Mat determinant(hessian.rows, hessian.cols, CV_32FC1);
+    //-Do not look around the borders to avoid pattern accesing outside img
+    for (size_t i = m_pattern.get_size().y(); i < frame.gray.rows- m_pattern.get_size().y(); i++) {
+        for (size_t j =  m_pattern.get_size().x(); j < frame.gray.cols- m_pattern.get_size().x(); j++) {
+            //determinant is high enough, add the point
+            cv::Vec4f& elem = hessian.at<cv::Vec4f>(i,j);
+            float hessian_det=elem[0]*elem[3]-elem[1]*elem[2];
+            determinant.at<float>(i,j)=hessian_det;
+        }
+    }
+
+    //whatever is bigger than the gradH_th, we set to 1.0 to indicate that we will create a seed, otherwise set to 0
+    cv::Mat high_determinant;
+    cv::threshold(determinant, high_determinant, m_params.gradH_th, 1.0, cv::THRESH_BINARY);
+    TIME_END_GL("hessian_det_matrix");
+
+
+
+
+
+
+    TIME_START_GL("create_seeds");
+    //--------Do not look around the borders to avoid pattern accesing outside img
+    for (size_t i = m_pattern.get_size().y(); i < frame.gray.rows- m_pattern.get_size().y(); i++) {
+        for (size_t j =  m_pattern.get_size().x(); j < frame.gray.cols- m_pattern.get_size().x(); j++) {
+
+            //determinant is high enough, add the point
+            float high_det=high_determinant.at<float>(i,j);
+
+            if(high_det==1.0){
+                Seed point;
+                seeds.push_back(point);
+            }
+
+        }
+    }
+
+
+    // //--------Do not look around the borders to avoid pattern accesing outside img
+    // for (size_t i = m_pattern.get_size().y(); i < frame.gray.rows- m_pattern.get_size().y(); i++) {
+    //     for (size_t j =  m_pattern.get_size().x(); j < frame.gray.cols- m_pattern.get_size().x(); j++) {
+    //
+    //         //check if this point has enough determinant in the hessian
+    //         Eigen::Matrix2f gradient_hessian;
+    //         gradient_hessian.setZero();
+    //         for (size_t p = 0; p < m_pattern.get_nr_points(); p++) {
+    //             int dx = m_pattern.get_offset_x(p);
+    //             int dy = m_pattern.get_offset_y(p);
+    //
+    //             float gradient_x=frame.grad_x.at<float>(i+dy,j+dx);
+    //             float gradient_y=frame.grad_y.at<float>(i+dy,j+dx);
+    //
+    //             Eigen::Vector2f grad;
+    //             grad << gradient_x, gradient_y;
+    //             // std::cout << "gradients are " << gradient_x << " " << gradient_y << '\n';
+    //
+    //             gradient_hessian+= grad*grad.transpose();
+    //         }
+    //
+    //
+    //         //determinant is high enough, add the point
+    //         float hessian_det=gradient_hessian.determinant();
+    //         if(hessian_det > m_params.gradH_th ){
+    //         // if(hessian_det > 0){
+    //             Seed point;
+    //             point.u=j;
+    //             point.v=i;
+    //             point.gradH=glm::make_mat2x2(gradient_hessian.data());
+    //             // point.gradH=gradient_hessian;
+    //
+    //             //Seed::Seed
+    //             Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.u,point.v,1)).normalized();
+    //             point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+    //             // point.f=Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+    //
+    //             //start at an initial value for depth at around 4 meters (depth_filter->Seed::reinit)
+    //             // float mean_starting_depth=4.0;
+    //             // float mean_starting_depth=frame.depth.at<float>(i,j);
+    //             float mean_starting_depth=m_mean_starting_depth;
+    //             float min_starting_depth=0.1;
+    //             point.mu = (1.0/mean_starting_depth);
+    //             point.z_range = (1.0/min_starting_depth);
+    //             point.sigma2 = (point.z_range*point.z_range/36);
+    //
+    //             float z_inv_min = point.mu + sqrt(point.sigma2);
+    //             float z_inv_max = std::max<float>(point.mu- sqrt(point.sigma2), 0.00000001f);
+    //             point.idepth_min = z_inv_min;
+    //             point.idepth_max = z_inv_max;
+    //
+    //             point.a=10.0;
+    //             point.b=10.0;
+    //
+    //             //seed constructor deep_filter.h
+    //             point.converged=0;
+    //             point.is_outlier=1;
+    //
+    //
+    //             //immature point constructor (the idepth min and max are already set so don't worry about those)
+    //             point.lastTraceStatus=STATUS_UNINITIALIZED;
+    //
+    //             //get data for the color of that point (depth_point->ImmatureSeed::ImmatureSeed)---------------------
+    //             for(int p_idx=0;p_idx<m_pattern.get_nr_points();p_idx++){
+    //                 Eigen::Vector2f offset = m_pattern.get_offset(p_idx);
+    //
+    //                 point.color[p_idx]=texture_interpolate(frame.gray, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
+    //
+    //                 float grad_x_val=texture_interpolate(frame.grad_x, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
+    //                 float grad_y_val=texture_interpolate(frame.grad_y, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
+    //                 float squared_norm=grad_x_val*grad_x_val + grad_y_val*grad_y_val;
+    //                 point.weights[p_idx] = sqrtf(m_params.outlierTHSumComponent / (m_params.outlierTHSumComponent + squared_norm));
+    //
+    //                 //for ngf
+    //                 point.colorD[p_idx] = Eigen::Vector2f(grad_x_val,grad_y_val);
+    //                 point.colorD[p_idx] /= sqrt(point.colorD[p_idx].squaredNorm()+m_params.eta);
+    //                 point.colorGrad[p_idx] =  Eigen::Vector2f(grad_x_val,grad_y_val);
+    //
+    //
+    //             }
+    //             // point.ncc_sum_templ    = 0.0f;
+    //             // float ncc_sum_templ_sq = 0.0f;
+    //             // for(int p_idx=0;p_idx<m_pattern.get_nr_points();p_idx++){
+    //             //     const float templ = point.color[p_idx];
+    //             //     point.ncc_sum_templ += templ;
+    //             //     ncc_sum_templ_sq += templ*templ;
+    //             // }
+    //             // point.ncc_const_templ = m_pattern.get_nr_points() * ncc_sum_templ_sq - (double) point.ncc_sum_templ*point.ncc_sum_templ;
+    //
+    //             point.energyTH = m_pattern.get_nr_points()*m_params.outlierTH;
+    //             point.energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
+    //
+    //             point.quality=10000;
+    //             //-------------------------------------
+    //
+    //             //debug stuff
+    //             point.gradient_hessian_det=hessian_det;
+    //             point.last_visible_frame=0;
+    //             // point.gt_depth=frame.depth.at<float>(i,j); //add also the gt depth just for visualization purposes
+    //             point.debug=0.0;
+    //
+    //             seeds.push_back(point);
+    //         }
+    //
+    //     }
+    // }
+    TIME_END_GL("create_seeds");
+
+    std::cout << "seeds has size " << seeds.size() << '\n';
+    return seeds;
+
+}
 
 // void DepthEstimatorGL::compute_depth_and_create_mesh(){
 //     m_mesh.clear();
@@ -129,16 +330,16 @@ void DepthEstimatorGL::compile_shaders(){
 //     TIME_START_GL("compute_depth");
 //
 //
-//     std::vector<Seed> immature_points;
-//     immature_points=create_immature_points(m_frames[0]);
-//     std::cout << "immature_points size is " << immature_points.size() << '\n';
+//     std::vector<Seed> seeds;
+//     seeds=create_seeds(m_frames[0]);
+//     std::cout << "seeds size is " << seeds.size() << '\n';
 //
 //
 //     //upload to gpu the inmature points
-//     TIME_START_GL("upload_immature_points");
+//     TIME_START_GL("upload_seeds");
 //     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
-//     glBufferData(GL_SHADER_STORAGE_BUFFER, immature_points.size() * sizeof(Seed), immature_points.data(), GL_DYNAMIC_COPY);
-//     TIME_END_GL("upload_immature_points");
+//     glBufferData(GL_SHADER_STORAGE_BUFFER, seeds.size() * sizeof(Seed), seeds.data(), GL_DYNAMIC_COPY);
+//     TIME_END_GL("upload_seeds");
 //
 //     glUseProgram(m_update_depth_prog_id);
 //     for (size_t i = 1; i < m_frames.size(); i++) {
@@ -150,7 +351,7 @@ void DepthEstimatorGL::compile_shaders(){
 //         const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
 //         const Eigen::Matrix3f KRKi_cr_eigen = m_frames[i].K * tf_cur_host_eigen.linear() * m_frames[0].K.inverse();
 //         const Eigen::Vector3f Kt_cr_eigen = m_frames[i].K * tf_cur_host_eigen.translation();
-//         // const Eigen::Vector2f affine_cr_eigen = estimate_affine( immature_points, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
+//         // const Eigen::Vector2f affine_cr_eigen = estimate_affine( seeds, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
 //         const Eigen::Vector2f affine_cr_eigen= Eigen::Vector2f(1,1);
 //         const double focal_length = fabs(m_frames[i].K(0,0));
 //         double px_noise = 1.0;
@@ -253,7 +454,7 @@ void DepthEstimatorGL::compile_shaders(){
 //         TIME_START_GL("depth_update_kernel");
 //         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_gl_buf);
 //         bind_for_sampling(m_cur_frame, 1, glGetUniformLocation(m_update_depth_prog_id,"gray_img_sampler") );
-//         glDispatchCompute(immature_points.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
+//         glDispatchCompute(seeds.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
 //         glMemoryBarrier(GL_ALL_BARRIER_BITS);
 //         TIME_END_GL("depth_update_kernel");
 //
@@ -266,182 +467,44 @@ void DepthEstimatorGL::compile_shaders(){
 //     //TODO
 //     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
 //     Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-//     for (size_t i = 0; i < immature_points.size(); i++) {
-//         immature_points[i]=ptr[i];
+//     for (size_t i = 0; i < seeds.size(); i++) {
+//         seeds[i]=ptr[i];
 //     }
 //     glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 //
-//     assign_neighbours_for_points(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
-//     // denoise_cpu(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
+//     assign_neighbours_for_points(seeds, m_frames[0].gray.cols, m_frames[0].gray.rows);
+//     // denoise_cpu(seeds, m_frames[0].gray.cols, m_frames[0].gray.rows);
 //
 //
 //     //GPU---------------------------------------------------------------------------------------------------------
-//     // denoise_cpu(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
-//     // denoise_gpu_vector(immature_points);
-//     denoise_gpu_texture(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
-//     // denoise_gpu_framebuffer(immature_points, m_frames[0].gray.cols, m_frames[0].gray.rows);
+//     // denoise_cpu(seeds, m_frames[0].gray.cols, m_frames[0].gray.rows);
+//     // denoise_gpu_vector(seeds);
+//     denoise_gpu_texture(seeds, m_frames[0].gray.cols, m_frames[0].gray.rows);
+//     // denoise_gpu_framebuffer(seeds, m_frames[0].gray.cols, m_frames[0].gray.rows);
 //
 //
 //     TIME_END_GL("compute_depth");
 //
 //
-//     m_mesh=create_mesh(immature_points, m_frames);
-//     m_points=immature_points; //save the points in the class in case we need them for later saving to a file
+//     m_mesh=create_mesh(seeds, m_frames);
+//     m_points=seeds; //save the points in the class in case we need them for later saving to a file
 //
 //     m_scene_is_modified=true;
 //
 // }
 
-void DepthEstimatorGL::undistort_image(cv::Mat gray_img, const Eigen::Matrix3f K, const Eigen::VectorXf distort_coeffs){
-
-  cv::Mat undistortMapX, undistortMapY;
-
-  cv::Mat_<double> Kc = cv::Mat_<double>::eye( 3, 3 );
-  Kc (0,0) = K(0,0);
-  Kc (1,1) = K(1,1);
-  Kc (0,2) = K(0,2);
-  Kc (1,2) = K(1,2);
-  cv::Mat_<double> distortion ( 5, 1 );
-  distortion ( 0 ) = distort_coeffs(0);
-  distortion ( 1 ) = distort_coeffs(1);
-  distortion ( 2 ) = distort_coeffs(2);
-  distortion ( 3 ) = distort_coeffs(3);
-  distortion ( 4 ) = distort_coeffs(4);
-  cv::Mat_<double> Id = cv::Mat_<double>::eye ( 3, 3 );
-  cv::initUndistortRectifyMap ( Kc, distortion, Id, Kc, gray_img.size(), CV_32FC1, undistortMapX, undistortMapY );
-
-  cv::Mat undistorted_img;
-  cv::remap ( gray_img, undistorted_img, undistortMapX, undistortMapY, cv::INTER_LINEAR );
-  gray_img=undistorted_img.clone();
-}
 
 
-std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
-
-
-    TIME_START_GL("hessian_host_frame");
-    std::vector<Seed> immature_points;
-    immature_points.reserve(200000);
-    for (size_t i = 10; i < frame.gray.rows-10; i++) {  //--------Do not look around the borders to avoid pattern accesing outside img
-        for (size_t j = 10; j < frame.gray.cols-10; j++) {
-
-            //check if this point has enough determinant in the hessian
-            Eigen::Matrix2f gradient_hessian;
-            gradient_hessian.setZero();
-            for (size_t p = 0; p < m_pattern.get_nr_points(); p++) {
-                int dx = m_pattern.get_offset_x(p);
-                int dy = m_pattern.get_offset_y(p);
-
-                float gradient_x=frame.grad_x.at<float>(i+dy,j+dx); //TODO should be interpolated
-                float gradient_y=frame.grad_y.at<float>(i+dy,j+dx);
-
-                Eigen::Vector2f grad;
-                grad << gradient_x, gradient_y;
-                // std::cout << "gradients are " << gradient_x << " " << gradient_y << '\n';
-
-                gradient_hessian+= grad*grad.transpose();
-            }
-
-            //determinant is high enough, add the point
-            float hessian_det=gradient_hessian.determinant();
-            if(hessian_det > m_params.gradH_th && frame.depth.at<float>(i,j)!=0.0){
-            // if(hessian_det > 0){
-                Seed point;
-                point.u=j;
-                point.v=i;
-                point.gradH=glm::make_mat2x2(gradient_hessian.data());
-                // point.gradH=gradient_hessian;
-
-                //Seed::Seed
-                Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.u,point.v,1)).normalized();
-                point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
-                // point.f=Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
-
-                //start at an initial value for depth at around 4 meters (depth_filter->Seed::reinit)
-                // float mean_starting_depth=4.0;
-                // float mean_starting_depth=frame.depth.at<float>(i,j);
-                float mean_starting_depth=m_mean_starting_depth;
-                float min_starting_depth=0.1;
-                point.mu = (1.0/mean_starting_depth);
-                point.z_range = (1.0/min_starting_depth);
-                point.sigma2 = (point.z_range*point.z_range/36);
-
-                float z_inv_min = point.mu + sqrt(point.sigma2);
-                float z_inv_max = std::max<float>(point.mu- sqrt(point.sigma2), 0.00000001f);
-                point.idepth_min = z_inv_min;
-                point.idepth_max = z_inv_max;
-
-                point.a=10.0;
-                point.b=10.0;
-
-                //seed constructor deep_filter.h
-                point.converged=0;
-                point.is_outlier=1;
-
-
-                //immature point constructor (the idepth min and max are already set so don't worry about those)
-                point.lastTraceStatus=STATUS_UNINITIALIZED;
-
-                //get data for the color of that point (depth_point->ImmatureSeed::ImmatureSeed)---------------------
-                for(int p_idx=0;p_idx<m_pattern.get_nr_points();p_idx++){
-                    Eigen::Vector2f offset = m_pattern.get_offset(p_idx);
-
-                    point.color[p_idx]=texture_interpolate(frame.gray, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
-
-                    float grad_x_val=texture_interpolate(frame.grad_x, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
-                    float grad_y_val=texture_interpolate(frame.grad_y, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
-                    float squared_norm=grad_x_val*grad_x_val + grad_y_val*grad_y_val;
-                    point.weights[p_idx] = sqrtf(m_params.outlierTHSumComponent / (m_params.outlierTHSumComponent + squared_norm));
-
-                    //for ngf
-                    point.colorD[p_idx] = Eigen::Vector2f(grad_x_val,grad_y_val);
-                    point.colorD[p_idx] /= sqrt(point.colorD[p_idx].squaredNorm()+m_params.eta);
-                    point.colorGrad[p_idx] =  Eigen::Vector2f(grad_x_val,grad_y_val);
-
-
-                }
-                point.ncc_sum_templ    = 0.0f;
-                float ncc_sum_templ_sq = 0.0f;
-                for(int p_idx=0;p_idx<m_pattern.get_nr_points();p_idx++){
-                    const float templ = point.color[p_idx];
-                    point.ncc_sum_templ += templ;
-                    ncc_sum_templ_sq += templ*templ;
-                }
-                point.ncc_const_templ = m_pattern.get_nr_points() * ncc_sum_templ_sq - (double) point.ncc_sum_templ*point.ncc_sum_templ;
-
-                point.energyTH = m_pattern.get_nr_points()*m_params.outlierTH;
-                point.energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
-
-                point.quality=10000;
-                //-------------------------------------
-
-                //debug stuff
-                point.gradient_hessian_det=hessian_det;
-                point.last_visible_frame=0;
-                point.gt_depth=frame.depth.at<float>(i,j); //add also the gt depth just for visualization purposes
-                point.debug=0.0;
-
-                immature_points.push_back(point);
-            }
-
-        }
-    }
-
-    return immature_points;
-    TIME_END_GL("hessian_host_frame");
-
-}
-
-Eigen::Vector2f DepthEstimatorGL::estimate_affine(std::vector<Seed>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr){
+Eigen::Vector2f DepthEstimatorGL::estimate_affine(std::vector<Seed>& seeds, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr){
     ceres::Problem problem;
     ceres::LossFunction * loss_function = new ceres::HuberLoss(1);
     double scaleA = 1;
     double offsetB = 0;
 
     TIME_START("creating ceres problem");
-    for ( int i = 0; i < immature_points.size(); ++i )
+    for ( int i = 0; i < seeds.size(); ++i )
     {
-        Seed& point = immature_points[i];
+        Seed& point = seeds[i];
         if ( i % 100 != 0 )
             continue;
 

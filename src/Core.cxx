@@ -168,7 +168,10 @@ void Core::update() {
         // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
         m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
         m_depth_estimator_gl->upload_gray_and_grad_stereo_pair(frame_left.gray_with_gradients, frame_right.gray_with_gradients);
-        // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.rgb, frame_left.rgb);
+        m_depth_estimator_gl->compute_depth(frame_left,frame_right);
+
+
+
 
         //update camera frustum mesh
         for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {

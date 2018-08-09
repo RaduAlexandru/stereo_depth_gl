@@ -21,7 +21,7 @@ public:
     int get_offset_y(const int point_idx);
     Eigen::MatrixXf get_offset_matrix();
     Pattern get_rotated_pattern(const Eigen::Matrix2f& rotation);
-
+    Eigen::Vector2i get_size(); //get the size of the pattern image in x and y
 
 
 private:
@@ -31,6 +31,7 @@ private:
 //    std::vector<int> m_offsets_y;
 
     Eigen::MatrixXf m_offsets; //2xN ofsets of the pattern points with repect to the central pixel (x,y)
+    Eigen::Vector2i m_pattern_size; //size of the pattern in x and y, usually it's 5x5
 
 
 };
