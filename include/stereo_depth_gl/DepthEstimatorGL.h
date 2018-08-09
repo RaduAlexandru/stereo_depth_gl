@@ -171,6 +171,7 @@ class DepthEstimatorGL{
 public:
     DepthEstimatorGL();
     ~DepthEstimatorGL(); //needed so that forward declarations work
+    void init_params();
 
     // void compute_depth_and_create_mesh(); //from all the immature points created triangulate depth for them, updates the mesh
     // void compute_depth_and_create_mesh_cpu();

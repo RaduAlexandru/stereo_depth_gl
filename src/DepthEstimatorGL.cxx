@@ -18,6 +18,9 @@
 #include "Texture2DArray.h"
 #include "Texture2D.h"
 
+//ros
+#include "stereo_depth_gl/RosTools.h"
+
 //Libigl
 #include <igl/opengl/glfw/Viewer.h>
 
@@ -31,6 +34,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 // using namespace glm;
+using namespace configuru;
 
 DepthEstimatorGL::DepthEstimatorGL():
         m_gl_profiling_enabled(true),
@@ -38,6 +42,7 @@ DepthEstimatorGL::DepthEstimatorGL():
         m_mean_starting_depth(4.0)
         {
 
+    init_params();
     init_opengl();
     std::string pattern_filepath="/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/pattern_1.png";
     m_pattern.init_pattern(pattern_filepath);
@@ -55,6 +60,17 @@ DepthEstimatorGL::DepthEstimatorGL():
 
 //needed so that forward declarations work
 DepthEstimatorGL::~DepthEstimatorGL(){
+}
+
+void DepthEstimatorGL::init_params(){
+    //get the config filename
+    ros::NodeHandle private_nh("~");
+    std::string config_file= getParamElseThrow<std::string>(private_nh, "config_file");
+
+    //read all the parameters
+    Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
+    Config depth_config=cfg["depth"];
+    m_gl_profiling_enabled = depth_config["gl_profiling_enabled"];
 }
 
 void DepthEstimatorGL::init_opengl(){
@@ -516,7 +532,7 @@ void DepthEstimatorGL::upload_rgb_stereo_pair(const cv::Mat& image_left, const c
 }
 
 void DepthEstimatorGL::upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right){
-    TIME_START_GL("upload_rgb_stereo_pair");
+    TIME_START_GL("upload_gray_and_grad");
     int size_bytes=image_left.step[0] * image_left.rows;
     // m_frame_gray_tex.upload_data(GL_R32F, image_left.cols, image_left.rows, GL_RED, GL_FLOAT, image_left.ptr(), size_bytes);
     m_frame_left.upload_data(GL_RGB, image_left.cols, image_left.rows, GL_RGB, GL_FLOAT, image_left.ptr(), size_bytes);
@@ -525,5 +541,5 @@ void DepthEstimatorGL::upload_gray_and_grad_stereo_pair(const cv::Mat& image_lef
     size_bytes=image_right.step[0] * image_right.rows;
     // m_frame_gray_stereo_tex.upload_data(GL_R32F, image_right.cols, image_right.rows, GL_RED, GL_FLOAT, image_right.ptr(), size_bytes);
     m_frame_right.upload_data(GL_RGB, image_right.cols, image_right.rows, GL_RGB, GL_FLOAT, image_right.ptr(), size_bytes);
-    TIME_END_GL("upload_rgb_stereo_pair");
+    TIME_END_GL("upload_gray_and_grad");
 }
