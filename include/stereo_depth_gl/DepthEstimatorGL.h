@@ -159,9 +159,6 @@ private:
 };
 
 
-
-
-
 //forward declarations
 class Profiler;
 namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
@@ -199,16 +196,21 @@ public:
     gl::Texture2D m_hessian_pointwise_tex; // a 4 channels texture containing the hessian of each point, gx2, gxgy gy2, alpha is set to 255 for visualziation
     gl::Texture2D m_hessian_blurred_tex; //blurred texture of the previous m_hessian_pointwise_tex, using a box blur which is not normalized for speed reasons
     gl::Texture2D m_high_hessian_tex; //thresholded version of the m_hessian_tex which stores 1 for the high ones and 0 for the low ones
+    gl::Texture2D m_debug_tex;
+    GLuint m_atomic_nr_seeds_created;
 
 
     //gl shaders
     GLuint m_update_depth_prog_id;
     GLuint m_compute_hessian_pointwise_prog_id;
     GLuint m_compute_hessian_blurred_prog_id;
+    GLuint m_compute_create_seeds_prog_id;
 
 
     //databasse
     // std::vector<Seed> m_seeds;
+    int m_nr_total_seeds; //calculated from m_nr_buffered_keyframes and m_estimated_seeds_per_keyframe
+    std::vector<int> m_nr_times_frame_used_for_seed_creation_per_cam;
 
 
     //params
@@ -216,6 +218,8 @@ public:
     bool m_debug_enabled;
     float m_mean_starting_depth;
     std::string m_pattern_file;
+    int m_estimated_seeds_per_keyframe; //conservative estimate of nr of seeds created per frame
+    int m_nr_buffered_keyframes; //nr of keyframes for which we store the seeds
     Params m_params; //parameters for depth estimation that may also be needed inside the gl shader
 
 

@@ -405,6 +405,11 @@ void Gui::show_debug_textures(){
         ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_high_hessian_tex.get_tex_id(), ImGui::GetContentRegionAvail());
         ImGui::End();
     }
+    if(m_core->m_depth_estimator_gl->m_debug_tex.get_tex_id()!=-1){
+        ImGui::Begin("m_debug_tex", nullptr, debug_window_flags);
+        ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_debug_tex.get_tex_id(), ImGui::GetContentRegionAvail());
+        ImGui::End();
+    }
 
 
 }

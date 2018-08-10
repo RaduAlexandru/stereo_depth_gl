@@ -72,6 +72,11 @@ void DepthEstimatorGL::init_params(){
     Config depth_config=cfg["depth"];
     m_gl_profiling_enabled = depth_config["gl_profiling_enabled"];
     m_pattern_file= (std::string)depth_config["pattern_file"];
+    m_estimated_seeds_per_keyframe=depth_config["estimated_seeds_per_keyframe"];
+    m_nr_buffered_keyframes=depth_config["nr_buffered_keyframes"];
+
+    m_nr_times_frame_used_for_seed_creation_per_cam.resize(20,0); //TODO kinda HACK because we will never have that many cameras
+
 }
 
 void DepthEstimatorGL::init_opengl(){
@@ -104,6 +109,27 @@ void DepthEstimatorGL::init_opengl(){
     m_hessian_blurred_tex.set_wrap_mode(GL_CLAMP_TO_BORDER);
     m_hessian_blurred_tex.set_filter_mode(GL_LINEAR);
 
+    //debug texture
+    m_debug_tex.set_wrap_mode(GL_CLAMP_TO_BORDER);
+    m_debug_tex.set_filter_mode(GL_LINEAR);
+
+    //Seeds are calculated for each keyframe and we store the seeds of only the last few keyframes.make a buffer for seeds big enough to store around X keyframe worth of data.
+    //each keyframe will store a maximum of m_estimated_seeds_per_keyframe
+    m_nr_total_seeds=m_estimated_seeds_per_keyframe*m_nr_buffered_keyframes;
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_left_gl_buf);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, m_nr_total_seeds * sizeof(Seed), NULL, GL_DYNAMIC_COPY);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, m_nr_total_seeds * sizeof(Seed), NULL, GL_DYNAMIC_COPY);
+
+    //nr of seeds created is counter with an atomic counter
+    glGenBuffers(1, &m_atomic_nr_seeds_created);
+	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, m_atomic_nr_seeds_created);
+    GLuint zero=0;
+	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), &(zero), GL_STATIC_COPY);  //sets it to 0
+
+
+
+
     compile_shaders();
 
 }
@@ -116,6 +142,8 @@ void DepthEstimatorGL::compile_shaders(){
     m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_hessian_pointwise.glsl");
 
     m_compute_hessian_blurred_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_hessian_blurred.glsl");
+
+    m_compute_create_seeds_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_create_seeds.glsl");
 
     // m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
 
@@ -150,7 +178,6 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     TIME_START_GL("hessian_det_matrix");
     //if the m_hessian_pointwise_tex is not initialize allocate memory for it
     if(!m_hessian_pointwise_tex.get_tex_storage_initialized()){
-        VLOG(1) << "initializing m_hessian_pointwise_tex" ;
         m_hessian_pointwise_tex.allocate_tex_storage_inmutable(GL_RGBA32F,frame.gray.cols, frame.gray.rows);
     }
     GL_C( glUseProgram(m_compute_hessian_pointwise_prog_id) );
@@ -174,7 +201,7 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     TIME_START_GL("hessian_blurred_matrix");
     //if the m_hessian_pointwise_tex is not initialize allocate memory for it
     if(!m_hessian_blurred_tex.get_tex_storage_initialized()){
-        VLOG(1) << "initializing m_hessian_blurred_tex"; 
+        VLOG(1) << "initializing m_hessian_blurred_tex";
         GL_C(m_hessian_blurred_tex.allocate_tex_storage_inmutable(GL_RGBA32F,frame.gray.cols, frame.gray.rows) );
     }
     GL_C( glUseProgram(m_compute_hessian_blurred_prog_id) );
@@ -183,6 +210,44 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     GL_C( glDispatchCompute(frame.gray.cols/32, frame.gray.rows/16, 1) ); //TODO need to ceil the size otherwise you will have block of the image that are not computed
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     TIME_END_GL("hessian_blurred_matrix");
+
+
+    //create seeds by calculating the determinant of the hessian and if it's big enough add the seed to the seed buffer and atomically increment a counter for the nr of seeds
+    TIME_START_GL("create_seeds");
+    //seeds are stored either in m_seeds_left_gl_buf or in m_seeds_right_gl_buf.m_seeds_left_gl_buf is split equally beteween m_nr_buffered_keyframes
+    int idx_keyframe=m_nr_times_frame_used_for_seed_creation_per_cam[frame.cam_id]%m_nr_buffered_keyframes; //idx between 0 and m_nr_buffered_keyframes
+    int allocation_start_idx=idx_keyframe*m_estimated_seeds_per_keyframe;
+    //add seeds with compute shader
+    glUseProgram(m_compute_create_seeds_prog_id);
+    if(frame.cam_id==0){ glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_left_gl_buf);
+    }else if(frame.cam_id==1){ glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_right_gl_buf);
+    }else{ LOG(FATAL) << "Invalid cam_id " << frame.cam_id; }
+    bind_for_sampling(m_hessian_blurred_tex, 1, glGetUniformLocation(m_compute_create_seeds_prog_id,"hessian_blurred_sampler") );
+    glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 1, m_atomic_nr_seeds_created);
+    GLuint zero=0;
+	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), &(zero), GL_STATIC_COPY); //sets the counter to 0 TODO make sure setting to null means 0
+
+    //debug texture
+    if(!m_debug_tex.get_tex_storage_initialized()){
+        m_debug_tex.allocate_tex_storage_inmutable(GL_RGBA32F,frame.gray.cols, frame.gray.rows);
+    }
+    //clear the debug texture
+    std::vector<GLuint> clear_color(4,0);
+    GL_C ( glClearTexSubImage(m_debug_tex.get_tex_id(), 0,0,0,0, frame.gray.cols,frame.gray.rows,1,GL_RGBA, GL_FLOAT, clear_color.data()) );
+    glBindImageTexture(2, m_debug_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+    glDispatchCompute(frame.gray.cols/32, frame.gray.rows/16, 1);
+    m_nr_times_frame_used_for_seed_creation_per_cam[frame.cam_id]++;
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+
+    //get how many seeds were created
+    GLuint* atomic_nr_seeds_created_cpu= (GLuint*)glMapBufferRange(GL_ATOMIC_COUNTER_BUFFER,0,sizeof(GLuint),GL_MAP_READ_BIT);
+    glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
+    std::cout << "atomic_nr_seeds_created_cpu " << atomic_nr_seeds_created_cpu[0] << '\n';
+
+    TIME_END_GL("create_seeds");
+
+
 
 
     //cpu-----------------
@@ -384,6 +449,10 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     // TIME_END_GL("create_seeds");
 
     // std::cout << "seeds has size " << seeds.size() << '\n';
+
+
+
+
     return seeds;
 
 }

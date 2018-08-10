@@ -19,6 +19,28 @@ namespace gl{
         const char *c = src.c_str();
         glShaderSource(s, 1, &c, NULL);
         glCompileShader(s);
+
+        //check if it was compiled correctly
+        GLint isCompiled = 0;
+        glGetShaderiv(s, GL_COMPILE_STATUS, &isCompiled);
+        if(isCompiled == GL_FALSE){
+        	GLint maxLength = 5000;
+        	glGetShaderiv(s, GL_INFO_LOG_LENGTH, &maxLength);
+
+        	// The maxLength includes the NULL character
+        	std::vector<GLchar> errorLog(maxLength);
+        	glGetShaderInfoLog(s, maxLength, &maxLength, &errorLog[0]);
+
+            fprintf(stderr,"Error: compiling shader \n");
+            fprintf(stderr,&errorLog[0]);
+
+        	// Provide the infolog in whatever manor you deem best.
+        	// Exit with failure.
+        	glDeleteShader(s); // Don't leak the shader.
+        	return -1;
+        }
+
+
         return s;
     }
 
@@ -110,20 +132,18 @@ namespace gl{
 
     inline GLuint program_init_from_files( const std::string &compute_shader_filename){
 
+        auto file_to_string = [](const std::string &filename)->std::string{
+            std::ifstream t(filename);
+            if (t.is_open()) {
+                return std::string((std::istreambuf_iterator<char>(t)),
+                        std::istreambuf_iterator<char>());
+            }else{
+                LOG(FATAL) << "Failed to open file " << filename;
+                return "";
+            }
+        };
 
-
-    auto file_to_string = [](const std::string &filename)->std::string{
-        std::ifstream t(filename);
-        if (t.is_open()) {
-            return std::string((std::istreambuf_iterator<char>(t)),
-                    std::istreambuf_iterator<char>());
-        }else{
-            LOG(FATAL) << "Failed to open file " << filename;
-            return "";
-        }
-    };
-
-    return program_init(file_to_string(compute_shader_filename));
+        return program_init(file_to_string(compute_shader_filename));
 
     }
 

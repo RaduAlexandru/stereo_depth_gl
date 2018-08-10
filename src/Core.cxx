@@ -133,6 +133,8 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
          m_scene.add_mesh(mesh,"geom");
      }
 
+
+
 }
 
 

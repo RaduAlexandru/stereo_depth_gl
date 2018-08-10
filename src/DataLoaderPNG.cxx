@@ -278,7 +278,8 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             //gray
             cv::cvtColor ( frame.rgb, frame.gray, CV_BGR2GRAY );
             frame.gray.convertTo(frame.gray, CV_32F);
-            undistort_image(frame.gray, frame.K, frame.distort_coeffs, cam_id); //undistort only the gray image because rgb is only used for visualization
+            frame.gray/=255.0; //gray is normalized
+            frame.gray=undistort_image(frame.gray, frame.K, frame.distort_coeffs, cam_id); //undistort only the gray image because rgb is only used for visualization
             // frame.gray/=255.0;
 
             //gradients
@@ -627,7 +628,7 @@ void DataLoaderPNG::republish_last_frame_all_cams(){
     }
 }
 
-void DataLoaderPNG::undistort_image(cv::Mat& gray_img, const Eigen::Matrix3f& K, const Eigen::VectorXf& distort_coeffs, const int cam_id){
+cv::Mat DataLoaderPNG::undistort_image(const cv::Mat& gray_img, const Eigen::Matrix3f& K, const Eigen::VectorXf& distort_coeffs, const int cam_id){
 
     TIME_START("undistort");
     //if we don't have the undistorsion maps yet, create them
@@ -649,6 +650,8 @@ void DataLoaderPNG::undistort_image(cv::Mat& gray_img, const Eigen::Matrix3f& K,
 
     cv::Mat undistorted_img;
     cv::remap ( gray_img, undistorted_img, m_undistort_map_x_per_cam[cam_id], m_undistort_map_y_per_cam[cam_id], cv::INTER_LINEAR );
-    gray_img=undistorted_img.clone(); //remap cannot function in-place so we copy the gray image back
+    // gray_img=undistorted_img.clone(); //remap cannot function in-place so we copy the gray image back
     TIME_END("undistort");
+    return undistorted_img;
+
 }
