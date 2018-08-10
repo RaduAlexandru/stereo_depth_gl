@@ -63,6 +63,7 @@ private:
 
     void show_stereo_textures();
     void show_rgb_textures();
+    void show_debug_textures();
 
 
 };

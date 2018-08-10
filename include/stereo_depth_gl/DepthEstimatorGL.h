@@ -195,10 +195,16 @@ public:
     gl::Texture2D m_frame_right; //the right camera, same as above
     gl::Texture2D m_frame_rgb_left; //mostly for visualization purposes we upload here the gray image
     gl::Texture2D m_frame_rgb_right;
+    //for creating seeds
+    gl::Texture2D m_hessian_pointwise_tex; // a 4 channels texture containing the hessian of each point, gx2, gxgy gy2, alpha is set to 255 for visualziation
+    gl::Texture2D m_hessian_blurred_tex; //blurred texture of the previous m_hessian_pointwise_tex, using a box blur which is not normalized for speed reasons
+    gl::Texture2D m_high_hessian_tex; //thresholded version of the m_hessian_tex which stores 1 for the high ones and 0 for the low ones
 
 
     //gl shaders
     GLuint m_update_depth_prog_id;
+    GLuint m_compute_hessian_pointwise_prog_id;
+    GLuint m_compute_hessian_blurred_prog_id;
 
 
     //databasse

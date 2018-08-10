@@ -61,8 +61,14 @@ namespace gl{
 
     auto file_to_string = [](const std::string &filename)->std::string{
         std::ifstream t(filename);
-        return std::string((std::istreambuf_iterator<char>(t)),
-                std::istreambuf_iterator<char>());
+        if (t.is_open()) {
+            return std::string((std::istreambuf_iterator<char>(t)),
+                    std::istreambuf_iterator<char>());
+        }else{
+            LOG(FATAL) << "Failed to open file " << filename;
+            return "";
+        }
+
     };
 
     return program_init(file_to_string(vertex_shader_filename),
@@ -108,8 +114,13 @@ namespace gl{
 
     auto file_to_string = [](const std::string &filename)->std::string{
         std::ifstream t(filename);
-        return std::string((std::istreambuf_iterator<char>(t)),
-                std::istreambuf_iterator<char>());
+        if (t.is_open()) {
+            return std::string((std::istreambuf_iterator<char>(t)),
+                    std::istreambuf_iterator<char>());
+        }else{
+            LOG(FATAL) << "Failed to open file " << filename;
+            return "";
+        }
     };
 
     return program_init(file_to_string(compute_shader_filename));

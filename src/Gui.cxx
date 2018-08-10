@@ -206,6 +206,7 @@ void Gui::update() {
     }
     show_stereo_textures();
     show_rgb_textures();
+    show_debug_textures();
 
 
 
@@ -382,6 +383,29 @@ void Gui::show_rgb_textures(){
     ImGui::Begin("cam_right", nullptr, gray_window_flags);
     ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_frame_rgb_right.get_tex_id(), ImGui::GetContentRegionAvail());
     ImGui::End();
+
+}
+
+
+void Gui::show_debug_textures(){
+
+    ImGuiWindowFlags debug_window_flags = 0;
+    if(m_core->m_depth_estimator_gl->m_hessian_pointwise_tex.get_tex_id()!=-1){
+        ImGui::Begin("m_hessian_pointwise_tex", nullptr, debug_window_flags);
+        ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_hessian_pointwise_tex.get_tex_id(), ImGui::GetContentRegionAvail());
+        ImGui::End();
+    }
+    if(m_core->m_depth_estimator_gl->m_hessian_blurred_tex.get_tex_id()!=-1){
+        ImGui::Begin("m_hessian_blurred_tex", nullptr, debug_window_flags);
+        ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_hessian_blurred_tex.get_tex_id(), ImGui::GetContentRegionAvail());
+        ImGui::End();
+    }
+    if(m_core->m_depth_estimator_gl->m_high_hessian_tex.get_tex_id()!=-1){
+        ImGui::Begin("m_high_hessian_tex", nullptr, debug_window_flags);
+        ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_high_hessian_tex.get_tex_id(), ImGui::GetContentRegionAvail());
+        ImGui::End();
+    }
+
 
 }
 

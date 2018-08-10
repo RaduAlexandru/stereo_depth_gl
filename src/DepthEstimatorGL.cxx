@@ -39,7 +39,8 @@ using namespace configuru;
 DepthEstimatorGL::DepthEstimatorGL():
         m_gl_profiling_enabled(true),
         m_debug_enabled(false),
-        m_mean_starting_depth(4.0)
+        m_mean_starting_depth(4.0),
+        m_compute_hessian_pointwise_prog_id(-1)
         {
 
     init_params();
@@ -97,6 +98,11 @@ void DepthEstimatorGL::init_opengl(){
     m_frame_rgb_right.set_wrap_mode(GL_CLAMP_TO_BORDER);
     m_frame_rgb_right.set_filter_mode(GL_LINEAR);
 
+    //for creating seeds
+    m_hessian_pointwise_tex.set_wrap_mode(GL_CLAMP_TO_BORDER);
+    m_hessian_pointwise_tex.set_filter_mode(GL_LINEAR);
+    m_hessian_blurred_tex.set_wrap_mode(GL_CLAMP_TO_BORDER);
+    m_hessian_blurred_tex.set_filter_mode(GL_LINEAR);
 
     compile_shaders();
 
@@ -104,7 +110,14 @@ void DepthEstimatorGL::init_opengl(){
 
 void DepthEstimatorGL::compile_shaders(){
 
+
     m_update_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
+
+    m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_hessian_pointwise.glsl");
+
+    m_compute_hessian_blurred_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_hessian_blurred.glsl");
+
+    // m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
 
     // m_denoise_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/update_TVL1_primal_dual.glsl");
     //
@@ -131,83 +144,135 @@ void DepthEstimatorGL::compute_depth(const Frame& frame_left, const Frame& frame
 
 
 std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
+    std::vector<Seed> seeds;
 
 
     TIME_START_GL("hessian_det_matrix");
-    std::vector<Seed> seeds;
-    seeds.reserve(200000);
-
-
-    // //multiply the gradx with grady to get a hessian for each point
-    // cv::Mat hessian_pointwise=frame.grad_x.mul(frame.grad_y);
-    // //the hessian at each point can be blurred a bit to get something from the neighbouring points too
-    // cv::Mat hessian;
-    // cv::boxFilter(hessian_pointwise,hessian,-1,cv::Size(3,3));
-
-
-    //hessian point wise is a 2x2 matrix obtained by multiplying [gx][gx,gy]
-    //                                                           [gy]
-    //the 2x2  hessian matrix will contain [ gx2 gxgy ]
-    //                                     [ gxgy gy2 ]
-    //can be stored as a cv mat with 4 channels, each channel will be the multiplication of gradx and gray
-    // summing the hessian over a small patch means summing this matrix, which means summing the elements
-    // it's the same as blurring each one of the 4 channels
-    //the determinant of the hessian is then
-    cv::Mat hessian_pointwise = cv::Mat(frame.gray.rows, frame.gray.cols, CV_32FC4);
-    for (size_t i = 0; i < hessian_pointwise.rows; i++) {
-        for (size_t j = 0; j < hessian_pointwise.cols; j++) {
-            cv::Vec4f& elem = hessian_pointwise.at<cv::Vec4f>(i,j);
-            float gx=frame.grad_x.at<float>(i,j);
-            float gy=frame.grad_y.at<float>(i,j);
-            //the 4 channels will store the 4 elements of the hessian in row major fashion
-            elem[0]=gx*gx;
-            elem[1]=gx*gy;
-            elem[2]=elem[1];
-            elem[3]=gy*gy;
-        }
+    //if the m_hessian_pointwise_tex is not initialize allocate memory for it
+    if(!m_hessian_pointwise_tex.get_tex_storage_initialized()){
+        VLOG(1) << "initializing m_hessian_pointwise_tex" ;
+        m_hessian_pointwise_tex.allocate_tex_storage_inmutable(GL_RGBA32F,frame.gray.cols, frame.gray.rows);
     }
+    GL_C( glUseProgram(m_compute_hessian_pointwise_prog_id) );
+    if(frame.cam_id==0){
+        GL_C(bind_for_sampling(m_frame_left, 1, glGetUniformLocation(m_compute_hessian_pointwise_prog_id,"gray_with_gradients_img_sampler") ) );
 
-    //summing over an area the matrix means blurring it
-    cv::Mat hessian;
-    cv::boxFilter(hessian_pointwise,hessian,-1,cv::Size(3,3));
-
-    //determinant matrix
-    cv::Mat determinant(hessian.rows, hessian.cols, CV_32FC1);
-    //-Do not look around the borders to avoid pattern accesing outside img
-    for (size_t i = m_pattern.get_size().y(); i < frame.gray.rows- m_pattern.get_size().y(); i++) {
-        for (size_t j =  m_pattern.get_size().x(); j < frame.gray.cols- m_pattern.get_size().x(); j++) {
-            //determinant is high enough, add the point
-            cv::Vec4f& elem = hessian.at<cv::Vec4f>(i,j);
-            float hessian_det=elem[0]*elem[3]-elem[1]*elem[2];
-            determinant.at<float>(i,j)=hessian_det;
-        }
+    }else if(frame.cam_id==1){
+        GL_C( bind_for_sampling(m_frame_right, 1, glGetUniformLocation(m_compute_hessian_pointwise_prog_id,"gray_with_gradients_img_sampler") ) );
+    }else{
+        LOG(FATAL) << "Invalid cam id";
     }
-
-    //whatever is bigger than the gradH_th, we set to 1.0 to indicate that we will create a seed, otherwise set to 0
-    cv::Mat high_determinant;
-    cv::threshold(determinant, high_determinant, m_params.gradH_th, 1.0, cv::THRESH_BINARY);
+    GL_C( glBindImageTexture(0, m_hessian_pointwise_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F) );
+    GL_C( glDispatchCompute(frame.gray.cols/32, frame.gray.rows/16, 1) ); //TODO need to ceil the size otherwise you will have block of the image that are not computed
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
     TIME_END_GL("hessian_det_matrix");
 
 
 
-
-
-
-    TIME_START_GL("create_seeds");
-    //--------Do not look around the borders to avoid pattern accesing outside img
-    for (size_t i = m_pattern.get_size().y(); i < frame.gray.rows- m_pattern.get_size().y(); i++) {
-        for (size_t j =  m_pattern.get_size().x(); j < frame.gray.cols- m_pattern.get_size().x(); j++) {
-
-            //determinant is high enough, add the point
-            float high_det=high_determinant.at<float>(i,j);
-
-            if(high_det==1.0){
-                Seed point;
-                seeds.push_back(point);
-            }
-
-        }
+    //get hessian by box blurring
+    std::cout << "m_compute_hessian_blurred_prog_id " << m_compute_hessian_blurred_prog_id << '\n';
+    TIME_START_GL("hessian_blurred_matrix");
+    //if the m_hessian_pointwise_tex is not initialize allocate memory for it
+    if(!m_hessian_blurred_tex.get_tex_storage_initialized()){
+        VLOG(1) << "initializing m_hessian_blurred_tex"; 
+        GL_C(m_hessian_blurred_tex.allocate_tex_storage_inmutable(GL_RGBA32F,frame.gray.cols, frame.gray.rows) );
     }
+    GL_C( glUseProgram(m_compute_hessian_blurred_prog_id) );
+    bind_for_sampling(m_hessian_pointwise_tex, 1, glGetUniformLocation(m_compute_hessian_blurred_prog_id,"hessian_pointwise_tex_sampler") );
+    GL_C( glBindImageTexture(0, m_hessian_blurred_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F) );
+    GL_C( glDispatchCompute(frame.gray.cols/32, frame.gray.rows/16, 1) ); //TODO need to ceil the size otherwise you will have block of the image that are not computed
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    TIME_END_GL("hessian_blurred_matrix");
+
+
+    //cpu-----------------
+    // TIME_START_GL("hessian_det_matrix");
+    // std::vector<Seed> seeds;
+    // seeds.reserve(200000);
+    //
+    //
+    // // //multiply the gradx with grady to get a hessian for each point
+    // // cv::Mat hessian_pointwise=frame.grad_x.mul(frame.grad_y);
+    // // //the hessian at each point can be blurred a bit to get something from the neighbouring points too
+    // // cv::Mat hessian;
+    // // cv::boxFilter(hessian_pointwise,hessian,-1,cv::Size(3,3));
+    //
+    //
+    // //hessian point wise is a 2x2 matrix obtained by multiplying [gx][gx,gy]
+    // //                                                           [gy]
+    // //the 2x2  hessian matrix will contain [ gx2 gxgy ]
+    // //                                     [ gxgy gy2 ]
+    // //can be stored as a cv mat with 4 channels, each channel will be the multiplication of gradx and gray
+    // // summing the hessian over a small patch means summing this matrix, which means summing the elements
+    // // it's the same as blurring each one of the 4 channels
+    // //the determinant of the hessian is then
+    // cv::Mat hessian_pointwise = cv::Mat(frame.gray.rows, frame.gray.cols, CV_32FC4);
+    // for (size_t i = 0; i < hessian_pointwise.rows; i++) {
+    //     for (size_t j = 0; j < hessian_pointwise.cols; j++) {
+    //         cv::Vec4f& elem = hessian_pointwise.at<cv::Vec4f>(i,j);
+    //         float gx=frame.grad_x.at<float>(i,j);
+    //         float gy=frame.grad_y.at<float>(i,j);
+    //         //the 4 channels will store the 4 elements of the hessian in row major fashion
+    //         elem[0]=gx*gx;
+    //         elem[1]=gx*gy;
+    //         elem[2]=elem[1];
+    //         elem[3]=gy*gy;
+    //     }
+    // }
+    //
+    // //summing over an area the matrix means blurring it
+    // cv::Mat hessian;
+    // cv::boxFilter(hessian_pointwise,hessian,-1,cv::Size(3,3));
+    // // hessian=hessian_pointwise.clone();
+    //
+    // //determinant matrix
+    // cv::Mat determinant(hessian.rows, hessian.cols, CV_32FC1);
+    // //-Do not look around the borders to avoid pattern accesing outside img
+    // for (size_t i = m_pattern.get_size().y(); i < frame.gray.rows- m_pattern.get_size().y(); i++) {
+    //     for (size_t j =  m_pattern.get_size().x(); j < frame.gray.cols- m_pattern.get_size().x(); j++) {
+    //         //determinant is high enough, add the point
+    //         cv::Vec4f& elem = hessian.at<cv::Vec4f>(i,j);
+    //         float hessian_det=elem[0]*elem[3]-elem[1]*elem[2];
+    //         determinant.at<float>(i,j)=hessian_det;
+    //     }
+    // }
+    //
+    // // //see determinant
+    // // cv::Mat determinant_vis;
+    // // cv::normalize(determinant, determinant_vis, 0, 1.0, cv::NORM_MINMAX);
+    // // cv::imshow("determinant", determinant_vis);
+    //
+    // //whatever is bigger than the gradH_th, we set to 1.0 to indicate that we will create a seed, otherwise set to 0
+    // cv::Mat high_determinant;
+    // cv::threshold(determinant, high_determinant, m_params.gradH_th, 1.0, cv::THRESH_BINARY);
+    // TIME_END_GL("hessian_det_matrix");
+    //
+    //
+    // TIME_START_GL("create_seeds");
+    // //--------Do not look around the borders to avoid pattern accesing outside img
+    // for (size_t i = m_pattern.get_size().y(); i < frame.gray.rows- m_pattern.get_size().y(); i++) {
+    //     for (size_t j =  m_pattern.get_size().x(); j < frame.gray.cols- m_pattern.get_size().x(); j++) {
+    //
+    //         //determinant is high enough, add the point
+    //         float high_det=high_determinant.at<float>(i,j);
+    //
+    //         if(high_det==1.0){
+    //             Seed point;
+    //             seeds.push_back(point);
+    //         }
+    //
+    //     }
+    // }
+
+
+
+
+
+
+
+
+
+
 
 
     // //--------Do not look around the borders to avoid pattern accesing outside img
@@ -316,9 +381,9 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     //
     //     }
     // }
-    TIME_END_GL("create_seeds");
+    // TIME_END_GL("create_seeds");
 
-    std::cout << "seeds has size " << seeds.size() << '\n';
+    // std::cout << "seeds has size " << seeds.size() << '\n';
     return seeds;
 
 }
