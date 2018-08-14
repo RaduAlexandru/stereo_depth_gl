@@ -56,6 +56,10 @@ DepthEstimatorGL::DepthEstimatorGL():
     //more sanity checks that ensure that however I pad the Seed struct it will be correct
     assert(sizeof(float) == 4);
     assert(sizeof(int32_t) == 4);
+    std::cout << "size of Seed " << sizeof(Seed) << '\n';
+    std::cout << "size of minimaldepthfilet " << sizeof(MinimalDepthFilter) << '\n';
+    assert(sizeof(Seed)%16== 0); //check that it is correctly padded to 16 bytes
+    assert(sizeof(MinimalDepthFilter)%16== 0);
 }
 
 //needed so that forward declarations work
@@ -76,6 +80,7 @@ void DepthEstimatorGL::init_params(){
     m_nr_buffered_keyframes=depth_config["nr_buffered_keyframes"];
 
     m_nr_times_frame_used_for_seed_creation_per_cam.resize(20,0); //TODO kinda HACK because we will never have that many cameras
+    m_keyframes_per_cam.resize(20);
 
 }
 
@@ -168,6 +173,10 @@ void DepthEstimatorGL::compute_depth(const Frame& frame_left, const Frame& frame
     std::vector<Seed> seeds_left=create_seeds(frame_left);
     std::vector<Seed> seeds_right=create_seeds(frame_right);
     TIME_END_GL("create_all_seeds");
+
+    //trace
+    // trace(m_seeds_left_gl_buf, m_nr_seeds_left, frame_right);
+    // trace(m_seeds_right_gl_buf, m_nr_seeds_right, frame_left);
 }
 
 
@@ -219,13 +228,21 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     int allocation_start_idx=idx_keyframe*m_estimated_seeds_per_keyframe;
     //add seeds with compute shader
     glUseProgram(m_compute_create_seeds_prog_id);
-    if(frame.cam_id==0){ glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_left_gl_buf);
-    }else if(frame.cam_id==1){ glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_right_gl_buf);
-    }else{ LOG(FATAL) << "Invalid cam_id " << frame.cam_id; }
+    //bind seeds buffer and images
+    if(frame.cam_id==0){
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_left_gl_buf);
+        bind_for_sampling(m_frame_left, 1, glGetUniformLocation(m_compute_create_seeds_prog_id,"gray_with_gradients_img_sampler") );
+    }else if(frame.cam_id==1){
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_right_gl_buf);
+        bind_for_sampling(m_frame_right, 1, glGetUniformLocation(m_compute_create_seeds_prog_id,"gray_with_gradients_img_sampler") );
+    }else{
+        LOG(FATAL) << "Invalid cam_id " << frame.cam_id;
+    }
     bind_for_sampling(m_hessian_blurred_tex, 1, glGetUniformLocation(m_compute_create_seeds_prog_id,"hessian_blurred_sampler") );
+    //zero o out the counter for seeds creatted
     glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 1, m_atomic_nr_seeds_created);
     GLuint zero=0;
-	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), &(zero), GL_STATIC_COPY); //sets the counter to 0 TODO make sure setting to null means 0
+	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), &(zero), GL_STATIC_COPY);
 
     //debug texture
     if(!m_debug_tex.get_tex_storage_initialized()){
@@ -236,16 +253,55 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     GL_C ( glClearTexSubImage(m_debug_tex.get_tex_id(), 0,0,0,0, frame.gray.cols,frame.gray.rows,1,GL_RGBA, GL_FLOAT, clear_color.data()) );
     glBindImageTexture(2, m_debug_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
+    //uniforms needed for creating the seeds
+    //upload all the offses as an array of vec2 offsets
+    glUniform2fv(glGetUniformLocation(m_compute_create_seeds_prog_id,"pattern_rot_offsets"), m_pattern.get_nr_points(), m_pattern.get_offset_matrix().data());
+    glUniform1i(glGetUniformLocation(m_compute_create_seeds_prog_id,"pattern_rot_nr_points"), m_pattern.get_nr_points());
+    glUniformMatrix3fv(glGetUniformLocation(m_compute_create_seeds_prog_id,"K"), 1, GL_FALSE, frame.K.data());
+    Eigen::Matrix3f K_inv=frame.K.inverse();
+    glUniformMatrix3fv(glGetUniformLocation(m_compute_create_seeds_prog_id,"K_inv"), 1, GL_FALSE, K_inv.data());
+    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"depth_min"), 0.1);
+    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"depth_mean"), 1.0);
+    glUniform1i(glGetUniformLocation(m_compute_create_seeds_prog_id,"seeds_start_idx"), 0); //TODO
+
+
     glDispatchCompute(frame.gray.cols/32, frame.gray.rows/16, 1);
     m_nr_times_frame_used_for_seed_creation_per_cam[frame.cam_id]++;
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
-    //get how many seeds were created
+    // get how many seeds were created
     GLuint* atomic_nr_seeds_created_cpu= (GLuint*)glMapBufferRange(GL_ATOMIC_COUNTER_BUFFER,0,sizeof(GLuint),GL_MAP_READ_BIT);
     glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
+    if(frame.cam_id==0){
+        m_nr_seeds_left=atomic_nr_seeds_created_cpu[0];
+    }else{
+        m_nr_seeds_right=atomic_nr_seeds_created_cpu[0];
+    }
     std::cout << "atomic_nr_seeds_created_cpu " << atomic_nr_seeds_created_cpu[0] << '\n';
 
     TIME_END_GL("create_seeds");
+
+
+
+    //debug read the seeds back to cpu
+    std::cout << "cam " << frame.cam_id << '\n';
+    if(frame.cam_id==0){
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_left_gl_buf);
+    }else if(frame.cam_id==1){
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
+    }else{
+        LOG(FATAL) << "Invalid cam_id " << frame.cam_id;
+    }
+    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
+    Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+    for (size_t i = 0; i < std::min((int)atomic_nr_seeds_created_cpu[0],1); i++) {
+        // for (size_t d = 0; d < 16; d++) {
+        //     std::cout << "debug val is " << ptr[i].debug[d] << '\n';
+        // }
+        // std::cout << "uv of seed is " << ptr[i].m_uv.transpose() << '\n';
+        print_seed(ptr[i]);
+    }
+    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
 
 
@@ -630,65 +686,68 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
 
 
 Eigen::Vector2f DepthEstimatorGL::estimate_affine(std::vector<Seed>& seeds, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr){
-    ceres::Problem problem;
-    ceres::LossFunction * loss_function = new ceres::HuberLoss(1);
-    double scaleA = 1;
-    double offsetB = 0;
+    // ceres::Problem problem;
+    // ceres::LossFunction * loss_function = new ceres::HuberLoss(1);
+    // double scaleA = 1;
+    // double offsetB = 0;
+    //
+    // TIME_START("creating ceres problem");
+    // for ( int i = 0; i < seeds.size(); ++i )
+    // {
+    //     Seed& point = seeds[i];
+    //     if ( i % 100 != 0 )
+    //         continue;
+    //
+    //     //get colors at the current frame
+    //     float color_cur_frame[MAX_RES_PER_POINT];
+    //     float color_host_frame[MAX_RES_PER_POINT];
+    //
+    //
+    //     if ( 1.0/point.gt_depth > 0 ) {
+    //
+    //         const Eigen::Vector3f p = KRKi_cr * Eigen::Vector3f(point.u,point.v,1) + Kt_cr*  (1.0/point.gt_depth);
+    //         Eigen::Vector2f kp_GT = p.hnormalized();
+    //
+    //
+    //         if ( kp_GT(0) > 4 && kp_GT(0) < cur_frame.gray.cols-4 && kp_GT(1) > 3 && kp_GT(1) < cur_frame.gray.rows-4 ) {
+    //
+    //             Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
+    //
+    //             for(int idx=0;idx<m_pattern.get_nr_points();++idx) {
+    //                 Eigen::Vector2f offset=pattern_rot.get_offset(idx);
+    //
+    //                 color_cur_frame[idx]=texture_interpolate(cur_frame.gray, kp_GT(0)+offset(0), kp_GT(1)+offset(1) , InterpolType::LINEAR);
+    //                 color_host_frame[idx]=point.color[idx];
+    //
+    //             }
+    //         }
+    //     }
+    //
+    //
+    //     for ( int i = 0; i < m_pattern.get_nr_points(); ++i) {
+    //         if ( !std::isfinite(color_host_frame[i]) || ! std::isfinite(color_cur_frame[i]) )
+    //             continue;
+    //         if ( color_host_frame[i] <= 0 || color_host_frame[i] >= 255 || color_cur_frame[i] <= 0 || color_cur_frame[i] >= 255  )
+    //             continue;
+    //         ceres::CostFunction * cost_function = AffineAutoDiffCostFunctorGL::Create( color_cur_frame[i], color_host_frame[i] );
+    //         problem.AddResidualBlock( cost_function, loss_function, &scaleA, & offsetB );
+    //     }
+    // }
+    // TIME_END("creating ceres problem");
+    // ceres::Solver::Options solver_options;
+    // //solver_options.linear_solver_type = ceres::DENSE_QR;//DENSE_SCHUR;//QR;
+    // solver_options.minimizer_progress_to_stdout = false;
+    // solver_options.max_num_iterations = 1000;
+    // solver_options.function_tolerance = 1e-6;
+    // solver_options.num_threads = 8;
+    // ceres::Solver::Summary summary;
+    // ceres::Solve( solver_options, & problem, & summary );
+    // //std::cout << summary.FullReport() << std::endl;
+    // std::cout << "scale= " << scaleA << " offset= "<< offsetB << std::endl;
+    // return Eigen::Vector2f ( scaleA, offsetB );
 
-    TIME_START("creating ceres problem");
-    for ( int i = 0; i < seeds.size(); ++i )
-    {
-        Seed& point = seeds[i];
-        if ( i % 100 != 0 )
-            continue;
 
-        //get colors at the current frame
-        float color_cur_frame[MAX_RES_PER_POINT];
-        float color_host_frame[MAX_RES_PER_POINT];
-
-
-        if ( 1.0/point.gt_depth > 0 ) {
-
-            const Eigen::Vector3f p = KRKi_cr * Eigen::Vector3f(point.u,point.v,1) + Kt_cr*  (1.0/point.gt_depth);
-            Eigen::Vector2f kp_GT = p.hnormalized();
-
-
-            if ( kp_GT(0) > 4 && kp_GT(0) < cur_frame.gray.cols-4 && kp_GT(1) > 3 && kp_GT(1) < cur_frame.gray.rows-4 ) {
-
-                Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
-
-                for(int idx=0;idx<m_pattern.get_nr_points();++idx) {
-                    Eigen::Vector2f offset=pattern_rot.get_offset(idx);
-
-                    color_cur_frame[idx]=texture_interpolate(cur_frame.gray, kp_GT(0)+offset(0), kp_GT(1)+offset(1) , InterpolType::LINEAR);
-                    color_host_frame[idx]=point.color[idx];
-
-                }
-            }
-        }
-
-
-        for ( int i = 0; i < m_pattern.get_nr_points(); ++i) {
-            if ( !std::isfinite(color_host_frame[i]) || ! std::isfinite(color_cur_frame[i]) )
-                continue;
-            if ( color_host_frame[i] <= 0 || color_host_frame[i] >= 255 || color_cur_frame[i] <= 0 || color_cur_frame[i] >= 255  )
-                continue;
-            ceres::CostFunction * cost_function = AffineAutoDiffCostFunctorGL::Create( color_cur_frame[i], color_host_frame[i] );
-            problem.AddResidualBlock( cost_function, loss_function, &scaleA, & offsetB );
-        }
-    }
-    TIME_END("creating ceres problem");
-    ceres::Solver::Options solver_options;
-    //solver_options.linear_solver_type = ceres::DENSE_QR;//DENSE_SCHUR;//QR;
-    solver_options.minimizer_progress_to_stdout = false;
-    solver_options.max_num_iterations = 1000;
-    solver_options.function_tolerance = 1e-6;
-    solver_options.num_threads = 8;
-    ceres::Solver::Summary summary;
-    ceres::Solve( solver_options, & problem, & summary );
-    //std::cout << summary.FullReport() << std::endl;
-    std::cout << "scale= " << scaleA << " offset= "<< offsetB << std::endl;
-    return Eigen::Vector2f ( scaleA, offsetB );
+    return Eigen::Vector2f ( 1.0, 0.0 );
 }
 
 float DepthEstimatorGL::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type){
@@ -739,4 +798,23 @@ void DepthEstimatorGL::upload_gray_and_grad_stereo_pair(const cv::Mat& image_lef
     // m_frame_gray_stereo_tex.upload_data(GL_R32F, image_right.cols, image_right.rows, GL_RED, GL_FLOAT, image_right.ptr(), size_bytes);
     m_frame_right.upload_data(GL_RGB, image_right.cols, image_right.rows, GL_RGB, GL_FLOAT, image_right.ptr(), size_bytes);
     TIME_END_GL("upload_gray_and_grad");
+}
+
+void DepthEstimatorGL::print_seed(const Seed& s){
+    std::cout << "idx_keyframe " << s.idx_keyframe << '\n';
+    std::cout << "m_energyTH " << s.m_energyTH << '\n';
+    // std::cout << "m_gradH \n \t" << s.m_gradH << '\n';
+    std::cout << "m_uv " << s.m_uv.transpose() << '\n';
+    std::cout << "m_active_pattern_points " << s.m_active_pattern_points << '\n';
+
+    std::cout << "m_converged " << s.depth_filter.m_converged << '\n';
+    std::cout << "m_is_outlier " << s.depth_filter.m_is_outlier << '\n';
+    std::cout << "m_initialized " << s.depth_filter.m_initialized << '\n';
+    std::cout << "m_f " << s.depth_filter.m_f.transpose() << '\n';
+    std::cout << "m_alpha " << s.depth_filter.m_alpha << '\n';
+    std::cout << "m_beta " << s.depth_filter.m_beta << '\n';
+    std::cout << "m_mu " << s.depth_filter.m_mu << '\n';
+    std::cout << "m_z_range " << s.depth_filter.m_z_range << '\n';
+    std::cout << "m_sigma2 " << s.depth_filter.m_sigma2 << '\n';
+    std::cout << '\n';
 }

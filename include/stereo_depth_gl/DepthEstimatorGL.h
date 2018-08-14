@@ -62,73 +62,117 @@ enum SeedStatus {
     STATUS_UNINITIALIZED};			// not even traced once.
 
 //needs to be 16 bytes aligned as explained by john conor here https://www.opengl.org/discussion_boards/showthread.php/199303-How-to-get-Uniform-Block-Buffers-to-work-correctly
+
+struct MinimalDepthFilter{
+    int32_t m_converged = 0;
+    int32_t m_is_outlier = 0;
+    int32_t m_initialized = 0;
+    float m_f_scale = 1; //the scale of at the current level on the pyramid
+    Eigen::Vector4f m_f; // heading range = Ki * (u,v,1) MAKE IT VECTOR4 so it's memory aligned for GPU usage
+    int32_t m_lvl = 0; //pyramid lvl at which the depth filter was created
+    float m_alpha;                 //!< a of Beta distribution: When high, probability of inlier is large.
+    float m_beta;                  //!< b of Beta distribution: When high, probability of outlier is large.
+    float m_mu;                    //!< Mean of normal distribution.
+    float m_z_range;               //!< Max range of the possible depth.
+    float m_sigma2;                //!< Variance of normal distribution.
+    float pad[2]; //padded to 16 until now
+};
 struct Seed{
-    int32_t idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
-    float u,v; //position in host frame of the point
-    float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
-    float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
-    float mu;                    //!< Mean of normal distribution.
-    float z_range;               //!< Max range of the possible depth.
-    float sigma2;                //!< Variance of normal distribution.
-    float idepth_min;
-    float idepth_max;
-    float energyTH;
-    float quality;
-    //-----------------up until here we have 48 bytes so it's padded correctly to 16 bytes
-
-    glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
-    // Eigen::Vector4f f;
-    SeedStatus lastTraceStatus;
-    int32_t converged;
-    int32_t is_outlier;
-    int32_t pad_1;
+    // int32_t idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
+    // float u,v; //position in host frame of the point
+    // float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
+    // float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
+    // float mu;                    //!< Mean of normal distribution.
+    // float z_range;               //!< Max range of the possible depth.
+    // float sigma2;                //!< Variance of normal distribution.
+    // float idepth_min;
+    // float idepth_max;
+    // float energyTH;
+    // float quality;
+    // //-----------------up until here we have 48 bytes so it's padded correctly to 16 bytes
     //
-    float color[MAX_RES_PER_POINT]; 		// colors in host frame
-    float weights[MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
-    Eigen::Vector2f colorD[MAX_RES_PER_POINT];  //gradient in x and y at the pixel of the pattern normalized by the sqrt
-    Eigen::Vector2f colorGrad[MAX_RES_PER_POINT]; //just the raw gradient in x and y at the pixel offset of the pattern
+    // glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
+    // // Eigen::Vector4f f;
+    // SeedStatus lastTraceStatus;
+    // int32_t converged;
+    // int32_t is_outlier;
+    // int32_t pad_1;
+    // //
+    // float color[MAX_RES_PER_POINT]; 		// colors in host frame
+    // float weights[MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
+    // Eigen::Vector2f colorD[MAX_RES_PER_POINT];  //gradient in x and y at the pixel of the pattern normalized by the sqrt
+    // Eigen::Vector2f colorGrad[MAX_RES_PER_POINT]; //just the raw gradient in x and y at the pixel offset of the pattern
+    //
+    //
+    // float ncc_sum_templ;
+    // float ncc_const_templ;
+    // float pad_2;
+    // float pad_3;
+    //
+    // //Stuff that may be to be removed
+    // glm::mat2 gradH;
+    // // Eigen::Matrix2f gradH;
+    //
+    //
+    // //for denoising (indexes iinto the array of points of each of the 8 neighbours)
+    // int32_t left = -1;
+    // int32_t right = -1;
+    // int32_t above = -1;
+    // int32_t below = -1;
+    // int32_t left_upper = -1;
+    // int32_t right_upper = -1;
+    // int32_t left_lower = -1;
+    // int32_t right_lower = -1;
+    //
+    // //some other things for denoising
+    // float g;
+    // float mu_denoised;
+    // float mu_head;
+    // float pad_6;
+    // Eigen::Vector2f p;
+    // // glm::vec2 p;
+    // float pad_7;
+    // float pad_8;
+    //
+    //
+    // //debug stuff
+    // float gradient_hessian_det;
+    // float gt_depth;
+    // int32_t last_visible_frame;
+    //
+    // float debug; //serves as both debug and padding to 16 bytes
+    // // float padding_1; //to gt the struc to be aligned to 16 bytes
+    //
+    // float debug2[16];
 
 
-    float ncc_sum_templ;
-    float ncc_const_templ;
-    float pad_2;
-    float pad_3;
-
-    //Stuff that may be to be removed
-    glm::mat2 gradH;
-    // Eigen::Matrix2f gradH;
 
 
-    //for denoising (indexes iinto the array of points of each of the 8 neighbours)
-    int32_t left = -1;
-    int32_t right = -1;
-    int32_t above = -1;
-    int32_t below = -1;
-    int32_t left_upper = -1;
-    int32_t right_upper = -1;
-    int32_t left_lower = -1;
-    int32_t right_lower = -1;
+    int32_t idx_keyframe; //idx in the array of frames of the frame which "hosts" this inmature points
+    float m_energyTH=0;
+    float pad[2]; //padded to 16 until now
+    float m_intensity[MAX_RES_PER_POINT]; //gray value for each point on the pattern
+    Eigen::Vector2f m_normalized_grad[MAX_RES_PER_POINT];
+    Eigen::Matrix2f m_gradH; //2x2 matrix for the hessian (gx2, gxgy, gxgy, gy2), used for calculating the alpha value
+    Eigen::Vector2f m_uv; //position in x,y of the seed in th host_frame
+    Eigen::Vector2f m_scaled_uv; //scaled uv position depending on the pyramid level of the image
+    Eigen::Vector2f m_idepth_minmax;
+    Eigen::Vector2f m_best_kp; //position at which the matching energy was minimal in another frame
+    Eigen::Vector2f m_min_uv; //uv cooresponding to the minimum depth at which to trace
+    Eigen::Vector2f m_max_uv; //uv cooresponding to the maximum depth at which to trace
+    int32_t m_zero_grad [MAX_RES_PER_POINT]; //indicates fro each point on the pattern if it has zero grad and therefore can be skipped STORE it as int because bools are nasty for memory alignemnt on GPU as they are have different sizes in memory
 
-    //some other things for denoising
-    float g;
-    float mu_denoised;
-    float mu_head;
-    float pad_6;
-    Eigen::Vector2f p;
-    // glm::vec2 p;
-    float pad_7;
-    float pad_8;
+    int m_active_pattern_points = 0; //nr of points of the pattern that don't have zero_grad
+    int m_lvl = 0; //TODO why two time here andfilter?
+    float m_igt_depth = 0;
+    float m_last_error = 255;
+    float m_last_idepth = 0;
+    float m_last_tau2 = 0;
+    float pad2[2]; //padded until 16 now
 
+    MinimalDepthFilter depth_filter;
 
-    //debug stuff
-    float gradient_hessian_det;
-    float gt_depth;
-    int32_t last_visible_frame;
-
-    float debug; //serves as both debug and padding to 16 bytes
-    // float padding_1; //to gt the struc to be aligned to 16 bytes
-
-    float debug2[16];
+    float debug[16];
 
 };
 
@@ -158,6 +202,10 @@ private:
     const double m_newColor;
 };
 
+struct Keyframe{
+    int32_t idx_host_frame; //idx of the frame from which this keyframe was created
+};
+
 
 //forward declarations
 class Profiler;
@@ -178,6 +226,7 @@ public:
     void upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void compute_depth(const Frame& frame_left, const Frame& frame_right);
+    void print_seed(const Seed& s);
 
 
     //objects
@@ -188,6 +237,8 @@ public:
     GLuint m_ubo_params; //stores all parameters that may be needed inside the shader
     GLuint m_seeds_left_gl_buf; //stores all the depth_seeds
     GLuint m_seeds_right_gl_buf; //stores all the depth_seeds
+    int m_nr_seeds_left; //how many seeds were created in the left frame, set by create_seeds()
+    int m_nr_seeds_right;
     gl::Texture2D m_frame_left; //stored the gray image and the grad_x and grad_y in the other channels, the 4th channel is unused
     gl::Texture2D m_frame_right; //the right camera, same as above
     gl::Texture2D m_frame_rgb_left; //mostly for visualization purposes we upload here the gray image
@@ -211,6 +262,8 @@ public:
     // std::vector<Seed> m_seeds;
     int m_nr_total_seeds; //calculated from m_nr_buffered_keyframes and m_estimated_seeds_per_keyframe
     std::vector<int> m_nr_times_frame_used_for_seed_creation_per_cam;
+    std::vector<std::vector<Keyframe>> m_keyframes_per_cam;
+
 
 
     //params

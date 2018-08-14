@@ -285,6 +285,8 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             //gradients
             cv::Scharr( frame.gray, frame.grad_x, CV_32F, 1, 0);
             cv::Scharr( frame.gray, frame.grad_y, CV_32F, 0, 1);
+            frame.grad_x = cv::abs(frame.grad_x);
+            frame.grad_y = cv::abs(frame.grad_y);
 
             //merge the gray image and the gradients into one 3 channel image
             std::vector<cv::Mat> channels;
