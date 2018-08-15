@@ -173,6 +173,18 @@ void Core::update() {
         m_depth_estimator_gl->compute_depth(frame_left,frame_right);
 
 
+        //update point cloud
+        Mesh point_cloud=m_depth_estimator_gl->create_point_cloud();
+        std::string cloud_name="point_cloud";
+        point_cloud.name=cloud_name;
+        point_cloud.m_show_points=true;
+        if(m_scene.does_mesh_with_name_exist(cloud_name)){
+            m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+        }else{
+            m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+        }
+
+
 
 
         //update camera frustum mesh

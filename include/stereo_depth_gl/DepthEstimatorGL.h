@@ -234,9 +234,8 @@ public:
     void upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void compute_depth(const Frame& frame_left, const Frame& frame_right);
-    void trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds_left, const Frame& cur_frame);
-    void print_seed(const Seed& s);
-    Frame create_keyframe(const Frame& frame);
+    Mesh create_point_cloud();
+
 
 
     //objects
@@ -285,6 +284,8 @@ public:
     std::string m_pattern_file;
     int m_estimated_seeds_per_keyframe; //conservative estimate of nr of seeds created per frame
     int m_nr_buffered_keyframes; //nr of keyframes for which we store the seeds
+    float m_min_starting_depth;
+    float m_max_starting_depth;
     Params m_params; //parameters for depth estimation that may also be needed inside the gl shader
 
 
@@ -296,6 +297,9 @@ private:
 
     //start with everything
     std::vector<Seed> create_seeds (const Frame& frame);
+    void trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds_left, const Frame& cur_frame);
+    void print_seed(const Seed& s);
+    Frame create_keyframe(const Frame& frame);
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
     Eigen::Vector2f estimate_affine(std::vector<Seed>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
 

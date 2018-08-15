@@ -40,7 +40,9 @@ DepthEstimatorGL::DepthEstimatorGL():
         m_gl_profiling_enabled(true),
         m_debug_enabled(false),
         m_mean_starting_depth(4.0),
-        m_compute_hessian_pointwise_prog_id(-1)
+        m_compute_hessian_pointwise_prog_id(-1),
+        m_nr_seeds_left(0),
+        m_nr_seeds_right(0)
         {
 
     init_params();
@@ -83,6 +85,8 @@ void DepthEstimatorGL::init_params(){
     m_pattern_file= (std::string)depth_config["pattern_file"];
     m_estimated_seeds_per_keyframe=depth_config["estimated_seeds_per_keyframe"];
     m_nr_buffered_keyframes=depth_config["nr_buffered_keyframes"];
+    m_min_starting_depth=depth_config["min_starting_depth"];
+    m_mean_starting_depth=depth_config["mean_starting_depth"];
 
     m_nr_times_frame_used_for_seed_creation_per_cam.resize(20,0); //TODO kinda HACK because we will never have that many cameras
     m_keyframes_per_cam.resize(20);
@@ -176,6 +180,12 @@ void DepthEstimatorGL::compile_shaders(){
 }
 
 void DepthEstimatorGL::compute_depth(const Frame& frame_left, const Frame& frame_right){
+
+    TIME_START_GL("upload_params");
+    //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
+    glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
+    glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
+    TIME_END_GL("upload_params");
 
     //trace all the seeds we have with these new frames
     //create matrix that projects from eachkeyframe into the current frame
@@ -283,8 +293,8 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     glUniformMatrix3fv(glGetUniformLocation(m_compute_create_seeds_prog_id,"K"), 1, GL_FALSE, frame.K.data());
     Eigen::Matrix3f K_inv=frame.K.inverse();
     glUniformMatrix3fv(glGetUniformLocation(m_compute_create_seeds_prog_id,"K_inv"), 1, GL_FALSE, K_inv.data());
-    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"depth_min"), 0.1);
-    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"depth_mean"), 1.0);
+    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"min_starting_depth"), m_min_starting_depth);
+    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"mean_starting_depth"), m_mean_starting_depth);
     glUniform1i(glGetUniformLocation(m_compute_create_seeds_prog_id,"seeds_start_idx"), 0); //TODO
     glUniform1i(glGetUniformLocation(m_compute_create_seeds_prog_id,"idx_keyframe"), m_keyframes_per_cam[0].size()-1);
 
@@ -539,6 +549,10 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
 
 void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, const Frame& cur_frame){
 
+    if(m_nr_seeds==0){
+        return;
+    }
+
     //are we tracing from a left or a right keyframe?
     int keyframe_id=-1;
     if(m_seeds_gl_buf==m_seeds_left_gl_buf){
@@ -565,9 +579,9 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
     }
     assert(epidata_vec[0]%16==0);
 
-    //upload that vector of matrices as another ssbo
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_epidata_vec_gl_buf);
-    glBufferData(GL_SHADER_STORAGE_BUFFER,  m_keyframes_per_cam[keyframe_id].size() * sizeof(EpiData), epidata_vec.data(), GL_DYNAMIC_COPY);
+    //upload that vector of epidata as another ssbo
+    GL_C( glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_epidata_vec_gl_buf) );
+    GL_C( glBufferData(GL_SHADER_STORAGE_BUFFER,  m_keyframes_per_cam[keyframe_id].size() * sizeof(EpiData), epidata_vec.data(), GL_DYNAMIC_COPY) );
 
     //TODO get the other necessary data
     const double focal_length = fabs(cur_frame.K(0,0));
@@ -576,13 +590,15 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
 
 
     //when tracing, the seeds will have knowledge of the keyframe that hosts them, they will index into the epidata_vector and get the epidata so as to trace into the cur_frame
-    TIME_START_GL("depth_update_kernel");
-    glUseProgram(m_compute_trace_seeds_prog_id);
+    VLOG(1) << "tracing";
+    TIME_START_GL("trace");
+    GL_C( glUseProgram(m_compute_trace_seeds_prog_id) );
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_gl_buf);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_epidata_vec_gl_buf);
+    glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_compute_trace_seeds_prog_id,"params_block"), m_ubo_params );
     glUniformMatrix3fv(glGetUniformLocation(m_compute_trace_seeds_prog_id,"K"), 1, GL_FALSE, cur_frame.K.data());
     glUniform1f(glGetUniformLocation(m_compute_trace_seeds_prog_id,"px_error_angle"), px_error_angle);
-    glUniform1i(glGetUniformLocation(m_compute_trace_seeds_prog_id,"pattern_rot_nr_points"), m_pattern.get_nr_points());
+    GL_C( glUniform1i(glGetUniformLocation(m_compute_trace_seeds_prog_id,"pattern_rot_nr_points"), m_pattern.get_nr_points()) );
     if(cur_frame.cam_id==0){
         GL_C(bind_for_sampling(m_frame_left, 1, glGetUniformLocation(m_compute_trace_seeds_prog_id,"gray_with_gradients_img_sampler") ) );
 
@@ -591,9 +607,10 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
     }else{
         LOG(FATAL) << "Invalid cam id";
     }
-    glDispatchCompute(m_nr_seeds/256, 1, 1); //TODO adapt the local size to better suit the gpu
+    VLOG(1) << "tracing with " << m_nr_seeds;
+    GL_C( glDispatchCompute(m_nr_seeds/256, 1, 1) ); //TODO adapt the local size to better suit the gpu
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
-    TIME_END_GL("depth_update_kernel");
+    TIME_END_GL("trace");
 
 
 
@@ -607,6 +624,95 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
     // glUniform3fv(glGetUniformLocation(m_update_depth_prog_id,"Kt_cr"), 1, Kt_cr_eigen.data());
 
 }
+
+Mesh DepthEstimatorGL::create_point_cloud(){
+    // std::cout << "cam " << frame.cam_id << '\n';
+    // if(frame.cam_id==0){
+    //     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_left_gl_buf);
+    // }else if(frame.cam_id==1){
+    //     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
+    // }else{
+    //     LOG(FATAL) << "Invalid cam_id " << frame.cam_id;
+    // }
+
+    Mesh mesh;
+    if(m_nr_seeds_left==0){
+        return mesh;
+    }
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_left_gl_buf);
+    Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+    // for (size_t i = 0; i < m_nr_seeds_left; i++) {
+    //     // print_seed(ptr[i]);
+    // }
+
+
+
+
+    mesh.V.resize(m_nr_seeds_left,3);
+    mesh.V.setZero();
+
+
+    for (size_t i = 0; i < m_nr_seeds_left; i++) {
+        float u=ptr[i].m_uv.x();
+        float v=ptr[i].m_uv.y();
+        // float depth=immature_points[i].gt_depth;
+        float depth=1.0;
+        // float depth=1/ptr[i].depth_filter.m_mu;
+
+        if(std::isfinite(ptr[i].depth_filter.m_mu)){
+        // if(true){
+
+            // float outlier_measure=immature_points[i].a/(immature_points[i].a+immature_points[i].b);
+            // if(outlier_measure<0.7){
+            //     continue;
+            // }
+            //
+            // if(immature_points[i].sigma2>0.000005){
+            //     continue;
+            // }
+            //
+            // std::cout << immature_points[i].sigma2 << '\n';
+
+
+            //backproject the immature point
+            Eigen::Vector3f point_screen;
+            point_screen << u, v, 1.0;
+            Eigen::Vector3f point_dir=m_keyframes_per_cam[0][ptr[i].idx_keyframe].K.inverse()*point_screen; //TODO get the K and also use the cam to world corresponding to the immature point
+            // point_dir.normalize(); //this is just the direction (in cam coordinates) of that pixel
+
+            // point_dir=Eigen::Vector3f(point_dir.x()/point_dir.z(), point_dir.y()/point_dir.z(), 1.0);
+            Eigen::Vector3f point_cam = point_dir*depth;
+            // point_cam(2)=-point_cam(2); //flip the depth because opengl 7has a camera which looks at the negative z axis (therefore, more depth means a more negative number)
+            Eigen::Vector3f point_world=m_keyframes_per_cam[0][ptr[i].idx_keyframe].tf_cam_world.inverse()*point_cam;
+            mesh.V.row(i)=point_world.cast<double>();
+
+        }
+
+
+    }
+
+    //make also some colors based on depth
+    mesh.C.resize(m_nr_seeds_left,3);
+    double min_z, max_z;
+    min_z = mesh.V.col(2).minCoeff();
+    max_z = mesh.V.col(2).maxCoeff();
+    // min_z=-6.5;
+    // max_z=-4;
+    std::cout << "min max z is " << min_z << " " << max_z << '\n';
+    for (size_t i = 0; i < mesh.C.rows(); i++) {
+        float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
+        mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+    }
+
+
+    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+    return mesh;
+
+
+}
+
 // void DepthEstimatorGL::compute_depth_and_create_mesh(){
 //     m_mesh.clear();
 //
@@ -899,6 +1005,10 @@ void DepthEstimatorGL::print_seed(const Seed& s){
     std::cout << "m_energyTH " << s.m_energyTH << '\n';
     // std::cout << "m_gradH \n \t" << s.m_gradH << '\n';
     std::cout << "m_uv " << s.m_uv.transpose() << '\n';
+    std::cout << "m_idepth_minmax " << s.m_idepth_minmax.transpose() << '\n';
+    std::cout << "m_best_kp " <<  s.m_best_kp.transpose() << '\n';
+    std::cout << "m_min_uv " << s.m_min_uv.transpose() << '\n';
+    std::cout << "m_max_uv " << s.m_max_uv.transpose() << '\n';
     std::cout << "m_active_pattern_points " << s.m_active_pattern_points << '\n';
 
     std::cout << "m_converged " << s.depth_filter.m_converged << '\n';

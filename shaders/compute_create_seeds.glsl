@@ -91,8 +91,8 @@ uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
 uniform int pattern_rot_nr_points;
 uniform mat3 K;
 uniform mat3 K_inv;
-uniform float depth_min;
-uniform float depth_mean;
+uniform float min_starting_depth;
+uniform float mean_starting_depth;
 uniform int seeds_start_idx;
 uniform int idx_keyframe;
 
@@ -127,19 +127,25 @@ Seed create_seed(ivec2 img_coords, vec3 hessian){
     }
     s.m_energyTH = s.m_active_pattern_points * params.maxPerPtError * params.slackFactor;
 
+
     //stuff for the depthfilter
     //stuff in reinit
     s.depth_filter.m_converged = 0;
     s.depth_filter.m_is_outlier = 0;
     s.depth_filter.m_alpha = 10;
     s.depth_filter.m_beta = 10;
-    s.depth_filter.m_z_range = (1.0/depth_min);
+    s.depth_filter.m_z_range = (1.0/min_starting_depth);
     s.depth_filter.m_sigma2 = (s.depth_filter.m_z_range*s.depth_filter.m_z_range/36);
-    s.depth_filter.m_mu = (1.0/depth_mean);
+    s.depth_filter.m_mu = (1.0/mean_starting_depth);
     //stuff in the constructor
     s.depth_filter.m_f.xyz = K_inv * vec3(img_coords,1.0);
     s.depth_filter.m_f_scale = length(s.depth_filter.m_f.xyz);
     s.depth_filter.m_f.xyz /= s.depth_filter.m_f_scale;
+
+
+    s.m_idepth_minmax.x = s.depth_filter.m_mu + sqrt(s.depth_filter.m_sigma2);
+    s.m_idepth_minmax.y = max(s.depth_filter.m_mu - sqrt(s.depth_filter.m_sigma2), 0.00000001f);
+
 
     //debug
     for(int i = 0; i < 16; i++){
