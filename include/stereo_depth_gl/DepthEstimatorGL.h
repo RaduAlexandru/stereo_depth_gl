@@ -25,7 +25,7 @@
 #include <GL/glad.h>
 #include <glm/glm.hpp>
 
-#define MAX_RES_PER_POINT 16
+#define MAX_RES_PER_POINT 16 //IMPORTANT to change this value also in the shaders
 
 struct Params {
     float outlierTH = 12*12;					// higher -> less strict
@@ -202,8 +202,16 @@ private:
     const double m_newColor;
 };
 
-struct Keyframe{
-    int32_t idx_host_frame; //idx of the frame from which this keyframe was created
+// struct Keyframe:Frame{
+//     // int32_t idx_host_frame; //idx of the frame from which this keyframe was created
+// };
+
+struct EpiData{
+    Eigen::Affine3f tf_cur_host; //the of corresponds to a 4x4 matrix
+    Eigen::Affine3f tf_host_cur;
+    Eigen::Matrix3f KRKi_cr;
+    Eigen::Vector3f Kt_cr;
+    Eigen::MatrixXf pattern_rot_offsets; //its it made sure to have nr of rows the same as MAX_RES_PER_POINT so we can easily pass it to gl
 };
 
 
@@ -226,7 +234,9 @@ public:
     void upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void compute_depth(const Frame& frame_left, const Frame& frame_right);
+    void trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds_left, const Frame& cur_frame);
     void print_seed(const Seed& s);
+    Frame create_keyframe(const Frame& frame);
 
 
     //objects
@@ -249,6 +259,7 @@ public:
     gl::Texture2D m_high_hessian_tex; //thresholded version of the m_hessian_tex which stores 1 for the high ones and 0 for the low ones
     gl::Texture2D m_debug_tex;
     GLuint m_atomic_nr_seeds_created;
+    GLuint m_epidata_vec_gl_buf; //stores the epidata for all keyrames that relates them to the current frames
 
 
     //gl shaders
@@ -256,13 +267,14 @@ public:
     GLuint m_compute_hessian_pointwise_prog_id;
     GLuint m_compute_hessian_blurred_prog_id;
     GLuint m_compute_create_seeds_prog_id;
+    GLuint m_compute_trace_seeds_prog_id;
 
 
     //databasse
     // std::vector<Seed> m_seeds;
     int m_nr_total_seeds; //calculated from m_nr_buffered_keyframes and m_estimated_seeds_per_keyframe
     std::vector<int> m_nr_times_frame_used_for_seed_creation_per_cam;
-    std::vector<std::vector<Keyframe>> m_keyframes_per_cam;
+    std::vector<std::vector<Frame>> m_keyframes_per_cam;
 
 
 

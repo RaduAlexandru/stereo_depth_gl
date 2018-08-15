@@ -4,7 +4,7 @@
 
 const int MAX_RES_PER_POINT=16; //IMPORTANT to change this value also in the DepthEstimatorGL.h
 
-layout (local_size_x = 32, local_size_y = 16) in;
+layout (local_size_x = 256) in;
 
 struct MinimalDepthFilter{
     int m_converged;
@@ -47,11 +47,23 @@ struct Seed{
 
     float debug[16];
 };
+struct EpiData{
+    mat4 tf_cur_host; //the of corresponds to a 4x4 matrix
+    mat4 tf_host_cur;
+    mat3 KRKi_cr;
+    vec3 Kt_cr;
+    vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
+};
 
 //you change it to  layout (binding = 0, std430) or layout (binding = 0, std140) in case stuff breaks
 layout (binding = 0, std430) coherent buffer array_seeds_block{
     Seed p[];
 };
+
+layout (binding = 1, std430) coherent buffer array_epidata_block{
+    EpiData e[];
+};
+
 
 //if you assign a binding to this one it doesn't read the values anymore, god knows why..
 layout (std140) uniform params_block{
@@ -81,113 +93,38 @@ layout (std140) uniform params_block{
     float pad_2;
 }params ;
 
-uniform sampler2D hessian_blurred_sampler; //contains gray val and gradx and grady
-uniform sampler2D gray_with_gradients_img_sampler; //contains gray val and gradx and grady
-layout(binding = 1) uniform atomic_uint nr_seeds_created;
-layout(binding=2, rgba32f) uniform writeonly image2D debug;
-
-
-uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
-uniform int pattern_rot_nr_points;
-uniform mat3 K;
-uniform mat3 K_inv;
-uniform float depth_min;
-uniform float depth_mean;
-uniform int seeds_start_idx;
-uniform int idx_keyframe;
-
-
-Seed create_seed(ivec2 img_coords, vec3 hessian){
-    Seed s;
-
-
-    //at position nr_seeds_created fill out whatever is necesaary for the seed
-    s.idx_keyframe=idx_keyframe;
-    s.m_uv=img_coords;
-    s.m_gradH=mat2(hessian.x,hessian.y,hessian.y,hessian.z); //column major filling
-
-    for(int p_idx=0;p_idx<pattern_rot_nr_points; ++p_idx){
-        vec2 offset=pattern_rot_offsets[p_idx];
-
-        vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords + ivec2(offset), 0 ).xyz;
-
-        s.m_intensity[p_idx]=hit_color_and_grads.x;
-        float squared_norm=dot(hit_color_and_grads.yz,hit_color_and_grads.yz);
-        float grad_normalization= sqrt(squared_norm + params.eta); //TODO would it be faster to add the eta to vector and then use length?
-        vec2 grad_normalized=hit_color_and_grads.yz / grad_normalization;
-        s.m_normalized_grad[p_idx]=grad_normalized;
-
-        if(length(grad_normalized)<1e-3){
-            s.m_zero_grad[p_idx]=1;
-        }else{
-            s.m_zero_grad[p_idx]=0;
-            s.m_active_pattern_points++;
-        }
-
-    }
-    s.m_energyTH = s.m_active_pattern_points * params.maxPerPtError * params.slackFactor;
-
-    //stuff for the depthfilter
-    //stuff in reinit
-    s.depth_filter.m_converged = 0;
-    s.depth_filter.m_is_outlier = 0;
-    s.depth_filter.m_alpha = 10;
-    s.depth_filter.m_beta = 10;
-    s.depth_filter.m_z_range = (1.0/depth_min);
-    s.depth_filter.m_sigma2 = (s.depth_filter.m_z_range*s.depth_filter.m_z_range/36);
-    s.depth_filter.m_mu = (1.0/depth_mean);
-    //stuff in the constructor
-    s.depth_filter.m_f.xyz = K_inv * vec3(img_coords,1.0);
-    s.depth_filter.m_f_scale = length(s.depth_filter.m_f.xyz);
-    s.depth_filter.m_f.xyz /= s.depth_filter.m_f_scale;
-
-    //debug
-    for(int i = 0; i < 16; i++){
-        s.debug[i]=i;
-    }
-
-    return s;
+vec4 hqfilter(sampler2D samp, vec2 tc){
+    // Get the size of the texture we'll be sampling from
+    vec2 texSize = textureSize(samp, 0);
+    // Scale our input texture coordinates up, move to center of texel
+    vec2 uvScaled = tc * texSize + 0.5;
+    // Find integer and fractional parts of texture coordinate
+    vec2 uvInt = floor(uvScaled);
+    vec2 uvFrac = fract(uvScaled);
+    // Replace fractional part of texture coordinate
+    uvFrac = smoothstep(0.0, 1.0, uvFrac);
+    // Reassemble texture coordinate, remove bias, and
+    // scale back to 0.0 to 1.0 range
+    vec2 uv = (uvInt + uvFrac - 0.5) / texSize;
+    // Regular texture lookup
+    return texture(samp, uv);
 }
 
+//https://www.boost.org/doc/libs/1_47_0/libs/math/doc/sf_and_dist/html/math_toolkit/dist/dist_ref/dists/normal_dist.html
+float gaus_pdf(float mean, float sd, float x){
+    return exp(- (x-mean)*(x-mean)/(2*sd)*(2*sd)  )  / (sd*sqrt(2*M_PI));
+}
+
+
+uniform sampler2D gray_with_gradients_img_sampler; //contains gray val and gradx and grady
+layout(binding=2, rgba32f) uniform writeonly image2D debug;
+
+uniform int pattern_rot_nr_points;
+uniform float px_error_angle;
+
 void main(void) {
+    int id = int(gl_GlobalInvocationID.x);
 
-    ivec2 img_coords = ivec2(gl_GlobalInvocationID.xy);
-
-
-    vec3 hessian=texelFetch(hessian_blurred_sampler, img_coords, 0).xyz;
-    float determinant=abs(hessian.x*hessian.z-hessian.y*hessian.y);
-    float trace=hessian.x+hessian.z;
-    // if(determinant>0.005){
-    if(trace>0.9){
-        uint id=atomicCounterIncrement(nr_seeds_created); //increments and returns the previous value
-
-        Seed s=create_seed(img_coords, hessian);
-
-        p[id+seeds_start_idx]=s;
-
-        imageStore(debug, img_coords , vec4(0,255,0,255) );
-    }
-
-
-
-    // //attempt 2 with the pattern
-    // mat2 gradH=mat2(0.0, 0.0 ,0.0 ,0.0);
-    // for(int p_idx=0;p_idx<pattern_rot_nr_points; ++p_idx){
-    //     vec2 offset=pattern_rot_offsets[p_idx];
-    //     vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords + ivec2(offset), 0 ).xyz;
-    //     gradH+=outerProduct(hit_color_and_grads.yz,hit_color_and_grads.yz);
-    // }
-    // float trace=gradH[0][0]+gradH[1][1];
-    // float determinant=determinant(gradH);
-    // float grad_length=length(vec2(gradH[0][0],gradH[1][1]));
-    // if(trace>3.0){
-    // // if(determinant>0.2){
-    // // if(grad_length>2.0){
-    //     uint id=atomicCounterIncrement(nr_seeds_created); //increments and returns the previous value
-    //
-    //     Seed s=create_seed();
-    //
-    //     imageStore(debug, img_coords , vec4(0,255,0,255) );
-    // }
+    
 
 }
