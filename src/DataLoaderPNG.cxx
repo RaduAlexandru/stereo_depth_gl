@@ -282,6 +282,9 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             frame.gray=undistort_image(frame.gray, frame.K, frame.distort_coeffs, cam_id); //undistort only the gray image because rgb is only used for visualization
             // frame.gray/=255.0;
 
+            //TODO remove this as we only use the rgb for visualization and debug
+            frame.rgb=undistort_image(frame.rgb, frame.K, frame.distort_coeffs, cam_id);
+
             //gradients
             cv::Scharr( frame.gray, frame.grad_x, CV_32F, 1, 0);
             cv::Scharr( frame.gray, frame.grad_y, CV_32F, 0, 1);
