@@ -195,8 +195,8 @@ void DepthEstimatorGL::compute_depth(const Frame& frame_left, const Frame& frame
 
     //update epidata(m_keyframes_per_cam, frame_left, frame_right);
 
-    // trace(m_seeds_left_gl_buf, m_nr_seeds_left, frame_right);
-    // trace(m_seeds_right_gl_buf, m_nr_seeds_right, frame_left);
+    trace(m_seeds_left_gl_buf, m_nr_seeds_left, frame_right);
+    trace(m_seeds_right_gl_buf, m_nr_seeds_right, frame_left);
 
     //create kf every x frames
     if(frame_left.frame_idx%20==0){
@@ -317,25 +317,25 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
 
 
 
-    //debug read the seeds back to cpu
-    std::cout << "cam " << frame.cam_id << '\n';
-    if(frame.cam_id==0){
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_left_gl_buf);
-    }else if(frame.cam_id==1){
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
-    }else{
-        LOG(FATAL) << "Invalid cam_id " << frame.cam_id;
-    }
-    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
-    Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-    for (size_t i = 0; i < std::min((int)atomic_nr_seeds_created_cpu[0],1); i++) {
-        // for (size_t d = 0; d < 16; d++) {
-        //     std::cout << "debug val is " << ptr[i].debug[d] << '\n';
-        // }
-        // std::cout << "uv of seed is " << ptr[i].m_uv.transpose() << '\n';
-        print_seed(ptr[i]);
-    }
-    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+    // //debug read the seeds back to cpu
+    // std::cout << "cam " << frame.cam_id << '\n';
+    // if(frame.cam_id==0){
+    //     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_left_gl_buf);
+    // }else if(frame.cam_id==1){
+    //     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
+    // }else{
+    //     LOG(FATAL) << "Invalid cam_id " << frame.cam_id;
+    // }
+    // // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
+    // Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+    // for (size_t i = 0; i < std::min((int)atomic_nr_seeds_created_cpu[0],1); i++) {
+    //     // for (size_t d = 0; d < 16; d++) {
+    //     //     std::cout << "debug val is " << ptr[i].debug[d] << '\n';
+    //     // }
+    //     // std::cout << "uv of seed is " << ptr[i].m_uv.transpose() << '\n';
+    //     print_seed(ptr[i]);
+    // }
+    // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
 
 
@@ -549,6 +549,8 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
 
 void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, const Frame& cur_frame){
 
+    std::cout << '\n';
+    std::cout << "cur_frame idx is " << cur_frame.frame_idx  << '\n';
     if(m_nr_seeds==0){
         return;
     }
@@ -563,25 +565,72 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
 
     //make a vector of epidate which says for each keyframe (either left or right depending on the thing above) how does to transform to the new frame
     std::vector<EpiData> epidata_vec;
-    for (size_t i = 0; i < m_keyframes_per_cam[keyframe_id].size(); i++) {
+    // for (size_t i = 0; i < m_keyframes_per_cam[keyframe_id].size(); i++) {
+    for (size_t i = 0; i < 1; i++) {
         Frame keyframe=m_keyframes_per_cam[keyframe_id][i];
         EpiData e;
 
-        e.tf_cur_host=cur_frame.tf_cam_world * keyframe.tf_cam_world.inverse();
-        e.tf_host_cur=e.tf_cur_host.inverse();
-        e.KRKi_cr=cur_frame.K * e.tf_cur_host.linear() * keyframe.K.inverse();
-        e.Kt_cr=cur_frame.K * e.tf_cur_host.translation();
-        Pattern pattern_rot=m_pattern.get_rotated_pattern( e.KRKi_cr.topLeftCorner<2,2>() );
-        e.pattern_rot_offsets.resize(MAX_RES_PER_POINT,2);
-        e.pattern_rot_offsets.block(0,0,m_pattern.get_nr_points(),2)=m_pattern.get_offset_matrix();
+        Eigen::Affine3f tf_cur_host;
+        tf_cur_host=cur_frame.tf_cam_world * keyframe.tf_cam_world.inverse();
+
+        // e.tf_cur_host=tf_cur_host.matrix();
+        // e.tf_host_cur=e.tf_cur_host.inverse();
+        // e.KRKi_cr=cur_frame.K * tf_cur_host.linear() * keyframe.K.inverse();
+        // e.Kt_cr=cur_frame.K * tf_cur_host.translation();
+        // Pattern pattern_rot=m_pattern.get_rotated_pattern( e.KRKi_cr.topLeftCorner<2,2>() );
+        // e.pattern_rot_offsets.resize(MAX_RES_PER_POINT,2);
+        // e.pattern_rot_offsets.setZero();
+        // e.pattern_rot_offsets.block(0,0,pattern_rot.get_nr_points(),2)=pattern_rot.get_offset_matrix();
+
+        // //attempt 1 but setting the rest to 0
+        // e.tf_cur_host.setZero();
+        // e.tf_host_cur.setZero();
+        // e.KRKi_cr=cur_frame.K * tf_cur_host.linear() * keyframe.K.inverse();
+        // e.Kt_cr.setZero();
+        // e.pattern_rot_offsets.resize(MAX_RES_PER_POINT,2);
+        // e.pattern_rot_offsets.setZero();
+
+
+        //attempt 3 with only 1 matrix
+        Eigen::Matrix3f KRKi_cr=cur_frame.K * tf_cur_host.linear() * keyframe.K.inverse();
+        e.KRKi_cr.setZero();
+        e.KRKi_cr.block(0,0,3,3)=KRKi_cr;
+        // e.KRKi_cr=cur_frame.K * tf_cur_host.linear() * keyframe.K.inverse();
+
+        // if(epidata_vec.size()==0){
+            // std::cout << "------------epidata_vec " << epidata_vec.size() << '\n';
+            // std::cout << "e.tf_cur_host is \n" << e.tf_cur_host << '\n';
+            // std::cout << "e.tf_host_cur is \n" << e.tf_host_cur << '\n';
+            std::cout << "e.KRKi_cr is \n" << e.KRKi_cr << '\n';
+            // std::cout << "e.Kt_cr is \n" << e.Kt_cr << '\n';
+            // std::cout << "pattern offsets is \n " << e.pattern_rot_offsets << '\n';
+        // }
+
+
+        //some of them have to be transposed because of opengl
+        // e.tf_cur_host.transposeInPlace();
+        // e.tf_host_cur.transposeInPlace();
+        // e.KRKi_cr.transposeInPlace();
 
         epidata_vec.push_back(e);
     }
     assert(epidata_vec[0]%16==0);
+    // std::cout << "sizeof epidata_vec[0]" << sizeof(epidata_vec[0]) << '\n';
+    //epidata size is not calculated correctly because it contains eigenmatix which is dynamic in size
+    int size_mat4x4=64; //64bytes because 4x4x4;
+    int size_mat3x3=36;
+    int size_vec3=12;
+    int size_pattern_offsets=MAX_RES_PER_POINT*2*4; //16 points wach with 2 coordinates and each with 4 bytes
+    // int size_epidata=2*size_mat4x4 + 1*size_mat3x3 + 1*size_vec3 + size_pattern_offsets;
+    int size_epidata=1*size_mat4x4;
+    std::cout << "size manual epidata " << size_epidata << '\n';
+
+
+
 
     //upload that vector of epidata as another ssbo
     GL_C( glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_epidata_vec_gl_buf) );
-    GL_C( glBufferData(GL_SHADER_STORAGE_BUFFER,  m_keyframes_per_cam[keyframe_id].size() * sizeof(EpiData), epidata_vec.data(), GL_DYNAMIC_COPY) );
+    GL_C( glBufferData(GL_SHADER_STORAGE_BUFFER,  m_keyframes_per_cam[keyframe_id].size() * size_epidata, epidata_vec.data(), GL_DYNAMIC_COPY) );
 
     //TODO get the other necessary data
     const double focal_length = fabs(cur_frame.K(0,0));
@@ -613,6 +662,19 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
     TIME_END_GL("trace");
 
 
+
+    //debug after tracing
+    std::cout << "debug after tracing " << '\n';
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_left_gl_buf);
+    Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+    // print_seed(ptr[0]);
+    for (size_t i = 0; i < 16; i++) {
+        std::cout << " debug " << ptr[0].debug[i] << '\n';
+    }
+    // for (size_t i = 0; i < m_nr_seeds_left; i++) {
+    //     // print_seed(ptr[i]);
+    // }
+    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
 
     // glUniformMatrix4fv(glGetUniformLocation(m_update_depth_prog_id,"tf_cur_host"), 1, GL_FALSE, tf_cur_host_eigen_trans.data());
@@ -652,13 +714,13 @@ Mesh DepthEstimatorGL::create_point_cloud(){
     mesh.V.resize(m_nr_seeds_left,3);
     mesh.V.setZero();
 
-
+    int nr_infinite_mus=0;
     for (size_t i = 0; i < m_nr_seeds_left; i++) {
         float u=ptr[i].m_uv.x();
         float v=ptr[i].m_uv.y();
         // float depth=immature_points[i].gt_depth;
-        float depth=1.0;
-        // float depth=1/ptr[i].depth_filter.m_mu;
+        // float depth=1.0;
+        float depth=1/ptr[i].depth_filter.m_mu;
 
         if(std::isfinite(ptr[i].depth_filter.m_mu)){
         // if(true){
@@ -687,10 +749,13 @@ Mesh DepthEstimatorGL::create_point_cloud(){
             Eigen::Vector3f point_world=m_keyframes_per_cam[0][ptr[i].idx_keyframe].tf_cam_world.inverse()*point_cam;
             mesh.V.row(i)=point_world.cast<double>();
 
+        }else{
+            nr_infinite_mus++;
         }
 
 
     }
+    LOG(WARNING) << "nr_infinite_mus " << nr_infinite_mus;
 
     //make also some colors based on depth
     mesh.C.resize(m_nr_seeds_left,3);
