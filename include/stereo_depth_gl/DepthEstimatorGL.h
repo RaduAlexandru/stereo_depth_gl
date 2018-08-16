@@ -213,8 +213,8 @@ struct EpiData{
     Eigen::Matrix4f tf_cur_host; //the of corresponds to a 4x4 matrix
     Eigen::Matrix4f tf_host_cur;
     Eigen::Matrix4f KRKi_cr; //should be 4x4 but we make it 4x4 for alignment to gpu https://stackoverflow.com/a/47227584
-    // Eigen::Vector4f Kt_cr;
-    // Eigen::MatrixXf pattern_rot_offsets; //its it made sure to have nr of rows the same as MAX_RES_PER_POINT so we can easily pass it to gl
+    Eigen::Vector4f Kt_cr;
+    Eigen::Matrix<float,MAX_RES_PER_POINT,2> pattern_rot_offsets; //its it made sure to have nr of rows the same as MAX_RES_PER_POINT so we can easily pass it to gl
 };
 
 
