@@ -237,6 +237,7 @@ public:
     void upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void compute_depth(const Frame& frame_left, const Frame& frame_right);
+    void compute_depth_icl(const Frame& frame_left, const Frame& frame_right);
     Mesh create_point_cloud();
 
 
@@ -270,6 +271,7 @@ public:
     GLuint m_compute_hessian_blurred_prog_id;
     GLuint m_compute_create_seeds_prog_id;
     GLuint m_compute_trace_seeds_prog_id;
+    GLuint m_compute_trace_seeds_icl_prog_id;
 
 
     //databasse

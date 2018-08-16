@@ -128,6 +128,7 @@ private:
 
     //read pose files
     void read_pose_file_eth();
+    void read_pose_file_icl();
 
     //get poses depending on the datset
     bool get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp, const uint64_t cam_id);

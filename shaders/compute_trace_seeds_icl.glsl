@@ -13,8 +13,8 @@ struct MinimalDepthFilter{
     float m_f_scale; //the scale of at the current level on the pyramid
     vec4 m_f; // heading range = Ki * (u,v,1) MAKE IT VECTOR4 so it's memory aligned for GPU usage
     int m_lvl; //pyramid lvl at which the depth filter was created
-    float m_alpha;                 //!< a of Beta distribution: When high, probability of inlier is large.
-    float m_beta;                  //!< b of Beta distribution: When high, probability of outlier is large.
+    float m_a;                 //!< a of Beta distribution: When high, probability of inlier is large.
+    float m_b;                  //!< b of Beta distribution: When high, probability of outlier is large.
     float m_mu;                    //!< Mean of normal distribution.
     float m_z_range;               //!< Max range of the possible depth.
     float m_sigma2;                //!< Variance of normal distribution.
@@ -47,22 +47,12 @@ struct Seed{
 
     float debug[16];
 };
-struct EpiData{
-    mat4 tf_cur_host; //the of corresponds to a 4x4 matrix
-    mat4 tf_host_cur;
-    mat4 KRKi_cr;
-    vec4 Kt_cr;
-    vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
-};
 
 //you change it to  layout (binding = 0, std430) or layout (binding = 0, std140) in case stuff breaks
 layout (binding = 0, std430) coherent buffer array_seeds_block{
     Seed p[];
 };
 
-layout (binding = 1, std430) coherent buffer array_epidata_block{
-    EpiData e[];
-};
 
 
 //if you assign a binding to this one it doesn't read the values anymore, god knows why..
@@ -123,71 +113,36 @@ float mean(vec2 vec){
 uniform sampler2D gray_with_gradients_img_sampler; //contains gray val and gradx and grady
 layout(binding=2, rgba32f) uniform writeonly image2D debug;
 
-uniform int pattern_rot_nr_points;
-uniform float px_error_angle;
+uniform vec2 frame_size; //x, y
+uniform mat4 tf_cur_host;
+uniform mat4 tf_host_cur;
 uniform mat3 K;
+uniform mat3 KRKi_cr;
+uniform vec3 Kt_cr;
+uniform vec2 affine_cr;
+uniform float px_error_angle;
+uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
+uniform int pattern_rot_nr_points;
 
 void main(void) {
     int id = int(gl_GlobalInvocationID.x);
 
-    vec2 frame_size;
-    frame_size=textureSize(gray_with_gradients_img_sampler, 0);
-
-    //which keyframe host this seed?
-    int k=p[id].idx_keyframe;
-
-
-    // if(id==0){
-    //     p[id].debug[0]=e[1].KRKi_cr[0][0]; //[col][row]
-    //     p[id].debug[1]=e[1].KRKi_cr[1][0];
-    //     p[id].debug[2]=e[1].KRKi_cr[2][0];
-    //     p[id].debug[3]=e[1].KRKi_cr[0][1];
-    //     p[id].debug[4]=e[1].KRKi_cr[1][1];
-    //     p[id].debug[5]=e[1].KRKi_cr[2][1];
-    //     p[id].debug[6]=e[1].KRKi_cr[0][2];
-    //     p[id].debug[7]=e[1].KRKi_cr[1][2];
-    //     p[id].debug[8]=e[1].KRKi_cr[2][2];
-    //
-    //     p[id].debug[9]=k;
-    //     p[id].debug[10]=999999;
-    //
-    //     // p[id].debug[6]=uvMean.x; // Huber Threshold
-    //     // p[id].debug[7]=uvMean.y;
-    //     // p[id].debug[8]=999999;      //!< threshold on depth uncertainty for convergence.
-    //     // p[id].debug[5]=p[id].depth_filter.m_mu;
-    //     // p[id].debug[6]=p[id].depth_filter.m_sigma2;
-    //     // p[id].debug[7]=ptpMean.x;
-    //     // p[id].debug[8]=ptpMean.y;
-    //     // p[id].debug[9]=ptpMean.z;
-    //     //
-    //     // p[id].debug[10]=pr.x;
-    //     // p[id].debug[11]=pr.y;
-    //     // p[id].debug[12]=pr.z;
-    //     //
-    //     // // p[id].debug[13]=vec3(p[id].m_uv, 1).x;
-    //     // // p[id].debug[14]=vec3(p[id].m_uv, 1).y;
-    //     // // p[id].debug[15]=vec3(p[id].m_uv, 1).z;
-    //     //
-    //     // p[id].debug[13]=k;
-    // }
-
     // // check if point is visible in the current image
     const vec3 p_backproj_xyz= p[id].depth_filter.m_f.xyz * 1.0f/ p[id].depth_filter.m_mu;
     const vec4 p_backproj_xyzw=vec4(p_backproj_xyz.x,p_backproj_xyz.y,p_backproj_xyz.z,1.0);
-    const vec4 xyz_f_xyzw = e[k].tf_cur_host*  p_backproj_xyzw ;
+    const vec4 xyz_f_xyzw = tf_cur_host*  p_backproj_xyzw ;
     const vec3 xyz_f=xyz_f_xyzw.xyz/xyz_f_xyzw.w;
     if(xyz_f.z < 0.0)  {
-        return; //behind
+        return; // TODO in gl this is a return
     }
 
 
     const vec3 kp_c = K * xyz_f;
     const vec2 kp_c_h=kp_c.xy/kp_c.z;
     if ( kp_c_h.x < 0 || kp_c_h.x >= frame_size.x || kp_c_h.y < 0 || kp_c_h.y >= frame_size.y ) {
-        return; //outside of image
+        return; // TODO in gl this is a return
     }
 
-    // imageStore(debug, ivec2(kp_c_h) , vec4(0,0,255,255) );
 
     //point is visible
     // point.last_visible_frame=frames[i].frame_id;
@@ -203,80 +158,13 @@ void main(void) {
    // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
     // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
     float idepth_mean = mean(p[id].m_idepth_minmax);
-    vec3 pr =mat3(e[k].KRKi_cr) * vec3(p[id].m_uv, 1);
-    vec3 ptpMean = pr + vec3(e[k].Kt_cr)*idepth_mean;
-    vec3 ptpMin = pr + vec3(e[k].Kt_cr)*p[id].m_idepth_minmax.x;
-    vec3 ptpMax = pr + vec3(e[k].Kt_cr)*p[id].m_idepth_minmax.y;
+    vec3 pr = KRKi_cr * vec3(p[id].m_uv, 1);
+    vec3 ptpMean = pr + Kt_cr*idepth_mean;
+    vec3 ptpMin = pr + Kt_cr*p[id].m_idepth_minmax.x;
+    vec3 ptpMax = pr + Kt_cr*p[id].m_idepth_minmax.y;
     vec2 uvMean = ptpMean.xy/ptpMean.z;
     vec2 uvMin = ptpMin.xy/ptpMin.z;
     vec2 uvMax = ptpMax.xy/ptpMax.z;
-
-
-
-
-
-    // //debug the point
-    // if(id==0){
-    //     p[id].debug[0]=p[id].m_uv.x;
-    //     p[id].debug[1]=p[id].m_uv.y;
-    //     p[id].debug[2]=uvMean.x; 		// higher -> less strong gradient-based reweighting .
-    //     p[id].debug[3]=uvMean.y; // Huber Threshold
-    //     p[id].debug[4]=idepth_mean;      //!< threshold on depth uncertainty for convergence.
-    //     p[id].debug[5]=p[id].depth_filter.m_mu;
-    //     p[id].debug[6]=p[id].depth_filter.m_sigma2;
-    //     p[id].debug[7]=ptpMean.x;
-    //     p[id].debug[8]=ptpMean.y;
-    //     p[id].debug[9]=ptpMean.z;
-    //
-    //     p[id].debug[10]=pr.x;
-    //     p[id].debug[11]=pr.y;
-    //     p[id].debug[12]=pr.z;
-    //
-    //     // p[id].debug[13]=vec3(p[id].m_uv, 1).x;
-    //     // p[id].debug[14]=vec3(p[id].m_uv, 1).y;
-    //     // p[id].debug[15]=vec3(p[id].m_uv, 1).z;
-    //
-    //     p[id].debug[13]=k;
-    //     p[id].debug[14]=999999;
-    // }
-
-    // //debug the KRKi_cr
-    // if(id==0){
-    //     p[id].debug[0]=e[k].KRKi_cr[0][0]; //[col][row]
-    //     p[id].debug[1]=e[k].KRKi_cr[1][0];
-    //     p[id].debug[2]=e[k].KRKi_cr[2][0];
-    //
-    //     p[id].debug[3]=e[k].KRKi_cr[0][1];
-    //     p[id].debug[4]=e[k].KRKi_cr[1][1];
-    //     p[id].debug[5]=e[k].KRKi_cr[2][1];
-    //
-    //     p[id].debug[6]=e[k].KRKi_cr[0][2];
-    //     p[id].debug[7]=e[k].KRKi_cr[1][2];
-    //     p[id].debug[8]=e[k].KRKi_cr[2][2];
-    //
-    //     p[id].debug[9]=999999;
-    //
-    //     // p[id].debug[6]=uvMean.x; // Huber Threshold
-    //     // p[id].debug[7]=uvMean.y;
-    //     // p[id].debug[8]=999999;      //!< threshold on depth uncertainty for convergence.
-    //     // p[id].debug[5]=p[id].depth_filter.m_mu;
-    //     // p[id].debug[6]=p[id].depth_filter.m_sigma2;
-    //     // p[id].debug[7]=ptpMean.x;
-    //     // p[id].debug[8]=ptpMean.y;
-    //     // p[id].debug[9]=ptpMean.z;
-    //     //
-    //     // p[id].debug[10]=pr.x;
-    //     // p[id].debug[11]=pr.y;
-    //     // p[id].debug[12]=pr.z;
-    //     //
-    //     // // p[id].debug[13]=vec3(p[id].m_uv, 1).x;
-    //     // // p[id].debug[14]=vec3(p[id].m_uv, 1).y;
-    //     // // p[id].debug[15]=vec3(p[id].m_uv, 1).z;
-    //     //
-    //     // p[id].debug[13]=k;
-    // }
-
-
 
 
     vec2 epi_line = uvMax - uvMin;
@@ -293,19 +181,13 @@ void main(void) {
         float energy = 0;
         vec2 kp = uvMean + l*epi_dir;
 
-        //pattern will be a bit outside of the image so we ignore those points
         if( ( kp.x >= (frame_size.x-20) )  || ( kp.y >= (frame_size.y-20) ) || ( kp.x < 20 ) || ( kp.y < 20) ){
             continue;
         }
 
-        if(id==30000){
-            imageStore(debug, ivec2(kp) , vec4(0,0,255,255) );
-        }
-
-
         for(int idx=0;idx<pattern_rot_nr_points; ++idx){
             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
-            vec2 offset=e[k].pattern_rot_offsets[idx];
+            vec2 offset=pattern_rot_offsets[idx];
             // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
             // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
             // float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolationType::LINEAR);
@@ -315,11 +197,11 @@ void main(void) {
             // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
 
             //high qualty filter from openglsuperbible
-            float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
+            float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
 
             // float hit_color=0.0;
 
-            const float residual = hit_color - p[id].m_intensity[idx];
+            const float residual = hit_color - (affine_cr.x * p[id].m_intensity[idx] + affine_cr.y);
 
             float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
             energy += hw *residual*residual*(2-hw);
@@ -330,37 +212,10 @@ void main(void) {
         }
     }
 
-    if(id==30000){
-        imageStore(debug, ivec2(p[id].m_uv) , vec4(0,255,0,255) );
-    }
-    // imageStore(debug, ivec2(bestKp) , vec4(0,0,255,255) );
-
-
-    // //debug the traceing
-    if(id==30000){
-        p[id].debug[0]=p[id].m_uv.x;
-        p[id].debug[1]=p[id].m_uv.y;
-        p[id].debug[2]=uvMean.x; 		// higher -> less strong gradient-based reweighting .
-        p[id].debug[3]=uvMean.y; // Huber Threshold
-        p[id].debug[4]=bestKp.x;      //!< threshold on depth uncertainty for convergence.
-        p[id].debug[5]=bestKp.y;
-        p[id].debug[6]=bestEnergy;
-        p[id].debug[7]=uvMin.x;
-        p[id].debug[8]=uvMin.y;
-        p[id].debug[9]=uvMax.x;
-        p[id].debug[10]=uvMax.y;
-        p[id].debug[11]=99999;
-
-    }
-
-    //debug disparity
-    vec2 disp_vec=bestKp-p[id].m_uv;
-    float disp=length(disp_vec)/255;
-    imageStore(debug, ivec2(p[id].m_uv) , vec4(0,disp,0,255) );
-
-
-    // if ( bestEnergy > p[id].energyTH * 1.2f ) {
-    //     p[id].lastTraceStatus = STATUS_OUTLIER;
+    int is_outlier=0;
+    // if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
+    //     //is outlier
+    //     is_outlier=1;
     // }
     // else
     // {
@@ -372,13 +227,13 @@ void main(void) {
 
         if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
         {
-            p[id].m_idepth_minmax.x = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (e[k].Kt_cr.x - e[k].Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
-            p[id].m_idepth_minmax.y = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (e[k].Kt_cr.x - e[k].Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
+            p[id].m_idepth_minmax.x = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
+            p[id].m_idepth_minmax.y = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (Kt_cr.x - Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
         }
         else
         {
-            p[id].m_idepth_minmax.x = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (e[k].Kt_cr.y - e[k].Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
-            p[id].m_idepth_minmax.y = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (e[k].Kt_cr.y - e[k].Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
+            p[id].m_idepth_minmax.x = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
+            p[id].m_idepth_minmax.y = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (Kt_cr.y - Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
         }
         // memoryBarrier();
         // barrier();
@@ -389,7 +244,6 @@ void main(void) {
             p[id].m_idepth_minmax.x=p[id].m_idepth_minmax.y;
             p[id].m_idepth_minmax.y=tmp;
         }
-        // p[id].lastTraceStatus = STATUS_GOOD;
         // memoryBarrier();
         // barrier();
         // memoryBarrier();
@@ -397,6 +251,7 @@ void main(void) {
     // memoryBarrier();
     // barrier();
     // memoryBarrier();
+
 
 
 
@@ -421,19 +276,20 @@ void main(void) {
 
     float idepth = -1;
     float z = 0;
-    idepth = max(1e-5f, mean(p[id].m_idepth_minmax) );
+    idepth = max(1e-5f,.5*(p[id].m_idepth_minmax.x+p[id].m_idepth_minmax.y));
     z = 1.0f/idepth;
+    if ( idepth<0.00000001 || idepth>99999999 || is_outlier==1 ) {
+        p[id].depth_filter.m_b++; // increase outlier probability when no match was found
+        return;
+    }
 
-    // memoryBarrier();
-    // barrier();
-    // memoryBarrier();
 
 
     // update_idepth(point,tf_host_cur, z, px_error_angle);
 
     // compute tau----------------------------------------------------------------------------
     // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
-    vec3 t=  vec3(e[k].tf_host_cur[0][3], e[k].tf_host_cur[1][3], e[k].tf_host_cur[2][3]);
+    vec3 t=  vec3(tf_host_cur[0][3], tf_host_cur[1][3], tf_host_cur[2][3]);
     // Eigen::Vector3f t(tf_host_cur.translation());
     vec3 a = p[id].depth_filter.m_f.xyz*z-t;
     float t_norm = length(t);
@@ -453,29 +309,28 @@ void main(void) {
     float norm_scale = sqrt(p[id].depth_filter.m_sigma2 + tau2);
     float s2 = 1./(1./p[id].depth_filter.m_sigma2 + 1./tau2);
     float m = s2*(p[id].depth_filter.m_mu/p[id].depth_filter.m_sigma2 + x/tau2);
-    float C1 = p[id].depth_filter.m_alpha/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta) * gaus_pdf(p[id].depth_filter.m_mu, norm_scale, x);
-    float C2 = p[id].depth_filter.m_beta/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta) * 1./p[id].depth_filter.m_z_range;
+    float C1 = p[id].depth_filter.m_a/(p[id].depth_filter.m_a+p[id].depth_filter.m_b) * gaus_pdf(p[id].depth_filter.m_mu, norm_scale, x);
+    float C2 = p[id].depth_filter.m_b/(p[id].depth_filter.m_a+p[id].depth_filter.m_b) * 1./p[id].depth_filter.m_z_range;
     float normalization_constant = C1 + C2;
     C1 /= normalization_constant;
     C2 /= normalization_constant;
-    float f = C1*(p[id].depth_filter.m_alpha+1.)/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.) + C2*p[id].depth_filter.m_alpha/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.);
-    float e = C1*(p[id].depth_filter.m_alpha+1.)*(p[id].depth_filter.m_alpha+2.)/((p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.)*(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+2.))
-              + C2*p[id].depth_filter.m_alpha*(p[id].depth_filter.m_alpha+1.0f)/((p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.0f)*
-              (p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+2.0f));
+    float f = C1*(p[id].depth_filter.m_a+1.)/(p[id].depth_filter.m_a+p[id].depth_filter.m_b+1.) + C2*p[id].depth_filter.m_a/(p[id].depth_filter.m_a+p[id].depth_filter.m_b+1.);
+    float e = C1*(p[id].depth_filter.m_a+1.)*(p[id].depth_filter.m_a+2.)/((p[id].depth_filter.m_a+p[id].depth_filter.m_b+1.)*(p[id].depth_filter.m_a+p[id].depth_filter.m_b+2.))
+              + C2*p[id].depth_filter.m_a*(p[id].depth_filter.m_a+1.0f)/((p[id].depth_filter.m_a+p[id].depth_filter.m_b+1.0f)*(p[id].depth_filter.m_a+p[id].depth_filter.m_b+2.0f));
     // update parameters
     float mu_new = C1*m+C2*p[id].depth_filter.m_mu;
     p[id].depth_filter.m_sigma2 = C1*(s2 + m*m) + C2*(p[id].depth_filter.m_sigma2 + p[id].depth_filter.m_mu*p[id].depth_filter.m_mu) - mu_new*mu_new;
     p[id].depth_filter.m_mu = mu_new;
-    p[id].depth_filter.m_alpha = (e-f)/(f-e/f);
-    p[id].depth_filter.m_beta = p[id].depth_filter.m_alpha*(1.0f-f)/f;
-
-
-
+    p[id].depth_filter.m_a = (e-f)/(f-e/f);
+    // memoryBarrier();
+    // barrier();
+    // memoryBarrier();
+    p[id].depth_filter.m_b = p[id].depth_filter.m_a*(1.0f-f)/f;
     // memoryBarrier();
     // barrier(); //TODO add again the barrier
     // memoryBarrier();
 
-    // // // TODO not implemented in opengl
+    // // // not implemented in opengl
     // const float eta_inlier = .6f;
     // const float eta_outlier = .05f;
     // if( ((p[id].a / (p[id].a + p[id].b)) > eta_inlier) && (sqrt(p[id].sigma2) < p[id].z_range/params.convergence_sigma2_thresh)) {

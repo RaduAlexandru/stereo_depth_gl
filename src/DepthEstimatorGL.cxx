@@ -161,6 +161,8 @@ void DepthEstimatorGL::compile_shaders(){
 
     m_compute_trace_seeds_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_trace_seeds.glsl");
 
+    m_compute_trace_seeds_icl_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_trace_seeds_icl.glsl");
+
     // m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
 
     // m_denoise_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/update_TVL1_primal_dual.glsl");
@@ -199,7 +201,7 @@ void DepthEstimatorGL::compute_depth(const Frame& frame_left, const Frame& frame
     // trace(m_seeds_right_gl_buf, m_nr_seeds_right, frame_left);
 
     //tracing oly of the left seeds and only on the left frame because its closeer and easier to debug
-    trace(m_seeds_right_gl_buf, m_nr_seeds_right, frame_right);
+    // trace(m_seeds_right_gl_buf, m_nr_seeds_right, frame_right);
 
     //create kf every x frames
     if(frame_left.frame_idx%20==0){
@@ -212,6 +214,131 @@ void DepthEstimatorGL::compute_depth(const Frame& frame_left, const Frame& frame
         std::vector<Seed> seeds_right=create_seeds(frame_right);
         TIME_END_GL("create_all_seeds");
     }
+
+    trace(m_seeds_right_gl_buf, m_nr_seeds_right, frame_left);
+
+}
+
+void DepthEstimatorGL::compute_depth_icl(const Frame& frame_left, const Frame& frame_right){
+
+    TIME_START_GL("upload_params");
+    //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
+    glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
+    glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
+    TIME_END_GL("upload_params");
+
+    if(frame_left.frame_idx%20==0){
+        m_keyframes_per_cam[0].push_back(create_keyframe(frame_left));
+        m_keyframes_per_cam[1].push_back(create_keyframe(frame_right));
+
+        //create new seeds from those frames
+        TIME_START_GL("create_all_seeds");
+        std::vector<Seed> seeds_left=create_seeds(frame_left);
+        std::vector<Seed> seeds_right=create_seeds(frame_right);
+        TIME_END_GL("create_all_seeds");
+    }else{
+        ////trace-----
+
+        // trace(m_seeds_right_gl_buf, m_nr_seeds_right, frame_left);
+
+        const GLuint m_seeds_gl_buf=m_seeds_right_gl_buf;
+        const int m_nr_seeds=m_nr_seeds_right;
+        const Frame& cur_frame=frame_left;
+        const int keyframe_id=1; //right keyframes
+
+        GL_C( glUseProgram(m_compute_trace_seeds_icl_prog_id) );
+
+        //make a vector of epidate which says for each keyframe (either left or right depending on the thing above) how does to transform to the new frame
+
+        // for (size_t i = 0; i < 1; i++) {
+        Frame keyframe=m_keyframes_per_cam[keyframe_id][m_keyframes_per_cam[keyframe_id].size()-1]; //last keyframe
+        EpiData e;
+
+        const Eigen::Affine3f tf_cur_host_eigen = cur_frame.tf_cam_world * keyframe.tf_cam_world.inverse();
+        const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
+        const Eigen::Matrix3f KRKi_cr_eigen = cur_frame.K * tf_cur_host_eigen.linear() * keyframe.K.inverse();
+        const Eigen::Vector3f Kt_cr_eigen = cur_frame.K * tf_cur_host_eigen.translation();
+        const Eigen::Vector2f affine_cr_eigen= Eigen::Vector2f(1,1); //TODO should be 1,0
+        const double focal_length = fabs(cur_frame.K(0,0));
+        double px_noise = 1.0;
+        double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
+        Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr_eigen.topLeftCorner<2,2>() );
+
+        // for (size_t i = 0; i < epidata_vec.size(); i++) {
+        //     std::cout << "e.KRKi_cr is \n" << epidata_vec[i].KRKi_cr << '\n';
+        // }
+
+        // //upload that vector of epidata as another ssbo
+        // GL_C( glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_epidata_vec_gl_buf) );
+        // GL_C( glBufferData(GL_SHADER_STORAGE_BUFFER,  m_keyframes_per_cam[keyframe_id].size() * sizeof(EpiData), epidata_vec.data(), GL_DYNAMIC_COPY) );
+
+
+
+        //upload matrices
+        TIME_START_GL("upload_matrices");
+        Eigen::Vector2f frame_size;
+        frame_size<< cur_frame.gray.cols, cur_frame.gray.rows;
+        glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"frame_size"), 1, frame_size.data());
+        // glUniformMatrix4fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"tf_cur_host"), 1, GL_FALSE, tf_cur_host_eigen_trans.data());
+        // glUniformMatrix4fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"tf_host_cur"), 1, GL_FALSE, tf_host_cur_eigen_trans.data());
+        glUniformMatrix4fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"tf_cur_host"), 1, GL_TRUE, tf_cur_host_eigen.data());
+        glUniformMatrix4fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"tf_host_cur"), 1, GL_TRUE, tf_host_cur_eigen.data());
+        glUniformMatrix3fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"K"), 1, GL_FALSE, cur_frame.K.data());
+        glUniformMatrix3fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"KRKi_cr"), 1, GL_FALSE, KRKi_cr_eigen.data());
+        glUniform3fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"Kt_cr"), 1, Kt_cr_eigen.data());
+        glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"affine_cr"), 1, affine_cr_eigen.data());
+        glUniform1f(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"px_error_angle"), px_error_angle);
+        glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"pattern_rot_offsets"), pattern_rot.get_nr_points(), pattern_rot.get_offset_matrix().data()); //upload all the offses as an array of vec2 offsets
+        // std::cout << "setting nr of points to " <<  pattern_rot.get_nr_points() << '\n';
+        // std::cout << "the uniform location is " << glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"pattern_rot_nr_points") << '\n';
+        glUniform1i(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"pattern_rot_nr_points"), pattern_rot.get_nr_points());
+        TIME_END_GL("upload_matrices");
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+
+
+        //when tracing, the seeds will have knowledge of the keyframe that hosts them, they will index into the epidata_vector and get the epidata so as to trace into the cur_frame
+        VLOG(1) << "tracing";
+        TIME_START_GL("trace");
+
+
+
+        //debug texture
+        if(!m_debug_tex.get_tex_storage_initialized()){
+            m_debug_tex.allocate_tex_storage_inmutable(GL_RGBA32F,cur_frame.gray.cols, cur_frame.gray.rows);
+        }
+        //clear the debug texture
+        std::vector<GLuint> clear_color(4,0);
+        GL_C ( glClearTexSubImage(m_debug_tex.get_tex_id(), 0,0,0,0, cur_frame.gray.cols,cur_frame.gray.rows,1,GL_RGBA, GL_FLOAT, clear_color.data()) );
+        glBindImageTexture(2, m_debug_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+
+
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_gl_buf);
+        glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_compute_trace_seeds_icl_prog_id,"params_block"), m_ubo_params );
+        GL_C(bind_for_sampling(m_frame_left, 1, glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"gray_with_gradients_img_sampler") ) );
+        VLOG(1) << "tracing with " << m_nr_seeds;
+        GL_C( glDispatchCompute(m_nr_seeds/256, 1, 1) ); //TODO adapt the local size to better suit the gpu
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        TIME_END_GL("trace");
+
+
+
+        //debug after tracing
+        std::cout << "debug after tracing " << '\n';
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
+        Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+        // print_seed(ptr[0]);
+        for (size_t i = 0; i < 16; i++) {
+            std::cout << " debug " << ptr[30000].debug[i] << '\n';
+        }
+        // for (size_t i = 0; i < m_nr_seeds_left; i++) {
+        //     // print_seed(ptr[i]);
+        // }
+        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+    }
+
+
+
 
 }
 

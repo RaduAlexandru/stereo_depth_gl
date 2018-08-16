@@ -40,6 +40,8 @@ DataLoaderPNG::DataLoaderPNG(){
     create_transformation_matrices();
     if(m_dataset_type==DatasetType::ETH){
         read_pose_file_eth();
+    }else if(m_dataset_type==DatasetType::ICL){
+        read_pose_file_icl();
     }
     // read_pose_file();
 
@@ -71,6 +73,7 @@ void DataLoaderPNG::init_params(){
     }
     std::string dataset_type_string=(std::string)loader_config["dataset_type"];
     if(dataset_type_string=="eth") m_dataset_type=DatasetType::ETH;
+    if(dataset_type_string=="icl") m_dataset_type=DatasetType::ICL;
     else LOG(FATAL) << " Dataset type is not known " << dataset_type_string;
     m_pose_file=(std::string)loader_config["pose_file"];
 
@@ -299,6 +302,9 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             cv::merge(channels, frame.gray_with_gradients);
             TIME_END("read_imgs");
 
+            // std::cout << "pusing frame with tf corld of " << frame.tf_cam_world.matrix() << '\n';
+            // std::cout << "pusing frame with K of " << frame.K << '\n';
+
 
             m_frames_buffer_per_cam[cam_id].enqueue(frame);
             nr_frames_read_for_cam++;
@@ -477,6 +483,42 @@ void DataLoaderPNG::read_pose_file_eth(){
 
 }
 
+void DataLoaderPNG::read_pose_file_icl(){
+    std::ifstream infile( m_pose_file );
+    if(!infile.is_open()){
+        LOG(FATAL) << "Could not open pose file " << m_pose_file;
+    }
+    VLOG(1) << "Reading pose file for ICL-NUIM dataset";
+
+    uint64_t scan_nr;
+    uint64_t timestamp;
+    Eigen::Vector3f position;
+    Eigen::Quaternionf quat;
+
+    std::string line;
+    while (std::getline(infile, line)) {
+        std::istringstream iss(line);
+
+        //skip comments
+        if(line.at(0)=='#'){
+            continue;
+        }
+
+        iss >> timestamp
+            >> position(0) >> position(1) >> position(2)
+            >> quat.x() >> quat.y() >> quat.z() >> quat.w();
+
+        // std::cout << "input is \n" << " " << timestamp << " " << position << " " << quat.matrix()  << "\n";
+        Eigen::Affine3f pose;
+        pose.matrix().block<3,3>(0,0)=quat.toRotationMatrix();
+        pose.matrix().block<3,1>(0,3)=position;
+
+        m_worldROS_baselink_map[timestamp]=pose;
+        m_worldROS_baselink_vec.push_back ( std::pair<uint64_t, Eigen::Affine3f>(timestamp,pose) );
+    }
+
+}
+
 bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp, const uint64_t cam_id){
 
 
@@ -532,6 +574,10 @@ bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t 
             LOG(FATAL) << "Now a known cam_id at " << cam_id;
         }
 
+    }else if(m_dataset_type==DatasetType::ICL){
+        pose=pose_from_file;
+    }else{
+        LOG(FATAL) << "Unknown dataset";
     }
 
     // std::cout << "closest idx is " << closest_idx << '\n';
@@ -545,6 +591,8 @@ bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t 
 }
 
 void DataLoaderPNG::get_intrinsics(Eigen::Matrix3f& K, Eigen::Matrix<float, 5, 1>& distort_coeffs, const uint64_t cam_id){
+    K.setIdentity();
+
     if(m_dataset_type==DatasetType::ETH){
         K.setIdentity();
         if(cam_id==0){
@@ -568,6 +616,24 @@ void DataLoaderPNG::get_intrinsics(Eigen::Matrix3f& K, Eigen::Matrix<float, 5, 1
             distort_coeffs(3) = -3.55590700e-05;
             distort_coeffs(4) = 0.;
         }
+    }else if(m_dataset_type==DatasetType::ICL){
+        K.setIdentity();
+        if(cam_id==0){
+            K(0,0)=481.2; //fx
+            K(1,1)=-480; //fy
+            K(0,2)=319.5; // cx
+            K(1,2)=239.5; //cy
+            distort_coeffs.setZero();
+        }else if(cam_id==1){
+            //even though we have one cam we set this one too because it's easier to deal with it like this for now.
+            K(0,0)=481.2; //fx
+            K(1,1)=-480; //fy
+            K(0,2)=319.5; // cx
+            K(1,2)=239.5; //cy
+            distort_coeffs.setZero();
+        }
+    }else{
+        LOG(FATAL) << "Unknown dataset";
     }
 }
 
