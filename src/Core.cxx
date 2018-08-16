@@ -134,6 +134,17 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
      }
 
 
+     m_depth_estimator_gl->compute_depth_and_create_mesh_ICL();
+     //update point cloud
+     Mesh point_cloud=m_depth_estimator_gl->m_mesh;
+     std::string cloud_name="point_cloud";
+     point_cloud.name=cloud_name;
+     point_cloud.m_show_points=true;
+     if(m_scene.does_mesh_with_name_exist(cloud_name)){
+         m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+     }else{
+         m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+     }
 
 }
 

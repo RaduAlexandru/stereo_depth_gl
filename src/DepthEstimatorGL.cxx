@@ -42,7 +42,8 @@ DepthEstimatorGL::DepthEstimatorGL():
         m_mean_starting_depth(4.0),
         m_compute_hessian_pointwise_prog_id(-1),
         m_nr_seeds_left(0),
-        m_nr_seeds_right(0)
+        m_nr_seeds_right(0),
+        m_start_frame(0)
         {
 
     init_params();
@@ -142,7 +143,11 @@ void DepthEstimatorGL::init_opengl(){
     GLuint zero=0;
 	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), &(zero), GL_STATIC_COPY);  //sets it to 0
 
-
+    //for debuggling using icl nuim
+    glGenBuffers(1, &m_points_gl_buf);
+    glGenBuffers(1, &m_ubo_params );
+    m_cur_frame.set_wrap_mode(GL_CLAMP_TO_BORDER);
+    m_cur_frame.set_filter_mode(GL_LINEAR);
 
     compile_shaders();
 
@@ -1283,4 +1288,371 @@ Frame DepthEstimatorGL::create_keyframe(const Frame& frame){
     keyframe.depth.release();
 
     return keyframe;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+///ONLY ICL_NUIM-------------------------------------------------------------------------------
+
+std::vector<Frame> DepthEstimatorGL::loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read){
+   std::vector< Frame > frames;
+   std::string filename_img = dataset_path + "/associations.txt";
+   std::string filename_gt = dataset_path + "/livingRoom2.gt.freiburg";
+
+   //K is from here https://www.doc.ic.ac.uk/~ahanda/VaFRIC/codes.html
+   Eigen::Matrix3f K;
+   K.setZero();
+   K(0,0)=481.2; //fx
+   K(1,1)=-480; //fy
+   K(0,2)=319.5; // cx
+   K(1,2)=239.5; //cy
+   K(2,2)=1.0;
+
+   std::ifstream imageFile ( filename_img, std::ifstream::in );
+   std::ifstream grtruFile ( filename_gt, std::ifstream::in );
+
+   int imagesRead = 0;
+   int images_skipped=0;
+   for ( imagesRead = 0; imageFile.good() && grtruFile.good() && imagesRead <= num_images_to_read ; ++imagesRead ){
+      std::string depthFileName, colorFileName;
+      int idc, idd, idg;
+      double tsc, tx, ty, tz, qx, qy, qz, qw;
+      imageFile >> idd >> depthFileName >> idc >> colorFileName;
+
+      if ( idd == 0 )
+          continue;
+      grtruFile >> idg >> tx >> ty >> tz >> qx >> qy >> qz >> qw;
+
+      if ( idc != idd || idc != idg ){
+          std::cerr << "Error during reading... not correct anymore!" << std::endl;
+          break;
+      }
+
+      if(images_skipped<m_start_frame){
+          images_skipped++;
+          continue;
+      }
+
+      if ( ! depthFileName.empty() ){
+         Eigen::Affine3f pose_wc = Eigen::Affine3f::Identity();
+         pose_wc.translation() << tx,ty,tz;
+         pose_wc.linear() = Eigen::Quaternionf(qw,qx,qy,qz).toRotationMatrix();
+         Eigen::Affine3f pose_cw = pose_wc.inverse();
+
+         cv::Mat rgb_cv=cv::imread(dataset_path + "/" + colorFileName, CV_LOAD_IMAGE_UNCHANGED);
+         cv::Mat depth_cv=cv::imread(dataset_path + "/" + depthFileName, CV_LOAD_IMAGE_UNCHANGED);
+         depth_cv.convertTo ( depth_cv, CV_32F, 1./5000. ); //ICLNUIM stores theis weird units so we transform to meters
+
+
+         Frame cur_frame;
+         cur_frame.rgb=rgb_cv;
+         cv::cvtColor ( cur_frame.rgb, cur_frame.gray, CV_BGR2GRAY );
+         cur_frame.depth=depth_cv;
+         cv::Scharr( cur_frame.gray, cur_frame.grad_x, CV_32F, 1, 0);
+         cv::Scharr( cur_frame.gray, cur_frame.grad_y, CV_32F, 0, 1);
+         cur_frame.tf_cam_world=pose_cw;
+         cur_frame.gray.convertTo ( cur_frame.gray, CV_32F );
+         cur_frame.K=K;
+         cur_frame.frame_idx=imagesRead;
+
+         frames.push_back(cur_frame);
+         VLOG(1) << "read img " << imagesRead << " " << colorFileName;
+      }
+   }
+   std::cout << "read " << imagesRead << " images. (" << frames.size() <<", " << ")" << std::endl;
+   return frames;
+}
+
+std::vector<Seed> DepthEstimatorGL::create_immature_points (const Frame& frame){
+
+
+    TIME_START_GL("hessian_host_frame");
+    std::vector<Seed> immature_points;
+    for (size_t i = 10; i < frame.gray.rows-10; i++) {  //--------Do not look around the borders to avoid pattern accesing outside img
+        for (size_t j = 10; j < frame.gray.cols-10; j++) {
+
+            //check if this point has enough determinant in the hessian
+            Eigen::Matrix2f gradient_hessian;
+            gradient_hessian.setZero();
+            for (size_t p = 0; p < m_pattern.get_nr_points(); p++) {
+                int dx = m_pattern.get_offset_x(p);
+                int dy = m_pattern.get_offset_y(p);
+
+                float gradient_x=frame.grad_x.at<float>(i+dy,j+dx); //TODO should be interpolated
+                float gradient_y=frame.grad_y.at<float>(i+dy,j+dx);
+
+                Eigen::Vector2f grad;
+                grad << gradient_x, gradient_y;
+                // std::cout << "gradients are " << gradient_x << " " << gradient_y << '\n';
+
+                gradient_hessian+= grad*grad.transpose();
+            }
+
+            //determinant is high enough, add the point
+            float hessian_det=gradient_hessian.determinant();
+            if(hessian_det > m_params.gradH_th){
+            // if(hessian_det > 0){
+                Seed point;
+                point.m_uv << j,i;
+                point.m_gradH=gradient_hessian;
+
+                //Seed::Seed
+                Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.m_uv.x(),point.m_uv.y(),1)).normalized();
+                // point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+                point.depth_filter.m_f=Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
+
+                //start at an initial value for depth at around 4 meters (depth_filter->Seed::reinit)
+                // float mean_starting_depth=4.0;
+                // float mean_starting_depth=frame.depth.at<float>(i,j);
+                float mean_starting_depth=m_mean_starting_depth;
+                float min_starting_depth=0.1;
+                point.depth_filter.m_mu = (1.0/mean_starting_depth);
+                point.depth_filter.m_z_range = (1.0/min_starting_depth);
+                point.depth_filter.m_sigma2 = (point.depth_filter.m_z_range*point.depth_filter.m_z_range/36);
+
+                float z_inv_min = point.depth_filter.m_mu + sqrt(point.depth_filter.m_sigma2);
+                float z_inv_max = std::max<float>(point.depth_filter.m_mu- sqrt(point.depth_filter.m_sigma2), 0.00000001f);
+                point.m_idepth_minmax <<  z_inv_min, z_inv_max;
+
+                point.depth_filter.m_alpha=10.0;
+                point.depth_filter.m_beta=10.0;
+
+
+
+                //get data for the color of that point (depth_point->ImmaturePoint::ImmaturePoint)---------------------
+                for(int p_idx=0;p_idx<m_pattern.get_nr_points();p_idx++){
+                    Eigen::Vector2f offset = m_pattern.get_offset(p_idx);
+
+                    point.m_intensity[p_idx]=texture_interpolate(frame.gray, point.m_uv.x()+offset(0), point.m_uv.y()+offset(1), InterpolType::NEAREST);
+
+                    // float grad_x_val=texture_interpolate(frame.grad_x, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
+                    // float grad_y_val=texture_interpolate(frame.grad_y, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
+                    // float squared_norm=grad_x_val*grad_x_val + grad_y_val*grad_y_val;
+                    // point.weights[p_idx] = sqrtf(m_params.outlierTHSumComponent / (m_params.outlierTHSumComponent + squared_norm));
+
+                    // //for ngf
+                    // point.colorD[p_idx] = Eigen::Vector2f(grad_x_val,grad_y_val);
+                    // point.colorD[p_idx] /= sqrt(point.colorD[p_idx].squaredNorm()+m_params.eta);
+                    // point.colorGrad[p_idx] =  Eigen::Vector2f(grad_x_val,grad_y_val);
+
+                }
+                point.m_energyTH = m_pattern.get_nr_points()*m_params.outlierTH;
+                point.m_energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
+
+                immature_points.push_back(point);
+            }
+
+        }
+    }
+
+    return immature_points;
+    TIME_END_GL("hessian_host_frame");
+
+}
+
+
+void DepthEstimatorGL::compute_depth_and_create_mesh_ICL(){
+
+    m_frames=loadDataFromICLNUIM("/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png", 60);
+
+    TIME_START_GL("compute_depth");
+
+
+    std::vector<Seed> immature_points;
+    immature_points=create_immature_points(m_frames[0]);
+    std::cout << "immature_points size is " << immature_points.size() << '\n';
+
+    glUseProgram(m_compute_trace_seeds_icl_prog_id);
+
+
+    //upload to gpu the inmature points
+    TIME_START_GL("upload_immature_points");
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, immature_points.size() * sizeof(Seed), immature_points.data(), GL_DYNAMIC_COPY);
+    TIME_END_GL("upload_immature_points");
+
+
+    for (size_t i = 1; i < m_frames.size(); i++) {
+        std::cout << "frame " << i << '\n';
+        TIME_START_GL("update_depth");
+
+        TIME_START_GL("estimate_affine");
+        const Eigen::Affine3f tf_cur_host_eigen = m_frames[i].tf_cam_world * m_frames[0].tf_cam_world.inverse();
+        const Eigen::Affine3f tf_host_cur_eigen = tf_cur_host_eigen.inverse();
+        const Eigen::Matrix3f KRKi_cr_eigen = m_frames[i].K * tf_cur_host_eigen.linear() * m_frames[0].K.inverse();
+        const Eigen::Vector3f Kt_cr_eigen = m_frames[i].K * tf_cur_host_eigen.translation();
+        // const Eigen::Vector2f affine_cr_eigen = estimate_affine( immature_points, frames[i], KRKi_cr_eigen, Kt_cr_eigen);
+        const Eigen::Vector2f affine_cr_eigen= Eigen::Vector2f(1,0);
+        const double focal_length = fabs(m_frames[i].K(0,0));
+        double px_noise = 1.0;
+        double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
+        Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr_eigen.topLeftCorner<2,2>() );
+
+        // std::cout << "pattern_rot has nr of points " << pattern_rot.get_nr_points() << '\n';
+        // for (size_t i = 0; i < pattern_rot.get_nr_points(); i++) {
+        //     std::cout << "offset for i " << i << " is " << pattern_rot.get_offset(i).transpose() << '\n';
+        // }
+
+        TIME_END_GL("estimate_affine");
+
+        TIME_START_GL("upload_params");
+        //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
+        glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
+        glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
+        glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_compute_trace_seeds_icl_prog_id,"params_block"), m_ubo_params );
+        TIME_END_GL("upload_params");
+
+
+        //attempt 3 upload the image as a inmutable storage but also pack the gradient into the 2nd and 3rd channel
+        TIME_START_GL("upload_gray_img");
+        //merge all mats into one with 4 channel
+        std::vector<cv::Mat> channels;
+        channels.push_back(m_frames[i].gray);
+        channels.push_back(m_frames[i].grad_x);
+        channels.push_back(m_frames[i].grad_y);
+        channels.push_back(m_frames[i].grad_y); //dummy one stored in the alpha channels just to have a 4 channel texture
+        cv::Mat img_with_gradients;
+        cv::merge(channels, img_with_gradients);
+
+        int size_bytes=img_with_gradients.step[0] * img_with_gradients.rows; //allocate 4 channels because gpu likes multiples of 4
+        if(!m_cur_frame.get_tex_storage_initialized()){
+            m_cur_frame.allocate_tex_storage_inmutable(GL_RGBA32F,img_with_gradients.cols, img_with_gradients.rows);
+        }
+        m_cur_frame.upload_without_pbo(0,0,0, img_with_gradients.cols, img_with_gradients.rows, GL_RGBA, GL_FLOAT, img_with_gradients.ptr());
+        TIME_END_GL("upload_gray_img");
+
+
+
+
+
+        //upload the matrices
+        TIME_START_GL("upload_matrices");
+        Eigen::Vector2f frame_size;
+        frame_size<< m_frames[i].gray.cols, m_frames[i].gray.rows;
+        const Eigen::Matrix4f tf_cur_host_eigen_trans = tf_cur_host_eigen.matrix().transpose();
+        const Eigen::Matrix4f tf_host_cur_eigen_trans = tf_host_cur_eigen.matrix().transpose();
+        glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"frame_size"), 1, frame_size.data());
+        // glUniformMatrix4fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"tf_cur_host"), 1, GL_FALSE, tf_cur_host_eigen_trans.data());
+        // glUniformMatrix4fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"tf_host_cur"), 1, GL_FALSE, tf_host_cur_eigen_trans.data());
+        glUniformMatrix4fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"tf_cur_host"), 1, GL_TRUE, tf_cur_host_eigen.data());
+        glUniformMatrix4fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"tf_host_cur"), 1, GL_TRUE, tf_host_cur_eigen.data());
+        glUniformMatrix3fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"K"), 1, GL_FALSE, m_frames[i].K.data());
+        glUniformMatrix3fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"KRKi_cr"), 1, GL_FALSE, KRKi_cr_eigen.data());
+        glUniform3fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"Kt_cr"), 1, Kt_cr_eigen.data());
+        glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"affine_cr"), 1, affine_cr_eigen.data());
+        glUniform1f(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"px_error_angle"), px_error_angle);
+        glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"pattern_rot_offsets"), pattern_rot.get_nr_points(), pattern_rot.get_offset_matrix().data()); //upload all the offses as an array of vec2 offsets
+        // std::cout << "setting nr of points to " <<  pattern_rot.get_nr_points() << '\n';
+        // std::cout << "the uniform location is " << glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"pattern_rot_nr_points") << '\n';
+        glUniform1i(glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"pattern_rot_nr_points"), pattern_rot.get_nr_points());
+        TIME_END_GL("upload_matrices");
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+
+
+        // tf_cur_host, tf_host_cur, KRKi_cr, Kt_cr, affine_cr, px_error_angle
+        TIME_START_GL("depth_update_kernel");
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_points_gl_buf);
+        bind_for_sampling(m_cur_frame, 1, glGetUniformLocation(m_compute_trace_seeds_icl_prog_id,"gray_img_sampler") );
+        glDispatchCompute(immature_points.size()/256, 1, 1); //TODO adapt the local size to better suit the gpu
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        TIME_END_GL("depth_update_kernel");
+
+        TIME_END_GL("update_depth");
+    }
+
+
+
+    //read the points back to cpu
+    //TODO
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+    for (size_t i = 0; i < immature_points.size(); i++) {
+        immature_points[i]=ptr[i];
+    }
+    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+    TIME_END_GL("compute_depth");
+
+
+    m_mesh=create_mesh_ICL(immature_points, m_frames);
+
+}
+
+Mesh DepthEstimatorGL::create_mesh_ICL(const std::vector<Seed>& immature_points, const std::vector<Frame>& frames){
+    Mesh mesh;
+    mesh.V.resize(immature_points.size(),3);
+    mesh.V.setZero();
+
+
+    for (size_t i = 0; i < immature_points.size(); i++) {
+        float u=immature_points[i].m_uv.x();
+        float v=immature_points[i].m_uv.y();
+        // float depth=immature_points[i].gt_depth;
+        // float depth=1.0;
+        float depth=1/immature_points[i].depth_filter.m_mu;
+
+        if(std::isfinite(immature_points[i].depth_filter.m_mu) && immature_points[i].depth_filter.m_mu>=0.1){
+        // if(true){
+
+            // float outlier_measure=immature_points[i].a/(immature_points[i].a+immature_points[i].b);
+            // if(outlier_measure<0.7){
+            //     continue;
+            // }
+            //
+            // if(immature_points[i].sigma2>0.000005){
+            //     continue;
+            // }
+            //
+            // std::cout << immature_points[i].sigma2 << '\n';
+
+
+            //backproject the immature point
+            Eigen::Vector3f point_screen;
+            point_screen << u, v, 1.0;
+            Eigen::Vector3f point_dir=frames[0].K.inverse()*point_screen; //TODO get the K and also use the cam to world corresponding to the immature point
+            // point_dir.normalize(); //this is just the direction (in cam coordinates) of that pixel
+
+            // point_dir=Eigen::Vector3f(point_dir.x()/point_dir.z(), point_dir.y()/point_dir.z(), 1.0);
+            Eigen::Vector3f point_cam = point_dir*depth;
+            point_cam(2)=-point_cam(2); //flip the depth because opengl 7has a camera which looks at the negative z axis (therefore, more depth means a more negative number)
+            // Eigen::Vector3f point_world=frames[0].tf_cam_world.inverse()*point_cam;
+
+            mesh.V.row(i)=point_cam.cast<double>();
+
+        }
+
+
+    }
+
+    //make also some colors based on depth
+    mesh.C.resize(immature_points.size(),3);
+    double min_z, max_z;
+    min_z = mesh.V.col(2).minCoeff();
+    max_z = mesh.V.col(2).maxCoeff();
+    // min_z=-6.5;
+    // max_z=-4;
+    std::cout << "min max z is " << min_z << " " << max_z << '\n';
+    for (size_t i = 0; i < mesh.C.rows(); i++) {
+        float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
+        mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+    }
+
+
+    return mesh;
 }

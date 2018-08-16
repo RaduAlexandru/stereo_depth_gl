@@ -513,6 +513,8 @@ void DataLoaderPNG::read_pose_file_icl(){
         pose.matrix().block<3,3>(0,0)=quat.toRotationMatrix();
         pose.matrix().block<3,1>(0,3)=position;
 
+
+
         m_worldROS_baselink_map[timestamp]=pose;
         m_worldROS_baselink_vec.push_back ( std::pair<uint64_t, Eigen::Affine3f>(timestamp,pose) );
     }
@@ -575,7 +577,7 @@ bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t 
         }
 
     }else if(m_dataset_type==DatasetType::ICL){
-        pose=pose_from_file;
+        pose=pose_from_file.inverse();
     }else{
         LOG(FATAL) << "Unknown dataset";
     }

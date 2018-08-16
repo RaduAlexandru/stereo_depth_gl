@@ -285,15 +285,21 @@ public:
     //params
     bool m_gl_profiling_enabled;
     bool m_debug_enabled;
-    float m_mean_starting_depth;
     std::string m_pattern_file;
     int m_estimated_seeds_per_keyframe; //conservative estimate of nr of seeds created per frame
     int m_nr_buffered_keyframes; //nr of keyframes for which we store the seeds
     float m_min_starting_depth;
-    float m_max_starting_depth;
+    float m_mean_starting_depth;
     Params m_params; //parameters for depth estimation that may also be needed inside the gl shader
 
 
+    //for debugging we run only icl nuim
+    int m_start_frame;
+    GLuint m_points_gl_buf; //stores all the immature points
+    gl::Texture2D m_cur_frame;
+    Mesh m_mesh;
+    std::vector<Frame> m_frames;
+    void compute_depth_and_create_mesh_ICL();
 
 
 private:
@@ -308,6 +314,11 @@ private:
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
     Eigen::Vector2f estimate_affine(std::vector<Seed>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
 
+
+    //debug with icl nuim
+    std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
+    std::vector<Seed> create_immature_points (const Frame& frame);
+    Mesh create_mesh_ICL(const std::vector<Seed>& immature_points, const std::vector<Frame>& frames);
 
     // void assign_neighbours_for_points( std::vector<Seed>& immature_points, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
     // void denoise_cpu( std::vector<Seed>& immature_points, const int frame_width, const int frame_height);
