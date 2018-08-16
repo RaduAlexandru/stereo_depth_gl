@@ -48,8 +48,8 @@ struct Seed{
     float debug[16];
 };
 struct EpiData{
-    // mat4 tf_cur_host; //the of corresponds to a 4x4 matrix
-    // mat4 tf_host_cur;
+    mat4 tf_cur_host; //the of corresponds to a 4x4 matrix
+    mat4 tf_host_cur;
     mat4 KRKi_cr;
     // vec4 Kt_cr;
     // vec2 pattern_rot_offsets[MAX_RES_PER_POINT];

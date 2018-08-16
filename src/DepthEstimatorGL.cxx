@@ -662,7 +662,7 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
     int size_pattern_offsets=MAX_RES_PER_POINT*2*4; //16 points wach with 2 coordinates and each with 4 bytes
     // int size_epidata=2*size_mat4x4 + 1*size_mat3x3 + 1*size_vec3 + size_pattern_offsets;
     // int size_epidata=3*size_mat4x4 + 1*size_vec4 + size_pattern_offsets;
-    int size_epidata=1*size_mat4x4;
+    int size_epidata=3*size_mat4x4;
     std::cout << "size manual epidata " << size_epidata << '\n';
 
 
