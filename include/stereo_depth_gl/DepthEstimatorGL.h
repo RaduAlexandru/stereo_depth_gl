@@ -28,6 +28,8 @@
 #define MAX_RES_PER_POINT 16 //IMPORTANT to change this value also in the shaders
 
 struct Params {
+    float maxPerPtError;
+    float slackFactor;
     float outlierTH = 12*12;					// higher -> less strict
     float overallEnergyTHWeight = 1;
     float outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
@@ -48,8 +50,8 @@ struct Params {
     float denoise_L=sqrt(8.0f);
     float denoise_tau=0.02f;
     float denoise_theta=0.5;
-    float pad_1;
-    float pad_2;
+    // float pad_1;
+    // float pad_2;
 };
 
 enum SeedStatus {
@@ -211,12 +213,7 @@ struct EpiData{
     // Eigen::Matrix4f tf_cur_host; //the of corresponds to a 4x4 matrix
     // Eigen::Matrix4f tf_host_cur;
     Eigen::Matrix4f KRKi_cr; //should be 4x4 but we make it 4x4 for alignment to gpu https://stackoverflow.com/a/47227584
-
-    // Eigen::Vector3f Kt_cr;
-    // // Eigen::MatrixXf tf_cur_host; //the of corresponds to a 4x4 matrix
-    // // Eigen::MatrixXf tf_host_cur;
-    // // Eigen::MatrixXf KRKi_cr;
-    // // Eigen::VectorXf Kt_cr;
+    // Eigen::Vector4f Kt_cr;
     // Eigen::MatrixXf pattern_rot_offsets; //its it made sure to have nr of rows the same as MAX_RES_PER_POINT so we can easily pass it to gl
 };
 

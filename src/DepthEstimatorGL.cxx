@@ -296,7 +296,9 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"min_starting_depth"), m_min_starting_depth);
     glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"mean_starting_depth"), m_mean_starting_depth);
     glUniform1i(glGetUniformLocation(m_compute_create_seeds_prog_id,"seeds_start_idx"), 0); //TODO
+    std::cout << "setting idx_keyframe " << m_keyframes_per_cam[0].size()-1 << '\n';
     glUniform1i(glGetUniformLocation(m_compute_create_seeds_prog_id,"idx_keyframe"), m_keyframes_per_cam[0].size()-1);
+    //TODO maybe change the 0 in the previous m_keyframes_per_cam to something else because we now assume that if we make a keyframe for left cam we also make for right
 
 
     glDispatchCompute(frame.gray.cols/32, frame.gray.rows/16, 1);
@@ -565,8 +567,8 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
 
     //make a vector of epidate which says for each keyframe (either left or right depending on the thing above) how does to transform to the new frame
     std::vector<EpiData> epidata_vec;
-    // for (size_t i = 0; i < m_keyframes_per_cam[keyframe_id].size(); i++) {
-    for (size_t i = 0; i < 1; i++) {
+    for (size_t i = 0; i < m_keyframes_per_cam[keyframe_id].size(); i++) {
+    // for (size_t i = 0; i < 1; i++) {
         Frame keyframe=m_keyframes_per_cam[keyframe_id][i];
         EpiData e;
 
@@ -592,16 +594,50 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
 
 
         //attempt 3 with only 1 matrix
+        // Eigen::Matrix3f KRKi_cr=cur_frame.K * tf_cur_host.linear() * keyframe.K.inverse();
+        // e.KRKi_cr.setZero();
+        // e.KRKi_cr.block(0,0,3,3)=KRKi_cr;
+        // e.KRKi_cr=cur_frame.K * tf_cur_host.linear() * keyframe.K.inverse();
+
+        // //attempt 4 all matrices but aligned
+        // e.tf_cur_host=tf_cur_host.matrix();
+        // e.tf_host_cur=e.tf_cur_host.inverse();
+        // Eigen::Matrix3f KRKi_cr=cur_frame.K * tf_cur_host.linear() * keyframe.K.inverse();
+        // e.KRKi_cr.setZero();
+        // e.KRKi_cr.block(0,0,3,3)=KRKi_cr;
+        // Eigen::Vector3f Kt_cr;
+        // Kt_cr=cur_frame.K * tf_cur_host.translation();
+        // e.Kt_cr.setZero();
+        // e.Kt_cr.block(0,0,1,3)=Kt_cr;
+        // Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
+        // e.pattern_rot_offsets.resize(MAX_RES_PER_POINT,2);
+        // e.pattern_rot_offsets.setZero();
+        // e.pattern_rot_offsets.block(0,0,pattern_rot.get_nr_points(),2)=pattern_rot.get_offset_matrix();
+
+
+        //attempt 5 as the previous one only read correctly the epidata for the first keyframe
+        //attempt 4 all matrices but aligned
+        // e.tf_cur_host=tf_cur_host.matrix();
+        // e.tf_host_cur=e.tf_cur_host.inverse();
         Eigen::Matrix3f KRKi_cr=cur_frame.K * tf_cur_host.linear() * keyframe.K.inverse();
         e.KRKi_cr.setZero();
         e.KRKi_cr.block(0,0,3,3)=KRKi_cr;
-        // e.KRKi_cr=cur_frame.K * tf_cur_host.linear() * keyframe.K.inverse();
+        // Eigen::Vector3f Kt_cr;
+        // Kt_cr=cur_frame.K * tf_cur_host.translation();
+        // e.Kt_cr.setZero();
+        // e.Kt_cr.block(0,0,1,3)=Kt_cr;
+        // Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
+        // e.pattern_rot_offsets.resize(MAX_RES_PER_POINT,2);
+        // e.pattern_rot_offsets.setZero();
+        // e.pattern_rot_offsets.block(0,0,pattern_rot.get_nr_points(),2)=pattern_rot.get_offset_matrix();
+
 
         // if(epidata_vec.size()==0){
             // std::cout << "------------epidata_vec " << epidata_vec.size() << '\n';
             // std::cout << "e.tf_cur_host is \n" << e.tf_cur_host << '\n';
             // std::cout << "e.tf_host_cur is \n" << e.tf_host_cur << '\n';
-            std::cout << "e.KRKi_cr is \n" << e.KRKi_cr << '\n';
+            // std::cout << "e.KRKi_cr is \n" << e.KRKi_cr << '\n';
+            // std::cout << "Kt_cr is \n" << Kt_cr << '\n';
             // std::cout << "e.Kt_cr is \n" << e.Kt_cr << '\n';
             // std::cout << "pattern offsets is \n " << e.pattern_rot_offsets << '\n';
         // }
@@ -614,14 +650,18 @@ void DepthEstimatorGL::trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds, 
 
         epidata_vec.push_back(e);
     }
+    for (size_t i = 0; i < epidata_vec.size(); i++) {
+        std::cout << "e.KRKi_cr is \n" << epidata_vec[i].KRKi_cr << '\n';
+    }
     assert(epidata_vec[0]%16==0);
-    // std::cout << "sizeof epidata_vec[0]" << sizeof(epidata_vec[0]) << '\n';
+    std::cout << "epidata_vec size  " << epidata_vec.size() << '\n';
+    std::cout << "sizeof epidata_vec[0]" << sizeof(epidata_vec[0]) << '\n';
     //epidata size is not calculated correctly because it contains eigenmatix which is dynamic in size
     int size_mat4x4=64; //64bytes because 4x4x4;
-    int size_mat3x3=36;
-    int size_vec3=12;
+    int size_vec4=16;
     int size_pattern_offsets=MAX_RES_PER_POINT*2*4; //16 points wach with 2 coordinates and each with 4 bytes
     // int size_epidata=2*size_mat4x4 + 1*size_mat3x3 + 1*size_vec3 + size_pattern_offsets;
+    // int size_epidata=3*size_mat4x4 + 1*size_vec4 + size_pattern_offsets;
     int size_epidata=1*size_mat4x4;
     std::cout << "size manual epidata " << size_epidata << '\n';
 

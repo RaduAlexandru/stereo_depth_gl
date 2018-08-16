@@ -51,7 +51,7 @@ struct EpiData{
     // mat4 tf_cur_host; //the of corresponds to a 4x4 matrix
     // mat4 tf_host_cur;
     mat4 KRKi_cr;
-    // vec3 Kt_cr;
+    // vec4 Kt_cr;
     // vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
 };
 
@@ -89,8 +89,8 @@ layout (std140) uniform params_block{
     float denoise_L;
     float denoise_tau;
     float denoise_theta;
-    float pad_1;
-    float pad_2;
+    // float pad_1;
+    // float pad_2;
 }params ;
 
 vec4 hqfilter(sampler2D samp, vec2 tc){
@@ -130,20 +130,26 @@ uniform mat3 K;
 void main(void) {
     int id = int(gl_GlobalInvocationID.x);
 
+    vec2 frame_size;
+    frame_size=textureSize(gray_with_gradients_img_sampler, 0);
+
+    //which keyframe host this seed?
+    int k=p[id].idx_keyframe;
+
+
     if(id==0){
-        p[id].debug[0]=e[0].KRKi_cr[0][0]; //[col][row]
-        p[id].debug[1]=e[0].KRKi_cr[1][0];
-        p[id].debug[2]=e[0].KRKi_cr[2][0];
+        p[id].debug[0]=e[1].KRKi_cr[0][0]; //[col][row]
+        p[id].debug[1]=e[1].KRKi_cr[1][0];
+        p[id].debug[2]=e[1].KRKi_cr[2][0];
+        p[id].debug[3]=e[1].KRKi_cr[0][1];
+        p[id].debug[4]=e[1].KRKi_cr[1][1];
+        p[id].debug[5]=e[1].KRKi_cr[2][1];
+        p[id].debug[6]=e[1].KRKi_cr[0][2];
+        p[id].debug[7]=e[1].KRKi_cr[1][2];
+        p[id].debug[8]=e[1].KRKi_cr[2][2];
 
-        p[id].debug[3]=e[0].KRKi_cr[0][1];
-        p[id].debug[4]=e[0].KRKi_cr[1][1];
-        p[id].debug[5]=e[0].KRKi_cr[2][1];
-
-        p[id].debug[6]=e[0].KRKi_cr[0][2];
-        p[id].debug[7]=e[0].KRKi_cr[1][2];
-        p[id].debug[8]=e[0].KRKi_cr[2][2];
-
-        p[id].debug[9]=999999;
+        p[id].debug[9]=k;
+        p[id].debug[10]=999999;
 
         // p[id].debug[6]=uvMean.x; // Huber Threshold
         // p[id].debug[7]=uvMean.y;
@@ -165,12 +171,6 @@ void main(void) {
         // p[id].debug[13]=k;
     }
 
-   //  vec2 frame_size;
-   //  frame_size=textureSize(gray_with_gradients_img_sampler, 0);
-   //
-   //  //which keyframe host this seed?
-   //  int k=p[id].idx_keyframe;
-   //
    //  // // check if point is visible in the current image
    //  const vec3 p_backproj_xyz= p[id].depth_filter.m_f.xyz * 1.0f/ p[id].depth_filter.m_mu;
    //  const vec4 p_backproj_xyzw=vec4(p_backproj_xyz.x,p_backproj_xyz.y,p_backproj_xyz.z,1.0);
@@ -202,17 +202,17 @@ void main(void) {
    // // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
    //  // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
    //  float idepth_mean = mean(p[id].m_idepth_minmax);
-   //  vec3 pr =e[k].KRKi_cr * vec3(p[id].m_uv, 1);
-   //  vec3 ptpMean = pr + e[k].Kt_cr*idepth_mean;
-   //  vec3 ptpMin = pr + e[k].Kt_cr*p[id].m_idepth_minmax.x;
-   //  vec3 ptpMax = pr + e[k].Kt_cr*p[id].m_idepth_minmax.y;
+   //  vec3 pr =mat3(e[k].KRKi_cr) * vec3(p[id].m_uv, 1);
+   //  vec3 ptpMean = pr + vec3(e[k].Kt_cr)*idepth_mean;
+   //  vec3 ptpMin = pr + vec3(e[k].Kt_cr)*p[id].m_idepth_minmax.x;
+   //  vec3 ptpMax = pr + vec3(e[k].Kt_cr)*p[id].m_idepth_minmax.y;
    //  vec2 uvMean = ptpMean.xy/ptpMean.z;
    //  vec2 uvMin = ptpMin.xy/ptpMin.z;
    //  vec2 uvMax = ptpMax.xy/ptpMax.z;
    //
    //
    //
-   //  //debug the point
+   //  // //debug the point
    //  // if(id==0){
    //  //     p[id].debug[0]=p[id].m_uv.x;
    //  //     p[id].debug[1]=p[id].m_uv.y;
@@ -234,21 +234,22 @@ void main(void) {
    //  //     // p[id].debug[15]=vec3(p[id].m_uv, 1).z;
    //  //
    //  //     p[id].debug[13]=k;
+   //  //     p[id].debug[14]=999999;
    //  // }
    //
    //  //debug the KRKi_cr
    //  if(id==0){
-   //      p[id].debug[0]=e[0].KRKi_cr[0][0]; //[col][row]
-   //      p[id].debug[1]=e[0].KRKi_cr[1][0];
-   //      p[id].debug[2]=e[0].KRKi_cr[2][0];
+   //      p[id].debug[0]=e[k].KRKi_cr[0][0]; //[col][row]
+   //      p[id].debug[1]=e[k].KRKi_cr[1][0];
+   //      p[id].debug[2]=e[k].KRKi_cr[2][0];
    //
-   //      p[id].debug[3]=e[0].KRKi_cr[0][1];
-   //      p[id].debug[4]=e[0].KRKi_cr[1][1];
-   //      p[id].debug[5]=e[0].KRKi_cr[2][1];
+   //      p[id].debug[3]=e[k].KRKi_cr[0][1];
+   //      p[id].debug[4]=e[k].KRKi_cr[1][1];
+   //      p[id].debug[5]=e[k].KRKi_cr[2][1];
    //
-   //      p[id].debug[6]=e[0].KRKi_cr[0][2];
-   //      p[id].debug[7]=e[0].KRKi_cr[1][2];
-   //      p[id].debug[8]=e[0].KRKi_cr[2][2];
+   //      p[id].debug[6]=e[k].KRKi_cr[0][2];
+   //      p[id].debug[7]=e[k].KRKi_cr[1][2];
+   //      p[id].debug[8]=e[k].KRKi_cr[2][2];
    //
    //      p[id].debug[9]=999999;
    //
@@ -274,186 +275,186 @@ void main(void) {
    //
    //
    //
-
-    // vec2 epi_line = uvMax - uvMin;
-    // float norm_epi = max(1e-5f,length(epi_line));
-    // vec2 epi_dir = epi_line / norm_epi;
-    // const float  half_length = 0.5f * norm_epi;
-    //
-    // vec2 bestKp=vec2(-1.0,-1.0);
-    // float bestEnergy = 1e10;
-    //
-    //
-    // for(float l = -half_length; l <= half_length; l += 0.7f)
-    // {
-    //     float energy = 0;
-    //     vec2 kp = uvMean + l*epi_dir;
-    //
-    //     //pattern will be a bit outside of the image so we ignore those points
-    //     if( ( kp.x >= (frame_size.x-20) )  || ( kp.y >= (frame_size.y-20) ) || ( kp.x < 20 ) || ( kp.y < 20) ){
-    //         continue;
-    //     }
-    //
-    //     for(int idx=0;idx<pattern_rot_nr_points; ++idx){
-    //         //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
-    //         vec2 offset=e[k].pattern_rot_offsets[idx];
-    //         // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
-    //         // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
-    //         // float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolationType::LINEAR);
-    //         // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
-    //
-    //         //for the case when the image is padded
-    //         // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
-    //
-    //         //high qualty filter from openglsuperbible
-    //         float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
-    //
-    //         // float hit_color=0.0;
-    //
-    //         const float residual = hit_color - p[id].m_intensity[idx];
-    //
-    //         float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
-    //         energy += hw *residual*residual*(2-hw);
-    //     }
-    //     if ( energy < bestEnergy )
-    //     {
-    //         bestKp = kp; bestEnergy = energy;
-    //     }
-    // }
-    //
-    //
-    // // if ( bestEnergy > p[id].energyTH * 1.2f ) {
-    // //     p[id].lastTraceStatus = STATUS_OUTLIER;
-    // // }
-    // // else
-    // // {
-    //     // vec2 epi_dir_inv=vec2(epi_dir.y,-epi_dir.x);
-    //     // float a = epi_dir * p[id].gradH * epi_dir;
-    //     // float b = epi_dir_inv * point.gradH * epi_dir_inv;
-    //     // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
-    //     float errorInPixel=0.0f;
-    //
-    //     if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
-    //     {
-    //         p[id].m_idepth_minmax.x = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (e[k].Kt_cr.x - e[k].Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
-    //         p[id].m_idepth_minmax.y = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (e[k].Kt_cr.x - e[k].Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
-    //     }
-    //     else
-    //     {
-    //         p[id].m_idepth_minmax.x = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (e[k].Kt_cr.y - e[k].Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
-    //         p[id].m_idepth_minmax.y = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (e[k].Kt_cr.y - e[k].Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
-    //     }
-    //     // memoryBarrier();
-    //     // barrier();
-    //     // memoryBarrier();
-    //     if(p[id].m_idepth_minmax.x > p[id].m_idepth_minmax.y) {
-    //         // std::swap<float>(point.idepth_min, point.idepth_max);
-    //         float tmp=p[id].m_idepth_minmax.x;
-    //         p[id].m_idepth_minmax.x=p[id].m_idepth_minmax.y;
-    //         p[id].m_idepth_minmax.y=tmp;
-    //     }
-    //     // p[id].lastTraceStatus = STATUS_GOOD;
-    //     // memoryBarrier();
-    //     // barrier();
-    //     // memoryBarrier();
-    // // }
-    // // memoryBarrier();
-    // // barrier();
-    // // memoryBarrier();
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    // float idepth = -1;
-    // float z = 0;
-    // idepth = max(1e-5f, mean(p[id].m_idepth_minmax) );
-    // z = 1.0f/idepth;
-    //
-    // // memoryBarrier();
-    // // barrier();
-    // // memoryBarrier();
-    //
-    //
-    // // update_idepth(point,tf_host_cur, z, px_error_angle);
-    //
-    // // compute tau----------------------------------------------------------------------------
-    // // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
-    // vec3 t=  vec3(e[k].tf_host_cur[0][3], e[k].tf_host_cur[1][3], e[k].tf_host_cur[2][3]);
-    // // Eigen::Vector3f t(tf_host_cur.translation());
-    // vec3 a = p[id].depth_filter.m_f.xyz*z-t;
-    // float t_norm = length(t);
-    // float a_norm = length(a);
-    // float alpha = acos(dot(p[id].depth_filter.m_f.xyz,t)/t_norm); // dot product
-    // float beta = acos(dot(a,-t)/(t_norm*a_norm)); // dot product
-    // float beta_plus = beta + px_error_angle;
-    // float gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
-    // float z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
-    // float tau= (z_plus - z); // tau
-    // float tau_inverse = 0.5 * (1.0/max(0.0000001, z-tau) - 1.0/(z+tau));
-    //
-    // // update the estimate--------------------------------------------------
-    // float x=1.0/z;
-    // float tau2=tau_inverse*tau_inverse;
-    // // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
-    // float norm_scale = sqrt(p[id].depth_filter.m_sigma2 + tau2);
-    // float s2 = 1./(1./p[id].depth_filter.m_sigma2 + 1./tau2);
-    // float m = s2*(p[id].depth_filter.m_mu/p[id].depth_filter.m_sigma2 + x/tau2);
-    // float C1 = p[id].depth_filter.m_alpha/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta) * gaus_pdf(p[id].depth_filter.m_mu, norm_scale, x);
-    // float C2 = p[id].depth_filter.m_beta/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta) * 1./p[id].depth_filter.m_z_range;
-    // float normalization_constant = C1 + C2;
-    // C1 /= normalization_constant;
-    // C2 /= normalization_constant;
-    // float f = C1*(p[id].depth_filter.m_alpha+1.)/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.) + C2*p[id].depth_filter.m_alpha/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.);
-    // float e = C1*(p[id].depth_filter.m_alpha+1.)*(p[id].depth_filter.m_alpha+2.)/((p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.)*(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+2.))
-    //           + C2*p[id].depth_filter.m_alpha*(p[id].depth_filter.m_alpha+1.0f)/((p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.0f)*
-    //           (p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+2.0f));
-    // // update parameters
-    // float mu_new = C1*m+C2*p[id].depth_filter.m_mu;
-    // p[id].depth_filter.m_sigma2 = C1*(s2 + m*m) + C2*(p[id].depth_filter.m_sigma2 + p[id].depth_filter.m_mu*p[id].depth_filter.m_mu) - mu_new*mu_new;
-    // p[id].depth_filter.m_mu = mu_new;
-    // p[id].depth_filter.m_alpha = (e-f)/(f-e/f);
-    // p[id].depth_filter.m_beta = p[id].depth_filter.m_alpha*(1.0f-f)/f;
-    //
-    // // memoryBarrier();
-    // // barrier(); //TODO add again the barrier
-    // // memoryBarrier();
-    //
-    // // // // TODO not implemented in opengl
-    // // const float eta_inlier = .6f;
-    // // const float eta_outlier = .05f;
-    // // if( ((p[id].a / (p[id].a + p[id].b)) > eta_inlier) && (sqrt(p[id].sigma2) < p[id].z_range/params.convergence_sigma2_thresh)) {
-    // //     p[id].is_outlier = 0; // The seed converged
-    // // }else if((p[id].a-1) / (p[id].a + p[id].b - 2) < eta_outlier){ // The seed failed to converge
-    // //     p[id].is_outlier = 1;
-    // //     // it->reinit();
-    // //     //TODO do a better reinit inside a point class
-    // //     p[id].a = 10;
-    // //     p[id].b = 10;
-    // //     p[id].mu = (1.0/4.0);
-    // //     p[id].z_range = (1.0/0.1);
-    // //     p[id].sigma2 = (p[id].z_range*p[id].z_range/36);
-    // // }
-    // // // if the seed has converged, we initialize a new candidate point and remove the seed
-    // // if(sqrt(p[id].sigma2) < p[id].z_range/params.convergence_sigma2_thresh){
-    // //     p[id].converged = 1;
-    // // }
+   //
+   //  vec2 epi_line = uvMax - uvMin;
+   //  float norm_epi = max(1e-5f,length(epi_line));
+   //  vec2 epi_dir = epi_line / norm_epi;
+   //  const float  half_length = 0.5f * norm_epi;
+   //
+   //  vec2 bestKp=vec2(-1.0,-1.0);
+   //  float bestEnergy = 1e10;
+   //
+   //
+   //  for(float l = -half_length; l <= half_length; l += 0.7f)
+   //  {
+   //      float energy = 0;
+   //      vec2 kp = uvMean + l*epi_dir;
+   //
+   //      //pattern will be a bit outside of the image so we ignore those points
+   //      if( ( kp.x >= (frame_size.x-20) )  || ( kp.y >= (frame_size.y-20) ) || ( kp.x < 20 ) || ( kp.y < 20) ){
+   //          continue;
+   //      }
+   //
+   //      for(int idx=0;idx<pattern_rot_nr_points; ++idx){
+   //          //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
+   //          vec2 offset=e[k].pattern_rot_offsets[idx];
+   //          // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+   //          // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
+   //          // float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolationType::LINEAR);
+   //          // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
+   //
+   //          //for the case when the image is padded
+   //          // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
+   //
+   //          //high qualty filter from openglsuperbible
+   //          float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
+   //
+   //          // float hit_color=0.0;
+   //
+   //          const float residual = hit_color - p[id].m_intensity[idx];
+   //
+   //          float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
+   //          energy += hw *residual*residual*(2-hw);
+   //      }
+   //      if ( energy < bestEnergy )
+   //      {
+   //          bestKp = kp; bestEnergy = energy;
+   //      }
+   //  }
+   //
+   //
+   //  // if ( bestEnergy > p[id].energyTH * 1.2f ) {
+   //  //     p[id].lastTraceStatus = STATUS_OUTLIER;
+   //  // }
+   //  // else
+   //  // {
+   //      // vec2 epi_dir_inv=vec2(epi_dir.y,-epi_dir.x);
+   //      // float a = epi_dir * p[id].gradH * epi_dir;
+   //      // float b = epi_dir_inv * point.gradH * epi_dir_inv;
+   //      // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
+   //      float errorInPixel=0.0f;
+   //
+   //      if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
+   //      {
+   //          p[id].m_idepth_minmax.x = (pr.z*(bestKp.x-errorInPixel*epi_dir.x) - pr.x) / (e[k].Kt_cr.x - e[k].Kt_cr.z*(bestKp.x-errorInPixel*epi_dir.x));
+   //          p[id].m_idepth_minmax.y = (pr.z*(bestKp.x+errorInPixel*epi_dir.x) - pr.x) / (e[k].Kt_cr.x - e[k].Kt_cr.z*(bestKp.x+errorInPixel*epi_dir.x));
+   //      }
+   //      else
+   //      {
+   //          p[id].m_idepth_minmax.x = (pr.z*(bestKp.y-errorInPixel*epi_dir.y) - pr.y) / (e[k].Kt_cr.y - e[k].Kt_cr.z*(bestKp.y-errorInPixel*epi_dir.y));
+   //          p[id].m_idepth_minmax.y = (pr.z*(bestKp.y+errorInPixel*epi_dir.y) - pr.y) / (e[k].Kt_cr.y - e[k].Kt_cr.z*(bestKp.y+errorInPixel*epi_dir.y));
+   //      }
+   //      // memoryBarrier();
+   //      // barrier();
+   //      // memoryBarrier();
+   //      if(p[id].m_idepth_minmax.x > p[id].m_idepth_minmax.y) {
+   //          // std::swap<float>(point.idepth_min, point.idepth_max);
+   //          float tmp=p[id].m_idepth_minmax.x;
+   //          p[id].m_idepth_minmax.x=p[id].m_idepth_minmax.y;
+   //          p[id].m_idepth_minmax.y=tmp;
+   //      }
+   //      // p[id].lastTraceStatus = STATUS_GOOD;
+   //      // memoryBarrier();
+   //      // barrier();
+   //      // memoryBarrier();
+   //  // }
+   //  // memoryBarrier();
+   //  // barrier();
+   //  // memoryBarrier();
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //
+   //  float idepth = -1;
+   //  float z = 0;
+   //  idepth = max(1e-5f, mean(p[id].m_idepth_minmax) );
+   //  z = 1.0f/idepth;
+   //
+   //  // memoryBarrier();
+   //  // barrier();
+   //  // memoryBarrier();
+   //
+   //
+   //  // update_idepth(point,tf_host_cur, z, px_error_angle);
+   //
+   //  // compute tau----------------------------------------------------------------------------
+   //  // double tau = compute_tau(tf_host_cur, point.f, z, px_error_angle);
+   //  vec3 t=  vec3(e[k].tf_host_cur[0][3], e[k].tf_host_cur[1][3], e[k].tf_host_cur[2][3]);
+   //  // Eigen::Vector3f t(tf_host_cur.translation());
+   //  vec3 a = p[id].depth_filter.m_f.xyz*z-t;
+   //  float t_norm = length(t);
+   //  float a_norm = length(a);
+   //  float alpha = acos(dot(p[id].depth_filter.m_f.xyz,t)/t_norm); // dot product
+   //  float beta = acos(dot(a,-t)/(t_norm*a_norm)); // dot product
+   //  float beta_plus = beta + px_error_angle;
+   //  float gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
+   //  float z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
+   //  float tau= (z_plus - z); // tau
+   //  float tau_inverse = 0.5 * (1.0/max(0.0000001, z-tau) - 1.0/(z+tau));
+   //
+   //  // update the estimate--------------------------------------------------
+   //  float x=1.0/z;
+   //  float tau2=tau_inverse*tau_inverse;
+   //  // updateSeed(point, 1.0/z, tau_inverse*tau_inverse);
+   //  float norm_scale = sqrt(p[id].depth_filter.m_sigma2 + tau2);
+   //  float s2 = 1./(1./p[id].depth_filter.m_sigma2 + 1./tau2);
+   //  float m = s2*(p[id].depth_filter.m_mu/p[id].depth_filter.m_sigma2 + x/tau2);
+   //  float C1 = p[id].depth_filter.m_alpha/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta) * gaus_pdf(p[id].depth_filter.m_mu, norm_scale, x);
+   //  float C2 = p[id].depth_filter.m_beta/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta) * 1./p[id].depth_filter.m_z_range;
+   //  float normalization_constant = C1 + C2;
+   //  C1 /= normalization_constant;
+   //  C2 /= normalization_constant;
+   //  float f = C1*(p[id].depth_filter.m_alpha+1.)/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.) + C2*p[id].depth_filter.m_alpha/(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.);
+   //  float e = C1*(p[id].depth_filter.m_alpha+1.)*(p[id].depth_filter.m_alpha+2.)/((p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.)*(p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+2.))
+   //            + C2*p[id].depth_filter.m_alpha*(p[id].depth_filter.m_alpha+1.0f)/((p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+1.0f)*
+   //            (p[id].depth_filter.m_alpha+p[id].depth_filter.m_beta+2.0f));
+   //  // update parameters
+   //  float mu_new = C1*m+C2*p[id].depth_filter.m_mu;
+   //  p[id].depth_filter.m_sigma2 = C1*(s2 + m*m) + C2*(p[id].depth_filter.m_sigma2 + p[id].depth_filter.m_mu*p[id].depth_filter.m_mu) - mu_new*mu_new;
+   //  p[id].depth_filter.m_mu = mu_new;
+   //  p[id].depth_filter.m_alpha = (e-f)/(f-e/f);
+   //  p[id].depth_filter.m_beta = p[id].depth_filter.m_alpha*(1.0f-f)/f;
+   //
+   //  // memoryBarrier();
+   //  // barrier(); //TODO add again the barrier
+   //  // memoryBarrier();
+   //
+   //  // // // TODO not implemented in opengl
+   //  // const float eta_inlier = .6f;
+   //  // const float eta_outlier = .05f;
+   //  // if( ((p[id].a / (p[id].a + p[id].b)) > eta_inlier) && (sqrt(p[id].sigma2) < p[id].z_range/params.convergence_sigma2_thresh)) {
+   //  //     p[id].is_outlier = 0; // The seed converged
+   //  // }else if((p[id].a-1) / (p[id].a + p[id].b - 2) < eta_outlier){ // The seed failed to converge
+   //  //     p[id].is_outlier = 1;
+   //  //     // it->reinit();
+   //  //     //TODO do a better reinit inside a point class
+   //  //     p[id].a = 10;
+   //  //     p[id].b = 10;
+   //  //     p[id].mu = (1.0/4.0);
+   //  //     p[id].z_range = (1.0/0.1);
+   //  //     p[id].sigma2 = (p[id].z_range*p[id].z_range/36);
+   //  // }
+   //  // // if the seed has converged, we initialize a new candidate point and remove the seed
+   //  // if(sqrt(p[id].sigma2) < p[id].z_range/params.convergence_sigma2_thresh){
+   //  //     p[id].converged = 1;
+   //  // }
 
 }

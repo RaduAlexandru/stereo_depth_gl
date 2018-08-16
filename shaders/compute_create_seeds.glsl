@@ -149,7 +149,7 @@ Seed create_seed(ivec2 img_coords, vec3 hessian){
 
     //debug
     for(int i = 0; i < 16; i++){
-        s.debug[i]=i;
+        s.debug[i]=0;
     }
 
     return s;
