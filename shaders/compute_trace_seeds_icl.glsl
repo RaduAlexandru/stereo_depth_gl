@@ -173,7 +173,7 @@ void main(void) {
     const float  half_length = 0.5f * norm_epi;
 
     //the epiline is too long, and it would take too much time to search
-    if(norm_epi>30){
+    if(norm_epi>80){
         return;
     }
 
