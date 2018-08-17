@@ -202,7 +202,7 @@ void main(void) {
             // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
 
             //high qualty filter from openglsuperbible
-            float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
+            float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
 
             // float hit_color=0.0;
 
@@ -221,7 +221,6 @@ void main(void) {
     if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
         //is outlier
         is_outlier=1;
-        return;
     }
     else
     {
