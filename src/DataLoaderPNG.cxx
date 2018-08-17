@@ -276,12 +276,12 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
 
             //Get images, rgb, gradients etc
             TIME_START("read_imgs");
-            frame.rgb=cv::imread(rgb_filename.string());
+            frame.rgb=cv::imread(rgb_filename.string(), CV_LOAD_IMAGE_UNCHANGED);
 
             //gray
             cv::cvtColor ( frame.rgb, frame.gray, CV_BGR2GRAY );
             frame.gray.convertTo(frame.gray, CV_32F);
-            frame.gray/=255.0; //gray is normalized
+            // frame.gray/=255.0; //gray is normalized
             frame.gray=undistort_image(frame.gray, frame.K, frame.distort_coeffs, cam_id); //undistort only the gray image because rgb is only used for visualization
             // frame.gray/=255.0;
 
@@ -291,8 +291,8 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             //gradients
             cv::Scharr( frame.gray, frame.grad_x, CV_32F, 1, 0);
             cv::Scharr( frame.gray, frame.grad_y, CV_32F, 0, 1);
-            frame.grad_x = cv::abs(frame.grad_x);
-            frame.grad_y = cv::abs(frame.grad_y);
+            // frame.grad_x = cv::abs(frame.grad_x);
+            // frame.grad_y = cv::abs(frame.grad_y);
 
             //merge the gray image and the gradients into one 3 channel image
             std::vector<cv::Mat> channels;
@@ -304,7 +304,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
 
             // std::cout << "pusing frame with tf corld of " << frame.tf_cam_world.matrix() << '\n';
             // std::cout << "pusing frame with K of " << frame.K << '\n';
-
+            std::cout << "pushing frame with frame_idxs " << frame.frame_idx << '\n';
 
             m_frames_buffer_per_cam[cam_id].enqueue(frame);
             nr_frames_read_for_cam++;
@@ -508,6 +508,8 @@ void DataLoaderPNG::read_pose_file_icl(){
             >> position(0) >> position(1) >> position(2)
             >> quat.x() >> quat.y() >> quat.z() >> quat.w();
 
+        // timestamp=timestamp-1; //timestamp starts at 1 and filenames starts at 0. We substract 1 from the timestamp to make it match
+
         // std::cout << "input is \n" << " " << timestamp << " " << position << " " << quat.matrix()  << "\n";
         Eigen::Affine3f pose;
         pose.matrix().block<3,3>(0,0)=quat.toRotationMatrix();
@@ -543,6 +545,12 @@ bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t 
     //     LOG(WARNING) << "time difference for pose is way too large! " << (smallest_timestamp_diff/1e6) << "s." << '\n';
     //     return false;
     // }
+
+    if ( smallest_timestamp_diff!=0 ){
+        LOG(WARNING) << "time difference for pose is way too large! " << smallest_timestamp_diff << '\n';
+        return false;
+    }
+
     // std::cout << "smallest_timestamp_diff is " << smallest_timestamp_diff << '\n';
     // std::cout << "smallest_timestamp_diff_no_abs is " << smallest_timestamp_diff_no_abs << '\n';
     // std::cout << "deviation_ms is " << deviation_ms << '\n';
@@ -625,6 +633,7 @@ void DataLoaderPNG::get_intrinsics(Eigen::Matrix3f& K, Eigen::Matrix<float, 5, 1
             K(1,1)=-480; //fy
             K(0,2)=319.5; // cx
             K(1,2)=239.5; //cy
+            K(2,2)=1.0;
             distort_coeffs.setZero();
         }else if(cam_id==1){
             //even though we have one cam we set this one too because it's easier to deal with it like this for now.
@@ -632,6 +641,7 @@ void DataLoaderPNG::get_intrinsics(Eigen::Matrix3f& K, Eigen::Matrix<float, 5, 1
             K(1,1)=-480; //fy
             K(0,2)=319.5; // cx
             K(1,2)=239.5; //cy
+            K(2,2)=1.0;
             distort_coeffs.setZero();
         }
     }else{

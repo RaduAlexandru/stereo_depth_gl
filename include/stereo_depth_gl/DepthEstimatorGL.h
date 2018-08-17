@@ -295,11 +295,16 @@ public:
 
     //for debugging we run only icl nuim
     int m_start_frame;
+    std::vector<Seed> m_immature_points;
     GLuint m_points_gl_buf; //stores all the immature points
     gl::Texture2D m_cur_frame;
     Mesh m_mesh;
     std::vector<Frame> m_frames;
+    Frame ref_frame; //frame containing the seed points 
     void compute_depth_and_create_mesh_ICL();
+
+    void compute_depth_and_create_mesh_ICL_incremental(const Frame& frame_left, const Frame& frame_right);
+    std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
 
 
 private:
@@ -316,7 +321,7 @@ private:
 
 
     //debug with icl nuim
-    std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
+
     std::vector<Seed> create_immature_points (const Frame& frame);
     Mesh create_mesh_ICL(const std::vector<Seed>& immature_points, const std::vector<Frame>& frames);
 

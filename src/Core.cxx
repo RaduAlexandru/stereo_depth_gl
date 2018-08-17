@@ -134,17 +134,21 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
      }
 
 
-     m_depth_estimator_gl->compute_depth_and_create_mesh_ICL();
-     //update point cloud
-     Mesh point_cloud=m_depth_estimator_gl->m_mesh;
-     std::string cloud_name="point_cloud";
-     point_cloud.name=cloud_name;
-     point_cloud.m_show_points=true;
-     if(m_scene.does_mesh_with_name_exist(cloud_name)){
-         m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
-     }else{
-         m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
-     }
+     //batch one works
+     // m_depth_estimator_gl->compute_depth_and_create_mesh_ICL();
+     // //update point cloud
+     // Mesh point_cloud=m_depth_estimator_gl->m_mesh;
+     // std::string cloud_name="point_cloud";
+     // point_cloud.name=cloud_name;
+     // point_cloud.m_show_points=true;
+     // if(m_scene.does_mesh_with_name_exist(cloud_name)){
+     //     m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+     // }else{
+     //     m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+     // }
+
+
+     m_depth_estimator_gl->m_frames=m_depth_estimator_gl->loadDataFromICLNUIM("/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png", 60);
 
 }
 
@@ -179,13 +183,13 @@ void Core::update() {
         Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
         Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
         // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
-        m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
-        m_depth_estimator_gl->upload_gray_and_grad_stereo_pair(frame_left.gray_with_gradients, frame_right.gray_with_gradients);
-        m_depth_estimator_gl->compute_depth_icl(frame_left,frame_right);
+        // m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
+        // m_depth_estimator_gl->upload_gray_and_grad_stereo_pair(frame_left.gray_with_gradients, frame_right.gray_with_gradients);
+        m_depth_estimator_gl->compute_depth_and_create_mesh_ICL_incremental(frame_left,frame_right);
 
 
-        //update point cloud
-        Mesh point_cloud=m_depth_estimator_gl->create_point_cloud();
+        //update mesh from the debug icl_incremental
+        Mesh point_cloud=m_depth_estimator_gl->m_mesh;
         std::string cloud_name="point_cloud";
         point_cloud.name=cloud_name;
         point_cloud.m_show_points=true;
@@ -194,6 +198,18 @@ void Core::update() {
         }else{
             m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
         }
+
+
+        // //update point cloud
+        // Mesh point_cloud=m_depth_estimator_gl->create_point_cloud();
+        // std::string cloud_name="point_cloud";
+        // point_cloud.name=cloud_name;
+        // point_cloud.m_show_points=true;
+        // if(m_scene.does_mesh_with_name_exist(cloud_name)){
+        //     m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+        // }else{
+        //     m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+        // }
 
 
 
