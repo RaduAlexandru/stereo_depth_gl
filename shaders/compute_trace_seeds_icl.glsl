@@ -172,6 +172,11 @@ void main(void) {
     vec2 epi_dir = epi_line / norm_epi;
     const float  half_length = 0.5f * norm_epi;
 
+    //the epiline is too long, and it would take too much time to search
+    if(norm_epi>30){
+        return;
+    }
+
     vec2 bestKp=vec2(-1.0,-1.0);
     float bestEnergy = 1e10;
 
@@ -213,12 +218,13 @@ void main(void) {
     }
 
     int is_outlier=0;
-    // if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
-    //     //is outlier
-    //     is_outlier=1;
-    // }
-    // else
-    // {
+    if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
+        //is outlier
+        is_outlier=1;
+        return;
+    }
+    else
+    {
         // vec2 epi_dir_inv=vec2(epi_dir.y,-epi_dir.x);
         // float a = epi_dir * p[id].gradH * epi_dir;
         // float b = epi_dir_inv * point.gradH * epi_dir_inv;
@@ -247,7 +253,7 @@ void main(void) {
         // memoryBarrier();
         // barrier();
         // memoryBarrier();
-    // }
+    }
     // memoryBarrier();
     // barrier();
     // memoryBarrier();
