@@ -73,7 +73,7 @@ void DataLoaderPNG::init_params(){
     }
     std::string dataset_type_string=(std::string)loader_config["dataset_type"];
     if(dataset_type_string=="eth") m_dataset_type=DatasetType::ETH;
-    if(dataset_type_string=="icl") m_dataset_type=DatasetType::ICL;
+    else if(dataset_type_string=="icl") m_dataset_type=DatasetType::ICL;
     else LOG(FATAL) << " Dataset type is not known " << dataset_type_string;
     m_pose_file=(std::string)loader_config["pose_file"];
 
@@ -276,7 +276,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
 
             //Get images, rgb, gradients etc
             TIME_START("read_imgs");
-            frame.rgb=cv::imread(rgb_filename.string(), CV_LOAD_IMAGE_UNCHANGED);
+            frame.rgb=cv::imread(rgb_filename.string());
 
             //gray
             cv::cvtColor ( frame.rgb, frame.gray, CV_BGR2GRAY );
