@@ -694,7 +694,7 @@ std::vector<Seed> DepthEstimatorGL::create_seeds (const Frame& frame){
     // //             // }
     // //             // point.ncc_const_templ = m_pattern.get_nr_points() * ncc_sum_templ_sq - (double) point.ncc_sum_templ*point.ncc_sum_templ;
     // //
-    // //             point.energyTH = m_pattern.get_nr_points()*m_params.outlierTH;
+    // //             point.energyTH = m_pattern.get_nr_points()*m_params.residualTH;
     // //             point.energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
     // //
     // //             point.quality=10000;
@@ -1479,19 +1479,31 @@ std::vector<Seed> DepthEstimatorGL::create_immature_points (const Frame& frame){
 
                     point.m_intensity[p_idx]=texture_interpolate(frame.gray, point.m_uv.x()+offset(0), point.m_uv.y()+offset(1), InterpolType::NEAREST);
 
-                    // float grad_x_val=texture_interpolate(frame.grad_x, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
-                    // float grad_y_val=texture_interpolate(frame.grad_y, point.u+offset(0), point.v+offset(1), InterpolType::NEAREST);
+                    // float grad_x_val=texture_interpolate(frame.grad_x,  point.m_uv.x()+offset(0), point.m_uv.y()+offset(1), InterpolType::NEAREST);
+                    // float grad_y_val=texture_interpolate(frame.grad_y,  point.m_uv.x()+offset(0), point.m_uv.y()+offset(1), InterpolType::NEAREST);
                     // float squared_norm=grad_x_val*grad_x_val + grad_y_val*grad_y_val;
                     // point.weights[p_idx] = sqrtf(m_params.outlierTHSumComponent / (m_params.outlierTHSumComponent + squared_norm));
-
                     // //for ngf
                     // point.colorD[p_idx] = Eigen::Vector2f(grad_x_val,grad_y_val);
                     // point.colorD[p_idx] /= sqrt(point.colorD[p_idx].squaredNorm()+m_params.eta);
                     // point.colorGrad[p_idx] =  Eigen::Vector2f(grad_x_val,grad_y_val);
 
+                    //for ngf attempt 2
+                    float grad_x_val=texture_interpolate(frame.grad_x,  point.m_uv.x()+offset(0), point.m_uv.y()+offset(1), InterpolType::NEAREST);
+                    float grad_y_val=texture_interpolate(frame.grad_y,  point.m_uv.x()+offset(0), point.m_uv.y()+offset(1), InterpolType::NEAREST);
+                    point.m_normalized_grad[p_idx] << grad_x_val, grad_y_val;
+                    point.m_normalized_grad[p_idx] /= sqrt(point.m_normalized_grad[p_idx].squaredNorm() + m_params.eta);
+                    if(point.m_normalized_grad[p_idx].norm()<1e-3){
+                        point.m_zero_grad[p_idx]=1;
+                    }else{
+                        point.m_zero_grad[p_idx]=0;
+                        point.m_active_pattern_points++;
+                    }
+
+
                 }
-                point.m_energyTH = m_pattern.get_nr_points()*m_params.outlierTH;
-                point.m_energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
+                point.m_energyTH = m_pattern.get_nr_points()*m_params.residualTH;
+                // point.m_energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
 
                 point.m_last_error = -1;
                 point.depth_filter.m_is_outlier = 0;
@@ -1698,18 +1710,18 @@ Mesh DepthEstimatorGL::create_mesh_ICL(const std::vector<Seed>& immature_points,
 
     }
 
-    // //make also some colors based on depth
-    // mesh.C.resize(immature_points.size(),3);
-    // double min_z, max_z;
-    // min_z = mesh.V.col(2).minCoeff();
-    // max_z = mesh.V.col(2).maxCoeff();
-    // // min_z=-6.5;
-    // // max_z=-4;
-    // std::cout << "min max z is " << min_z << " " << max_z << '\n';
-    // for (size_t i = 0; i < mesh.C.rows(); i++) {
-    //     float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
-    //     mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
-    // }
+    //make also some colors based on depth
+    mesh.C.resize(immature_points.size(),3);
+    double min_z, max_z;
+    min_z = mesh.V.col(2).minCoeff();
+    max_z = mesh.V.col(2).maxCoeff();
+    min_z=-5.5;
+    max_z=-2;
+    std::cout << "min max z is " << min_z << " " << max_z << '\n';
+    for (size_t i = 0; i < mesh.C.rows(); i++) {
+        float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
+        mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+    }
 
 
     // // //make also some colors based on the beta value
@@ -1739,19 +1751,19 @@ Mesh DepthEstimatorGL::create_mesh_ICL(const std::vector<Seed>& immature_points,
     //     mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
     // }
 
-    // //make also some colors based on the last_error value
-    mesh.C.resize(immature_points.size(),3);
-    double min_error, max_error;
-    min_error = last_errors.minCoeff();
-    max_error = last_errors.maxCoeff();
-    max_error=800;
-    // min_z=-6.5;
-    // max_z=-4;
-    std::cout << "min max error is " << min_error << " " << max_error << '\n';
-    for (size_t i = 0; i < mesh.C.rows(); i++) {
-        float gray_val = lerp(last_errors(i), min_error, max_error, 0.0, 1.0 );
-        mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
-    }
+    // // //make also some colors based on the last_error value
+    // mesh.C.resize(immature_points.size(),3);
+    // double min_error, max_error;
+    // min_error = last_errors.minCoeff();
+    // max_error = last_errors.maxCoeff();
+    // max_error=800;
+    // // min_z=-6.5;
+    // // max_z=-4;
+    // std::cout << "min max error is " << min_error << " " << max_error << '\n';
+    // for (size_t i = 0; i < mesh.C.rows(); i++) {
+    //     float gray_val = lerp(last_errors(i), min_error, max_error, 0.0, 1.0 );
+    //     mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+    // }
 
 
     return mesh;

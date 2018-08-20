@@ -57,7 +57,7 @@ layout (binding = 0, std430) coherent buffer array_seeds_block{
 layout (std140) uniform params_block{
     float maxPerPtError;
     float slackFactor;
-    float outlierTH;					// higher -> less strict
+    float residualTH;					// higher -> less strict
     float overallEnergyTHWeight;
     float outlierTHSumComponent; 		// higher -> less strong gradient-based reweighting .
     float huberTH; // Huber Threshold

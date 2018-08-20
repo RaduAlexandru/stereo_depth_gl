@@ -30,7 +30,8 @@
 struct Params {
     float maxPerPtError;
     float slackFactor;
-    float outlierTH = 12*12;					// higher -> less strict
+    // float outlierTH = 0.25;			//ngf		// higher -> less strict
+    float residualTH = 12*12;					// higher -> less strict
     float overallEnergyTHWeight = 1;
     float outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
     float huberTH = 9; // Huber Threshold
@@ -300,7 +301,7 @@ public:
     gl::Texture2D m_cur_frame;
     Mesh m_mesh;
     std::vector<Frame> m_frames;
-    Frame ref_frame; //frame containing the seed points 
+    Frame ref_frame; //frame containing the seed points
     void compute_depth_and_create_mesh_ICL();
 
     void compute_depth_and_create_mesh_ICL_incremental(const Frame& frame_left, const Frame& frame_right);

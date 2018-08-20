@@ -59,7 +59,7 @@ layout (binding = 0, std430) coherent buffer array_seeds_block{
 layout (std140) uniform params_block{
     float maxPerPtError;
     float slackFactor;
-    float outlierTH;					// higher -> less strict
+    float residualTH;					// higher -> less strict
     float overallEnergyTHWeight;
     float outlierTHSumComponent; 		// higher -> less strong gradient-based reweighting .
     float huberTH; // Huber Threshold
@@ -123,6 +123,8 @@ uniform vec2 affine_cr;
 uniform float px_error_angle;
 uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
 uniform int pattern_rot_nr_points;
+
+
 
 void main(void) {
     int min_border=20;
@@ -206,15 +208,24 @@ void main(void) {
             //for the case when the image is padded
             // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
 
-            //high qualty filter from openglsuperbible
-            float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
+            // //(Brightness Constancy Assumption) high qualty filter from openglsuperbible
+            // float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
+            // const float residual = hit_color - (affine_cr.x * p[id].m_intensity[idx] + affine_cr.y);
+            // float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
+            // energy += hw *residual*residual*(2-hw);
 
-            // float hit_color=0.0;
-
-            const float residual = hit_color - (affine_cr.x * p[id].m_intensity[idx] + affine_cr.y);
-
-            float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
+            //Uni modal NGF
+            vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
+            vec2 grads=hit_color_and_grads.yz;
+            grads /= sqrt(dot(grads,grads)+params.eta);
+            const float nn = dot(grads,p[id].m_normalized_grad[idx]);
+            const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf
+            //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
+            const float fr = abs(residual);
+            float hw = fr < params.huberTH ? 1 : params.huberTH / fr;
             energy += hw *residual*residual*(2-hw);
+
+
         }
 
 
@@ -239,15 +250,17 @@ void main(void) {
 
     //check that the best energy is different enough from the second best
     int is_outlier=0;
-    if(bestEnergy*1.3>second_best_energy && second_best_energy!=1e10
-        && distance(bestKp,second_best_kp)>2 ){
+    if(bestEnergy*1.1>second_best_energy && second_best_energy!=1e10
+        && distance(bestKp,second_best_kp)>3 ){
         is_outlier=1;
+         p[id].depth_filter.m_is_outlier=1;
     }
 
 
-    if ( bestEnergy > p[id].m_energyTH * 1.1f ) {
+    if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
         //is outlier
         is_outlier=1;
+             // p[id].depth_filter.m_is_outlier=1;
     }
     else
     {
@@ -299,9 +312,9 @@ void main(void) {
 
 
     //set this to 1 so that we don't represent the point in the mesh
-    if(is_outlier==1){
-        p[id].depth_filter.m_is_outlier=1;
-    }
+    // if(is_outlier==1){
+    //     p[id].depth_filter.m_is_outlier=1;
+    // }
 
 
 
