@@ -125,6 +125,8 @@ uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
 uniform int pattern_rot_nr_points;
 
 void main(void) {
+    int min_border=20;
+
     int id = int(gl_GlobalInvocationID.x);
 
     // // check if point is visible in the current image
@@ -139,7 +141,7 @@ void main(void) {
 
     const vec3 kp_c = K * xyz_f;
     const vec2 kp_c_h=kp_c.xy/kp_c.z;
-    if ( kp_c_h.x < 0 || kp_c_h.x >= frame_size.x || kp_c_h.y < 0 || kp_c_h.y >= frame_size.y ) {
+    if ( kp_c_h.x < min_border || kp_c_h.x >= frame_size.x-min_border || kp_c_h.y < min_border || kp_c_h.y >= frame_size.y-min_border ) {
         return; // TODO in gl this is a return
     }
 
@@ -179,6 +181,9 @@ void main(void) {
 
     vec2 bestKp=vec2(-1.0,-1.0);
     float bestEnergy = 1e10;
+    float second_best_energy = 1e10;
+    vec2 second_best_kp = vec2(-1.0,-1.0);
+
 
 
     for(float l = -half_length; l <= half_length; l += 0.7f)
@@ -186,8 +191,8 @@ void main(void) {
         float energy = 0;
         vec2 kp = uvMean + l*epi_dir;
 
-        if( ( kp.x >= (frame_size.x-20) )  || ( kp.y >= (frame_size.y-20) ) || ( kp.x < 20 ) || ( kp.y < 20) ){
-            continue;
+        if( ( kp.x >= (frame_size.x-min_border) )  || ( kp.y >= (frame_size.y-min_border) ) || ( kp.x < min_border ) || ( kp.y < min_border) ){
+            return ;
         }
 
         for(int idx=0;idx<pattern_rot_nr_points; ++idx){
@@ -211,14 +216,36 @@ void main(void) {
             float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
             energy += hw *residual*residual*(2-hw);
         }
-        if ( energy < bestEnergy )
-        {
-            bestKp = kp; bestEnergy = energy;
+
+
+        //store also the second best energy
+        if ( energy < bestEnergy ){
+            //got a new global maximum
+            second_best_energy=bestEnergy;
+            second_best_kp=bestKp;
+            bestKp = kp;
+            bestEnergy = energy;
+        }else if(energy < second_best_energy && energy != second_best_energy){
+            //got a new second max that is not as low as the bestEnergy but still lowers than the than the previous second best
+            second_best_energy=energy;
+            second_best_kp=kp;
         }
+
+
+
     }
 
+    p[id].m_last_error=bestEnergy;
+
+    //check that the best energy is different enough from the second best
     int is_outlier=0;
-    if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
+    if(bestEnergy*1.3>second_best_energy && second_best_energy!=1e10
+        && distance(bestKp,second_best_kp)>2 ){
+        is_outlier=1;
+    }
+
+
+    if ( bestEnergy > p[id].m_energyTH * 1.1f ) {
         //is outlier
         is_outlier=1;
     }
@@ -271,7 +298,10 @@ void main(void) {
 
 
 
-
+    //set this to 1 so that we don't represent the point in the mesh
+    if(is_outlier==1){
+        p[id].depth_filter.m_is_outlier=1;
+    }
 
 
 

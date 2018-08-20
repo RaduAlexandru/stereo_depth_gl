@@ -1493,6 +1493,9 @@ std::vector<Seed> DepthEstimatorGL::create_immature_points (const Frame& frame){
                 point.m_energyTH = m_pattern.get_nr_points()*m_params.outlierTH;
                 point.m_energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
 
+                point.m_last_error = -1;
+                point.depth_filter.m_is_outlier = 0;
+
                 immature_points.push_back(point);
             }
 
@@ -1641,6 +1644,13 @@ Mesh DepthEstimatorGL::create_mesh_ICL(const std::vector<Seed>& immature_points,
     mesh.V.resize(immature_points.size(),3);
     mesh.V.setZero();
 
+    Eigen::VectorXd betas(immature_points.size());
+    betas.setZero();
+    Eigen::VectorXd sigmas(immature_points.size());
+    sigmas.setZero();
+    Eigen::VectorXd last_errors(immature_points.size());
+    last_errors.setZero();
+
 
     for (size_t i = 0; i < immature_points.size(); i++) {
         float u=immature_points[i].m_uv.x();
@@ -1649,7 +1659,8 @@ Mesh DepthEstimatorGL::create_mesh_ICL(const std::vector<Seed>& immature_points,
         // float depth=1.0;
         float depth=1/immature_points[i].depth_filter.m_mu;
 
-        if(std::isfinite(immature_points[i].depth_filter.m_mu) && immature_points[i].depth_filter.m_mu>=0.1){
+        if(std::isfinite(immature_points[i].depth_filter.m_mu) && immature_points[i].depth_filter.m_mu>=0.1
+            && immature_points[i].depth_filter.m_is_outlier==0 ){
         // if(true){
 
             // float outlier_measure=immature_points[i].a/(immature_points[i].a+immature_points[i].b);
@@ -1677,21 +1688,68 @@ Mesh DepthEstimatorGL::create_mesh_ICL(const std::vector<Seed>& immature_points,
 
             mesh.V.row(i)=point_cam.cast<double>();
 
+            //store also some atributes fro the seeds
+            betas(i)=immature_points[i].depth_filter.m_beta;
+            sigmas(i)=immature_points[i].depth_filter.m_sigma2;
+            last_errors(i)=immature_points[i].m_last_error;
+
         }
 
 
     }
 
-    //make also some colors based on depth
+    // //make also some colors based on depth
+    // mesh.C.resize(immature_points.size(),3);
+    // double min_z, max_z;
+    // min_z = mesh.V.col(2).minCoeff();
+    // max_z = mesh.V.col(2).maxCoeff();
+    // // min_z=-6.5;
+    // // max_z=-4;
+    // std::cout << "min max z is " << min_z << " " << max_z << '\n';
+    // for (size_t i = 0; i < mesh.C.rows(); i++) {
+    //     float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
+    //     mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+    // }
+
+
+    // // //make also some colors based on the beta value
+    // mesh.C.resize(immature_points.size(),3);
+    // double min_beta, max_beta;
+    // min_beta = betas.minCoeff();
+    // max_beta = betas.maxCoeff();
+    // // min_z=-6.5;
+    // // max_z=-4;
+    // std::cout << "min max beta is " << min_beta << " " << max_beta << '\n';
+    // for (size_t i = 0; i < mesh.C.rows(); i++) {
+    //     float gray_val = lerp(betas(i), min_beta, max_beta, 0.0, 1.0 );
+    //     mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+    // }
+
+    // // //make also some colors based on the sigma value
+    // mesh.C.resize(immature_points.size(),3);
+    // double min_sigma, max_sigma;
+    // min_sigma = sigmas.minCoeff();
+    // max_sigma = sigmas.maxCoeff();
+    // max_sigma=0.05;
+    // // min_z=-6.5;
+    // // max_z=-4;
+    // std::cout << "min max sigma is " << min_sigma << " " << max_sigma << '\n';
+    // for (size_t i = 0; i < mesh.C.rows(); i++) {
+    //     float gray_val = lerp(sigmas(i), min_sigma, max_sigma, 0.0, 1.0 );
+    //     mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+    // }
+
+    // //make also some colors based on the last_error value
     mesh.C.resize(immature_points.size(),3);
-    double min_z, max_z;
-    min_z = mesh.V.col(2).minCoeff();
-    max_z = mesh.V.col(2).maxCoeff();
+    double min_error, max_error;
+    min_error = last_errors.minCoeff();
+    max_error = last_errors.maxCoeff();
+    max_error=800;
     // min_z=-6.5;
     // max_z=-4;
-    std::cout << "min max z is " << min_z << " " << max_z << '\n';
+    std::cout << "min max error is " << min_error << " " << max_error << '\n';
     for (size_t i = 0; i < mesh.C.rows(); i++) {
-        float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
+        float gray_val = lerp(last_errors(i), min_error, max_error, 0.0, 1.0 );
         mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
     }
 
