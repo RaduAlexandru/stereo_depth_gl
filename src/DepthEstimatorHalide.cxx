@@ -66,7 +66,8 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
     cv::Mat gray_left=frame_left.gray/255;
     cv::Mat gray_right=frame_right.gray/255;
 
-    cv::Mat gray_left_smooth=guided_filter(gray_left, 5, 0.001);
+    // guided filter
+    cv::Mat gray_left_smooth=guided_filter(gray_left, gray_left, 5, 0.001);
 
     debug_img_left=gray_left;
     debug_img_right=gray_left_smooth;
@@ -85,16 +86,20 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
     // //clamp the x and y so as to not go out of bounds
     // Var x("x"),y("y"), d("d");
     // Func clamped("clamped");
-    // Expr clamped_x_d = clamp(x+d, 0, buf_right.width()-1);
+    // // Expr clamped_x_d = clamp(x+d, 0, buf_right.width()-1);
+    // Func buf_right_cl = BoundaryConditions::repeat_edge(buf_right);
     //
     //
     // //cost volume
     // Func cost_vol("cost_vol");
     // cost_vol(x,y,d)=999999.0;
-    // cost_vol(x,y,d) = Halide::abs(buf_left(x,y) - buf_right(clamped_x_d,y));
+    // cost_vol(x,y,d) = Halide::abs(buf_left(x,y) - buf_right_cl(x+d,y));
     //
     // //filter the cost volume
     // //TODO
+    //
+    //
+    //
     //
     //
     // //argmax the cost volume
@@ -112,56 +117,29 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
     // // cost_vol.compute_root();
     // // argmax_disparity_tex.compute_root();
     //
-    // //auto schedule
-    // // Halide::Pipeline pipeline(argmax_disparity_tex);
-    // // argmax_disparity_tex.estimate(x, 0, img_output.cols)
-    // //         .estimate(y, 0, img_output.rows);
-    // // // halide_set_num_threads(1);
-    // // std::string schedule=pipeline.auto_schedule(Halide::get_jit_target_from_environment());
-    // // std::cout << "schedule is \n" << schedule  << '\n';
-    //
-    // //autoschedule
-    // {
+    // // auto schedule
+    // const int kParallelism = 32;
+    // const int kLastLevelCacheSize = 314573;
+    // const int kBalance = 1; //how much more expensive is the memory vs arithmetic costs. Higher values means less compute_root
+    // MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
     // Halide::Pipeline pipeline(argmax_disparity_tex);
-    // Var x_i("x_i");
-    // Var x_i_vi("x_i_vi");
-    // Var x_i_vo("x_i_vo");
-    // Var x_o("x_o");
-    // Var x_vi("x_vi");
-    // Var x_vo("x_vo");
+    // argmax_disparity_tex.estimate(x, 0, img_output.cols)
+    //         .estimate(y, 0, img_output.rows);
+    // // halide_set_num_threads(1);
+    // std::string schedule=pipeline.auto_schedule(Halide::get_jit_target_from_environment(), machine_params);
+    // pipeline.compile_jit();
+    // std::cout << "schedule is \n" << schedule  << '\n';
     //
-    // Func argmax_disparity_tex = pipeline.get_func(2);
-    // Func argmin = pipeline.get_func(1);
     //
-    // {
-    //     Var x = argmax_disparity_tex.args()[0];
-    //     Var y = argmax_disparity_tex.args()[1];
-    //     argmax_disparity_tex
-    //         .compute_root()
-    //         .split(x, x_o, x_i, 64)
-    //         .reorder(x_i, x_o, y)
-    //         .split(x_i, x_i_vo, x_i_vi, 8)
-    //         .vectorize(x_i_vi)
-    //         .parallel(y);
-    // }
-    // {
-    //     Var x = argmin.args()[0];
-    //     argmin
-    //         .compute_at(argmax_disparity_tex, x_o)
-    //         .split(x, x_vo, x_vi, 8)
-    //         .vectorize(x_vi);
-    //     argmin.update(0)
-    //         .split(x, x_vo, x_vi, 8, TailStrategy::GuardWithIf)
-    //         .vectorize(x_vi);
-    // }
-    // }
     //
     //
     //
     // //realize
     // argmax_disparity_tex.realize(buf_out);
     // TIME_START("compute_depth_halide");
-    // argmax_disparity_tex.realize(buf_out);
+    // for (size_t i = 0; i < 100; i++) {
+    //     argmax_disparity_tex.realize(buf_out);
+    // }
     // TIME_END("compute_depth_halide");
     // argmax_disparity_tex.compile_to_lowered_stmt("argmax_disparity_tex.html", {}, HTML);
     //
@@ -169,67 +147,90 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
     // debug_img_left=img_output/max_disparity;
     // // cv:normalize(img_output, debug_img_left, 0, 1.0, cv::NORM_MINMAX);
     // // debug_img_left=;
-    //
-    //
-    //
-    //
-    //
-    // // debug_img_left=frame_left.gray;
-    // // debug_img_right=frame_right.gray;
+
+
+
+
+
+    // debug_img_left=frame_left.gray;
+    // debug_img_right=frame_right.gray;
 
 }
 
-cv::Mat DepthEstimatorHalide::guided_filter(const cv::Mat& I_cv, const float radius, const float eps){
+cv::Mat DepthEstimatorHalide::guided_filter(const cv::Mat& I_cv, const cv::Mat& p_cv, const float radius, const float eps){
 
     Buffer<float> I_buf((float*)I_cv.data, I_cv.cols, I_cv.rows);
+    Buffer<float> p_buf((float*)p_cv.data, p_cv.cols, p_cv.rows);
     Func I = BoundaryConditions::repeat_edge(I_buf);
+    Func p = BoundaryConditions::repeat_edge(p_buf);
 
     //clamp the x and y so as to not go out of bounds
     Var x("x"),y("y"), d("d");
 
 
 
-    //p is the same as I because the guidance image and the smoothign image are the same
-    RDom r(-radius,radius,-radius,radius);
-    // Expr cl_x = clamp(x+r.x-r.x/2, 0, I.width()-1);
-    // Expr cl_y = clamp(y+r.y-r.y/2, 0, I.height()-1);
-    Expr rx=x+r.x;
-    Expr ry=y+r.y;
-
-    Func mean_I;
-    mean_I(x,y)=sum(I(rx, ry))/(radius*radius);
-    Func II;
-    II(x,y)=I(x,y)*I(x,y);
-    Func mean_II;
-    mean_II(x,y) = sum(II(rx, ry))/(radius*radius);
-    Func cov_Ip;
-    cov_Ip(x,y)=mean_II(x,y)-mean_I(x,y)*mean_I(x,y);
-
-    Func a;
-    a(x,y)=cov_Ip(x,y)/ (cov_Ip(x,y) +eps);
-    Func b;
-    b(x,y)=mean_I(x,y) - a(x,y)*mean_I(x,y);
-
-    Func mean_a;
-    mean_a(x,y)=sum(a(rx, ry))/(radius*radius);
-    Func mean_b;
-    mean_b(x,y)=sum(b(rx, ry))/(radius*radius);
-
-    Func out;
-    out(x,y)=mean_a(x,y)*I(x,y) + mean_b(x,y);
-    //trying out to ignore some parts
+    // //p is the same as I because the guidance image and the smoothign image are the same
+    // RDom r(-radius,radius,-radius,radius);
+    // Expr rx=x+r.x;
+    // Expr ry=y+r.y;
+    //
+    // Func mean_I;
+    // mean_I(x,y)=sum(I(rx, ry))/(radius*radius);
+    // Func II;
+    // II(x,y)=I(x,y)*I(x,y);
+    // Func mean_II;
+    // mean_II(x,y) = sum(II(rx, ry))/(radius*radius);
+    // Func cov_Ip;
+    // cov_Ip(x,y)=mean_II(x,y)-mean_I(x,y)*mean_I(x,y);
+    //
+    // Func a;
+    // a(x,y)=cov_Ip(x,y)/ (cov_Ip(x,y) +eps);
+    // Func b;
+    // b(x,y)=mean_I(x,y) - a(x,y)*mean_I(x,y);
+    //
+    // Func mean_a;
+    // mean_a(x,y)=sum(a(rx, ry))/(radius*radius);
+    // Func mean_b;
+    // mean_b(x,y)=sum(b(rx, ry))/(radius*radius);
+    //
+    // Func out;
     // out(x,y)=mean_a(x,y)*I(x,y) + mean_b(x,y);
+    // //trying out to ignore some parts
+    // // out(x,y)=select(x<400, 0, mean_a(x,y)*I(x,y) + mean_b(x,y));
+    //
+    //
+    // // cv::Mat mean_p = boxfilter(p, r);
+    // // cv::Mat mean_Ip = boxfilter(I.mul(p), r);
+    // // cv::Mat cov_Ip = mean_Ip - mean_I.mul(mean_p); // this is the covariance of (I, p) in each local patch.
+    // //
+    // // cv::Mat a = cov_Ip / (var_I + eps); // Eqn. (5) in the paper;
+    // // cv::Mat b = mean_p - a.mul(mean_I); // Eqn. (6) in the paper;
+    // //
+    // // cv::Mat mean_a = boxfilter(a, r);
+    // // cv::Mat mean_b = boxfilter(b, r);
 
 
-    // cv::Mat mean_p = boxfilter(p, r);
-    // cv::Mat mean_Ip = boxfilter(I.mul(p), r);
-    // cv::Mat cov_Ip = mean_Ip - mean_I.mul(mean_p); // this is the covariance of (I, p) in each local patch.
-    //
-    // cv::Mat a = cov_Ip / (var_I + eps); // Eqn. (5) in the paper;
-    // cv::Mat b = mean_p - a.mul(mean_I); // Eqn. (6) in the paper;
-    //
-    // cv::Mat mean_a = boxfilter(a, r);
-    // cv::Mat mean_b = boxfilter(b, r);
+
+
+
+
+
+    //attempt 2 guidance and image are different
+    //things that can be precomputed
+    Func mean_I = boxfilter(I, radius);
+    Func mean_II = boxfilter(mul_elem(I,I), radius);
+    Func var_I;     var_I(x,y) = mean_II(x,y) - mul_elem(mean_I,mean_I)(x,y);
+
+    //things that depend on the image itself and not the guidance
+    Func mean_p = boxfilter(p, radius);
+    Func mean_Ip = boxfilter(mul_elem(I,p),radius);
+    Func cov_Ip;    cov_Ip(x,y)=mean_Ip(x,y) - mul_elem(mean_I,mean_p)(x,y);
+    Func a;         a(x,y)=cov_Ip(x,y) / (var_I(x,y) +eps);
+    Func b;         b(x,y)=mean_p(x,y) - mul_elem(a,mean_I)(x,y);
+    Func mean_a = boxfilter(a, radius);
+    Func mean_b = boxfilter(b,radius);
+    Func out;      out(x,y)=mul_elem(mean_a,I)(x,y) + mean_b(x,y);
+
 
 
     //output
@@ -278,8 +279,28 @@ cv::Mat DepthEstimatorHalide::guided_filter(const cv::Mat& I_cv, const float rad
 
 
 
+
     return img_output;
 
+}
+
+Halide::Func DepthEstimatorHalide::boxfilter(const Halide::Func& I, const int radius){
+    Var x("x"),y("y");
+    RDom r(-radius,radius,-radius,radius);
+    Expr rx=x+r.x;
+    Expr ry=y+r.y;
+
+    Func mean_I;
+    mean_I(x,y)=sum(I(rx, ry))/(radius*radius);
+
+    return mean_I;
+}
+
+Halide::Func DepthEstimatorHalide::mul_elem(const Halide::Func& lhs, const Halide::Func& rhs){
+    Var x("x"),y("y");
+    Func mul;
+    mul(x,y)=lhs(x,y)*rhs(x,y);
+    return mul;
 }
 
 

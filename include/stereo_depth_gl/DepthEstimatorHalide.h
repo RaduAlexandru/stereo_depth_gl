@@ -54,7 +54,9 @@ public:
 private:
 
     cv::Mat undistort_rectify_image(const cv::Mat img, const Frame& frame_left, const Frame& frame_right);
-    cv::Mat guided_filter(const cv::Mat& img, const float radius, const float eps);
+    cv::Mat guided_filter(const cv::Mat& I, const cv::Mat& p, const float radius, const float eps);
+    Halide::Func boxfilter(const Halide::Func& I, const int radius);
+    Halide::Func mul_elem(const Halide::Func& lhs, const Halide::Func& rhs); //element wise multiplication
 
 };
 
