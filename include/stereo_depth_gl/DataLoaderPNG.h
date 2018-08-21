@@ -68,7 +68,7 @@ public:
     void set_mask_for_cam(const std::string mask_filename, const int cam_id); //set a mask which will cause parts of the rgb, classes and probs images to be ignored
     void republish_last_frame_from_cam(const int cam_id); //put the last frame back into the ringbuffer so we cna read it from the core
     void republish_last_frame_all_cams();
-    cv::Mat undistort_image(const cv::Mat& gray_img, const Eigen::Matrix3f& K, const Eigen::VectorXf& distort_coeffs, const int cam_id);
+    cv::Mat undistort_image(const cv::Mat& gray_img, Eigen::Matrix3f& K, const Eigen::VectorXf& distort_coeffs, const int cam_id);
 
 
     // void read_data();
@@ -108,6 +108,7 @@ private:
 
 
     //params
+    bool m_only_rgb;
     float m_tf_worldGL_worldROS_angle;
     std::string m_tf_worldGL_worldROS_axis;
     // std::string m_dataset_type;

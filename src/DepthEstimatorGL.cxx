@@ -1262,6 +1262,16 @@ float DepthEstimatorGL::texture_interpolate ( const cv::Mat& img, const float x,
 
 }
 
+void DepthEstimatorGL::upload_gray_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right){
+    TIME_START_GL("upload_rgb_stereo_pair");
+    int size_bytes=image_left.step[0] * image_left.rows;
+    m_frame_rgb_left.upload_data(GL_R32F, image_left.cols, image_left.rows, GL_RED, GL_FLOAT, image_left.ptr(), size_bytes);
+
+
+    size_bytes=image_right.step[0] * image_right.rows;
+    m_frame_rgb_right.upload_data(GL_R32F, image_right.cols, image_right.rows, GL_RED, GL_FLOAT, image_right.ptr(), size_bytes);
+    TIME_END_GL("upload_rgb_stereo_pair");
+}
 
 void DepthEstimatorGL::upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right){
     TIME_START_GL("upload_rgb_stereo_pair");
@@ -1452,6 +1462,7 @@ std::vector<Seed> DepthEstimatorGL::create_immature_points (const Frame& frame){
 
                 //Seed::Seed
                 Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.m_uv.x(),point.m_uv.y(),1)).normalized();
+                // f_eigen.normalize();
                 // point.f = glm::vec4(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
                 point.depth_filter.m_f=Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
 

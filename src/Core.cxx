@@ -12,6 +12,7 @@
 // #include "stereo_depth_gl/DepthEstimatorCPU.h"
 // #include "stereo_depth_gl/DepthEstimatorRenegade.h"
 #include "stereo_depth_gl/DepthEstimatorGL.h"
+#include "stereo_depth_gl/DepthEstimatorHalide.h"
 // #include "stereo_depth_gl/DepthEstimatorGL2.h"
 // #include "stereo_depth_gl/DataLoader.h"
 #include "stereo_depth_gl/DataLoaderPNG.h"
@@ -50,6 +51,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
         // m_depth_estimator(new DepthEstimatorCPU),
         // m_depth_estimator_renegade(new DepthEstimatorRenegade),
         m_depth_estimator_gl(new DepthEstimatorGL),
+        m_depth_estimator_halide(new DepthEstimatorHalide),
         // m_depth_estimator_gl2(new DepthEstimatorGL2),
         // m_loader(new DataLoader),
         m_loader_png(new DataLoaderPNG),
@@ -68,6 +70,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
     // m_depth_estimator_renegade->m_profiler=profiler;
     // m_depth_estimator_renegade->m_view=m_view;
     m_depth_estimator_gl->m_profiler=profiler;
+    m_depth_estimator_halide->m_profiler=profiler;
     // m_depth_estimator_gl2->m_profiler=profiler;
     // m_depth_estimator_gl2->m_view=m_view;
     // m_splatter->m_view=m_view;
@@ -185,19 +188,25 @@ void Core::update() {
         // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
         // m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
         // m_depth_estimator_gl->upload_gray_and_grad_stereo_pair(frame_left.gray_with_gradients, frame_right.gray_with_gradients);
-        m_depth_estimator_gl->compute_depth_and_create_mesh_ICL_incremental(frame_left,frame_right);
+        // m_depth_estimator_gl->compute_depth_and_create_mesh_ICL_incremental(frame_left,frame_right);
+
+        //halide one
+        m_depth_estimator_halide->compute_depth(frame_left,frame_right);
+
+        //to visualize what halide is doing
+        m_depth_estimator_gl->upload_gray_stereo_pair(m_depth_estimator_halide->debug_img_left, m_depth_estimator_halide->debug_img_right);
 
 
-        //update mesh from the debug icl_incremental
-        Mesh point_cloud=m_depth_estimator_gl->m_mesh;
-        std::string cloud_name="point_cloud";
-        point_cloud.name=cloud_name;
-        point_cloud.m_show_points=true;
-        if(m_scene.does_mesh_with_name_exist(cloud_name)){
-            m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
-        }else{
-            m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
-        }
+        // //update mesh from the debug icl_incremental
+        // Mesh point_cloud=m_depth_estimator_gl->m_mesh;
+        // std::string cloud_name="point_cloud";
+        // point_cloud.name=cloud_name;
+        // point_cloud.m_show_points=true;
+        // if(m_scene.does_mesh_with_name_exist(cloud_name)){
+        //     m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+        // }else{
+        //     m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+        // }
 
 
         // //update point cloud

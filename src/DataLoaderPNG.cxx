@@ -38,11 +38,14 @@ DataLoaderPNG::DataLoaderPNG(){
     init_params();
     init_data_reading();
     create_transformation_matrices();
-    if(m_dataset_type==DatasetType::ETH){
-        read_pose_file_eth();
-    }else if(m_dataset_type==DatasetType::ICL){
-        read_pose_file_icl();
+    if(!m_only_rgb){
+        if(m_dataset_type==DatasetType::ETH){
+            read_pose_file_eth();
+        }else if(m_dataset_type==DatasetType::ICL){
+            read_pose_file_icl();
+        }
     }
+
     // read_pose_file();
 
 
@@ -71,11 +74,17 @@ void DataLoaderPNG::init_params(){
         m_rgb_imgs_path_per_cam.push_back( (std::string)loader_config["rgb_path_cam_"+std::to_string(i)] );
         m_frames_buffer_per_cam.push_back( moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
     }
-    std::string dataset_type_string=(std::string)loader_config["dataset_type"];
-    if(dataset_type_string=="eth") m_dataset_type=DatasetType::ETH;
-    else if(dataset_type_string=="icl") m_dataset_type=DatasetType::ICL;
-    else LOG(FATAL) << " Dataset type is not known " << dataset_type_string;
-    m_pose_file=(std::string)loader_config["pose_file"];
+
+
+    m_only_rgb=loader_config["only_rgb"];
+    if(!m_only_rgb){
+        std::string dataset_type_string=(std::string)loader_config["dataset_type"];
+        if(dataset_type_string=="eth") m_dataset_type=DatasetType::ETH;
+        else if(dataset_type_string=="icl") m_dataset_type=DatasetType::ICL;
+        else LOG(FATAL) << " Dataset type is not known " << dataset_type_string;
+        m_pose_file=(std::string)loader_config["pose_file"];
+    }
+
 
 
     Config vis_config=cfg["visualization"];
@@ -263,13 +272,16 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             frame.timestamp=timestamp; //store the unrounded one because when we check for the labels we check for the same filename
 
             //POSE---
-            if (!get_pose_at_timestamp(frame.tf_cam_world, timestamp, cam_id )){
+            if (!m_only_rgb && !get_pose_at_timestamp(frame.tf_cam_world, timestamp, cam_id )){
                 LOG(WARNING) << "Not found any pose at timestamp " << timestamp << " Discarding";
                 continue;
             }
 
             //intrinsics
-            get_intrinsics(frame.K, frame.distort_coeffs, cam_id);
+            if(!m_only_rgb){
+                get_intrinsics(frame.K, frame.distort_coeffs, cam_id);
+            }
+
 
 
 
@@ -282,11 +294,15 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             cv::cvtColor ( frame.rgb, frame.gray, CV_BGR2GRAY );
             frame.gray.convertTo(frame.gray, CV_32F);
             // frame.gray/=255.0; //gray is normalized
-            frame.gray=undistort_image(frame.gray, frame.K, frame.distort_coeffs, cam_id); //undistort only the gray image because rgb is only used for visualization
+            if(!m_only_rgb){
+                frame.gray=undistort_image(frame.gray, frame.K, frame.distort_coeffs, cam_id); //undistort only the gray image because rgb is only used for visualization
+                //TODO remove this as we only use the rgb for visualization and debug
+                frame.rgb=undistort_image(frame.rgb, frame.K, frame.distort_coeffs, cam_id);
+            }
+
             // frame.gray/=255.0;
 
-            //TODO remove this as we only use the rgb for visualization and debug
-            frame.rgb=undistort_image(frame.rgb, frame.K, frame.distort_coeffs, cam_id);
+
 
             //gradients
             cv::Scharr( frame.gray, frame.grad_x, CV_32F, 1, 0);
@@ -711,7 +727,7 @@ void DataLoaderPNG::republish_last_frame_all_cams(){
     }
 }
 
-cv::Mat DataLoaderPNG::undistort_image(const cv::Mat& gray_img, const Eigen::Matrix3f& K, const Eigen::VectorXf& distort_coeffs, const int cam_id){
+cv::Mat DataLoaderPNG::undistort_image(const cv::Mat& gray_img, Eigen::Matrix3f& K, const Eigen::VectorXf& distort_coeffs, const int cam_id){
 
     TIME_START("undistort");
     //if we don't have the undistorsion maps yet, create them
@@ -730,6 +746,7 @@ cv::Mat DataLoaderPNG::undistort_image(const cv::Mat& gray_img, const Eigen::Mat
         cv::Mat_<double> Id = cv::Mat_<double>::eye ( 3, 3 );
         cv::initUndistortRectifyMap ( Kc, distortion, Id, Kc, gray_img.size(), CV_32FC1, m_undistort_map_x_per_cam[cam_id], m_undistort_map_y_per_cam[cam_id] );
     }
+
 
     cv::Mat undistorted_img;
     cv::remap ( gray_img, undistorted_img, m_undistort_map_x_per_cam[cam_id], m_undistort_map_y_per_cam[cam_id], cv::INTER_LINEAR );

@@ -61,6 +61,7 @@ find_package(GLM REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system thread filesystem)
 find_package(kqueue REQUIRED)
+find_package(Halide REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
@@ -108,6 +109,7 @@ include_directories(${GLM_INCLUDE_DIRS})
 # include_directories(${nanoflann_INCLUDE_DIRS})
 # include_directories(${KQUEUE_INCLUDE_DIRS})
 include_directories(${CERES_INCLUDE_DIR})
+include_directories(${HALIDE_INCLUDE_DIRS})
 #add_definitions(${GLM_DEFINITIONS})
 #include_directories("/media/alex/Data/Master/SHK/c_ws/src/laser_mesher/deps/libigl/external/nanogui/ext/glew/include/")
 
@@ -151,6 +153,7 @@ target_link_libraries(stereo_depth_gl ${catkin_LIBRARIES}  ${OpenCV_LIBS}  TINY_
           ${KQUEUE_LIBRARIES}
           igl::core igl::opengl igl::opengl_glfw
           ceres
+        ${HALIDE_LIBRARIES}
 )
 #definitions for cmake variables that are necesarry during runtime
 target_compile_definitions(stereo_depth_gl PRIVATE AWESOMEFONT_DIR="${CMAKE_SOURCE_DIR}/deps/imgui_ext/fontawesome-webfont.ttf")

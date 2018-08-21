@@ -30,11 +30,12 @@
 struct Params {
     float maxPerPtError;
     float slackFactor;
-    // float outlierTH = 0.25;			//ngf		// higher -> less strict
-    float residualTH = 12*12;					// higher -> less strict
+    float residualTH = 0.25;			//ngf		// higher -> less strict
+    // float residualTH = 12*12;					// higher -> less strict
     float overallEnergyTHWeight = 1;
     float outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
-    float huberTH = 9; // Huber Threshold
+    float huberTH = 0.5; //ngf // Huber Threshold
+    // float huberTH = 9; // Huber Threshold
     float convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
     float eta = 5;
 
@@ -235,6 +236,7 @@ public:
     // void save_depth_image();
     // Mesh get_mesh();
 
+    void upload_gray_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right); //mostly for visualization
     void upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void compute_depth(const Frame& frame_left, const Frame& frame_right);

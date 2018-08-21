@@ -29,6 +29,7 @@
 // class DepthEstimatorCPU;
 // class DepthEstimatorRenegade;
 class DepthEstimatorGL;
+class DepthEstimatorHalide;
  // class DepthEstimatorGL2;
 class Profiler;
 // class RosBagPlayer;
@@ -75,6 +76,7 @@ public:
     // std::shared_ptr<DepthEstimatorCPU> m_depth_estimator; //does a cpu implementation
     // std::shared_ptr<DepthEstimatorRenegade> m_depth_estimator_renegade; //just reads the file written by renegade
     std::shared_ptr<DepthEstimatorGL> m_depth_estimator_gl;
+    std::shared_ptr<DepthEstimatorHalide> m_depth_estimator_halide;
     // std::shared_ptr<DepthEstimatorGL2> m_depth_estimator_gl2;
     // std::shared_ptr<DataLoader> m_loader;
     std::shared_ptr<DataLoaderPNG> m_loader_png;
@@ -112,7 +114,7 @@ public:
       bool m_do_transform_mesh_to_worlGL;
       bool m_preload_mesh;
       std::string m_preload_mesh_path;
-      int m_preload_mesh_subsample_factor; //keep only a 1/subsample factor of the points in the preload mesh 
+      int m_preload_mesh_subsample_factor; //keep only a 1/subsample factor of the points in the preload mesh
       bool m_player_paused;
       bool m_player_should_do_one_step;
 
