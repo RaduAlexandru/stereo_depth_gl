@@ -54,6 +54,7 @@ public:
 private:
 
     cv::Mat undistort_rectify_image(const cv::Mat img, const Frame& frame_left, const Frame& frame_right);
+    cv::Mat guided_filter(const cv::Mat& img, const float radius, const float eps);
 
 };
 
