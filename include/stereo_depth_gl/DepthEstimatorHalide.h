@@ -46,17 +46,33 @@ public:
     cv::Mat m_undistort_map_y; //vector containing the undistort map in x direction for cam right
     cv::Mat debug_img_left;
     cv::Mat debug_img_right;
+    Mesh m_mesh;
 
     //params
+    bool m_use_cost_volume_filtering;
 
 
 
 private:
 
+    void init_params();
+
     cv::Mat undistort_rectify_image(const cv::Mat img, const Frame& frame_left, const Frame& frame_right);
     cv::Mat guided_filter(const cv::Mat& I, const cv::Mat& p, const float radius, const float eps);
-    Halide::Func boxfilter(const Halide::Func& I, const int radius);
-    Halide::Func mul_elem(const Halide::Func& lhs, const Halide::Func& rhs); //element wise multiplication
+    Halide::Func boxfilter(const Halide::Func& I, const int radius); //box filters a 2d image
+    Halide::Func boxfilter_3D(const Halide::Func& I, const int radius); //box filters a 3d image. Returns another 3D image and the filter is ran over the first 2 dimensions(x,y)
+    Halide::Func boxfilter_slice(const Halide::Func& I, const int radius, const int slice); //box filters a certain slice from a 3D vol. filters a channels indicated by slcie and returns a 2D image
+    Halide::Func mul_elem(const Halide::Func& lhs, const Halide::Func& rhs); //element wise multiplication of 2D matrices, returns a 2D matrix
+    Halide::Func mul_elem_3D(const Halide::Func& lhs, const Halide::Func& rhs); //element wise multiplication of 3D matrices, returns a 3D matrix
+    Halide::Func mul_elem_slice_lhs(const Halide::Func& lhs, const Halide::Func& rhs, const int slice); //element wise multiplication of a 3D matrix and a 2D matrix. The 3d matrix gets sliced to a certain channel
+    Halide::Func mul_elem_slice_rhs(const Halide::Func& lhs, const Halide::Func& rhs, const int slice);  //element wise multiplication of a 2D matrix and a 3D matrix. The 3d matrix gets sliced to a certain channel
+    Halide::Func mul_elem_replicate_lhs(const Halide::Func& lhs, const Halide::Func& rhs); //elem wise multiplication of 2D matrix with 3D matrix. The 2D matrix is replicateted along the channels to coincide with the rhs 3D matrix
+    Halide::Func mul_elem_replicate_rhs(const Halide::Func& lhs, const Halide::Func& rhs); //elem wise multiplication of 3D matrix with 2D matrix. The 2D matrix is replicateted along the channels to coincide with the lhs 3D matrix
+
+
+    cv::Mat cost_volume_cpu(const cv::Mat& gray_left, const cv::Mat& gray_right);
+
+    Mesh disparity_to_mesh(const cv::Mat& disparity);
 
 };
 

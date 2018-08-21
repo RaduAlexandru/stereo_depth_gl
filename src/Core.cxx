@@ -197,6 +197,19 @@ void Core::update() {
         m_depth_estimator_gl->upload_gray_stereo_pair(m_depth_estimator_halide->debug_img_left, m_depth_estimator_halide->debug_img_right);
 
 
+        // //update mesh from the depth_estimator_halide
+        Mesh point_cloud=m_depth_estimator_halide->m_mesh;
+        std::string cloud_name="point_cloud";
+        point_cloud.name=cloud_name;
+        point_cloud.m_show_points=true;
+        // std::cout << "point_cloud " << point_cloud.V << '\n';
+        if(m_scene.does_mesh_with_name_exist(cloud_name)){
+            m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+        }else{
+            m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+        }
+
+
         // //update mesh from the debug icl_incremental
         // Mesh point_cloud=m_depth_estimator_gl->m_mesh;
         // std::string cloud_name="point_cloud";
@@ -223,20 +236,20 @@ void Core::update() {
 
 
 
-        //update camera frustum mesh
-        for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
-            std::string cam_name= "cam_"+std::to_string(cam_id);
-            Mesh new_frustum_mesh;
-            if(cam_id==0){
-                new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-            }else if( cam_id==1){
-                new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
-            }
-            // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-            new_frustum_mesh.name=cam_name;
-            m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
-            m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
-        }
+        // //update camera frustum mesh
+        // for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
+        //     std::string cam_name= "cam_"+std::to_string(cam_id);
+        //     Mesh new_frustum_mesh;
+        //     if(cam_id==0){
+        //         new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+        //     }else if( cam_id==1){
+        //         new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
+        //     }
+        //     // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+        //     new_frustum_mesh.name=cam_name;
+        //     m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
+        //     m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
+        // }
 
 
 
@@ -309,6 +322,7 @@ void Core::update() {
                     set_mesh(mesh);  // the scene is internally broken down into various independent meshes
                 }
                 if (mesh.m_show_points) {
+                    std::cout << "settting point......." << '\n';
                     set_points(mesh);
                 }
                 if (mesh.m_show_edges) {
@@ -413,6 +427,7 @@ void Core::set_mesh(const Mesh &mesh) {
 
 void Core::set_points(const Mesh &mesh) {
     if(mesh.is_empty()){
+        std::cout << "returning because mesh is empty" << '\n';
         return;
     }
 
@@ -425,8 +440,10 @@ void Core::set_points(const Mesh &mesh) {
 
    m_view->data().point_size = 2;
 
+   std::cout << "setting " << '\n';
 
    if (!m_viewer_initialized) {
+       std::cout << "initialize" << '\n';
        m_viewer_initialized = true;
        m_view->core.align_camera_center(mesh.V);
    }

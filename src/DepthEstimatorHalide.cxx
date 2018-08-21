@@ -19,6 +19,9 @@
 #include "opencv2/imgproc.hpp"
 #include "opencv2/calib3d.hpp"
 
+//ros
+#include "stereo_depth_gl/RosTools.h"
+
 //loguru
 #include <loguru.hpp>
 
@@ -26,15 +29,29 @@
 #include <omp.h>
 
 using namespace Halide;
+using namespace configuru;
 
 
 DepthEstimatorHalide::DepthEstimatorHalide(){
 
+    init_params();
     init_halide();
 }
 
 //needed so that forward declarations work
 DepthEstimatorHalide::~DepthEstimatorHalide(){
+}
+
+void DepthEstimatorHalide::init_params(){
+    //get the config filename
+    ros::NodeHandle private_nh("~");
+    std::string config_file= getParamElseThrow<std::string>(private_nh, "config_file");
+
+    //read all the parameters
+    Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
+    Config depth_config=cfg["depth_halide"];
+    m_use_cost_volume_filtering = depth_config["use_cost_volume_filtering"];
+
 }
 
 void DepthEstimatorHalide::init_halide(){
@@ -46,7 +63,12 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
 
     std::cout << "compute depth" << '\n';
 
-    int max_disparity=100;
+    int max_disparity=50;
+
+
+
+
+
 
     // if(is_first_frame){
     //     is_first_frame=false;
@@ -65,88 +87,131 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
     //tsukuba images
     cv::Mat gray_left=frame_left.gray/255;
     cv::Mat gray_right=frame_right.gray/255;
+    //
+    // // guided filter
+    // cv::Mat gray_left_smooth=guided_filter(gray_left, gray_left, 5, 0.001);
+    //
+    // debug_img_left=gray_left;
+    // debug_img_right=gray_left_smooth;
 
-    // guided filter
-    cv::Mat gray_left_smooth=guided_filter(gray_left, gray_left, 5, 0.001);
 
-    debug_img_left=gray_left;
-    debug_img_right=gray_left_smooth;
+    // //trying with a cpu implementation
+    // cv::Mat img_output=cost_volume_cpu(gray_left,gray_right);
+    // cv::normalize(img_output, debug_img_left, 0, 1.0, cv::NORM_MINMAX);
+    // return;
 
 
 
-    // std::cout << "mat gray type is " << type2string(gray_left.type()) << '\n';
-    //
-    //
-    // //wrap the image in a halide buffer
-    // Buffer<float> buf_left((float*)gray_left.data, gray_left.cols, gray_left.rows);
-    // Buffer<float> buf_right((float*)gray_right.data, gray_right.cols, gray_right.rows);
-    //
-    // //ALGORITHM
-    //
-    // //clamp the x and y so as to not go out of bounds
-    // Var x("x"),y("y"), d("d");
-    // Func clamped("clamped");
-    // // Expr clamped_x_d = clamp(x+d, 0, buf_right.width()-1);
-    // Func buf_right_cl = BoundaryConditions::repeat_edge(buf_right);
-    //
-    //
-    // //cost volume
-    // Func cost_vol("cost_vol");
-    // cost_vol(x,y,d)=999999.0;
-    // cost_vol(x,y,d) = Halide::abs(buf_left(x,y) - buf_right_cl(x+d,y));
-    //
-    // //filter the cost volume
-    // //TODO
-    //
-    //
-    //
-    //
-    //
-    // //argmax the cost volume
-    // Func argmax_disparity_tex("argmax_disparity_tex");
-    // RDom d_range(0, max_disparity);
-    // argmax_disparity_tex(x,y)=cast<float>(argmin(cost_vol(x,y,d_range))[0] ); //argmax returns a tuple containing the index in the reduction domain that gave the smallest value and the value itseld
-    //
-    // //output
-    // cv::Mat img_output=gray_left.clone(); //so we allocate a new memory for the output and don't trample over the input memory
-    // Halide::Buffer<float> buf_out((float*)img_output.data, img_output.cols, img_output.rows);
-    //
-    //
-    // //schedule
-    // //TODO
-    // // cost_vol.compute_root();
-    // // argmax_disparity_tex.compute_root();
-    //
-    // // auto schedule
-    // const int kParallelism = 32;
-    // const int kLastLevelCacheSize = 314573;
-    // const int kBalance = 1; //how much more expensive is the memory vs arithmetic costs. Higher values means less compute_root
-    // MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
-    // Halide::Pipeline pipeline(argmax_disparity_tex);
-    // argmax_disparity_tex.estimate(x, 0, img_output.cols)
-    //         .estimate(y, 0, img_output.rows);
-    // // halide_set_num_threads(1);
-    // std::string schedule=pipeline.auto_schedule(Halide::get_jit_target_from_environment(), machine_params);
-    // pipeline.compile_jit();
-    // std::cout << "schedule is \n" << schedule  << '\n';
-    //
-    //
-    //
-    //
-    //
-    // //realize
-    // argmax_disparity_tex.realize(buf_out);
-    // TIME_START("compute_depth_halide");
-    // for (size_t i = 0; i < 100; i++) {
-    //     argmax_disparity_tex.realize(buf_out);
+    std::cout << "mat gray type is " << type2string(gray_left.type()) << '\n';
+
+
+    //wrap the image in a halide buffer
+    Buffer<float> buf_left((float*)gray_left.data, gray_left.cols, gray_left.rows);
+    Buffer<float> buf_right((float*)gray_right.data, gray_right.cols, gray_right.rows);
+
+    //ALGORITHM
+
+    //clamp the x and y so as to not go out of bounds
+    Var x("x"),y("y"), d("d");
+    // Expr clamped_x_d = clamp(x+d, 0, buf_right.width()-1);
+    Func buf_right_cl = BoundaryConditions::repeat_edge(buf_right);
+
+
+    //cost volume
+    Func cost_vol("cost_vol");
+    cost_vol(x,y,d)=999999.0;
+    cost_vol(x,y,d) = Halide::abs(buf_left(x,y) - buf_right_cl(x-d,y));
+
+    //filter the cost volume
+    //TODO
+
+
+    Func cost_vol_filtered("cost_vol_filtered");
+    if(m_use_cost_volume_filtering){
+        int radius=5;
+        float eps=0.001;
+        //things that can be precomputed
+        Func I = BoundaryConditions::repeat_edge(buf_left);
+        Func mean_I = boxfilter(I, radius);
+        Func mean_II = boxfilter(mul_elem(I,I), radius);
+        Func var_I;     var_I(x,y) = mean_II(x,y) - mul_elem(mean_I,mean_I)(x,y);
+        //things that depend on the image itself and not the guidance
+        Func mean_p = boxfilter_3D(cost_vol, radius);
+        Func mean_Ip = boxfilter_3D(mul_elem_replicate_lhs(I,cost_vol),radius);
+        Func cov_Ip;    cov_Ip(x,y,d)=mean_Ip(x,y,d) - mul_elem_replicate_lhs(mean_I,mean_p)(x,y,d);
+        Func a;         a(x,y,d)=cov_Ip(x,y,d) / (var_I(x,y) +eps);
+        Func b;         b(x,y,d)=mean_p(x,y,d) - mul_elem_replicate_rhs(a,mean_I)(x,y,d);
+        Func mean_a = boxfilter_3D(a, radius);
+        Func mean_b = boxfilter_3D(b,radius);
+        Func out;      out(x,y,d)=mul_elem_replicate_rhs(mean_a,I)(x,y,d) + mean_b(x,y,d);
+
+        // cost_vol_filtered(x,y,d)=out(x,y,d);
+        cost_vol_filtered(x,y,d)=mean_p(x,y,d);
+    }else{
+        cost_vol_filtered(x,y,d)=cost_vol(x,y,d);
+    }
+
+
+
+
+
+
+
+
+
+
+
+    //argmax the cost volume
+    Func argmax_disparity_tex("argmax_disparity_tex");
+    RDom d_range(0, max_disparity);
+    float max_error=0.3;
+    argmax_disparity_tex(x,y)=cast<float>(argmin(cost_vol_filtered(x,y,d_range))[0] ); //argmax returns a tuple containing the index in the reduction domain that gave the smallest value and the value itseld
+
+    //output
+    cv::Mat img_output=gray_left.clone(); //so we allocate a new memory for the output and don't trample over the input memory
+    Halide::Buffer<float> buf_out((float*)img_output.data, img_output.cols, img_output.rows);
+
+
+    //schedule
+    //TODO
+    // mean_p.compute_root();
+    // cost_vol.compute_root();
+    // argmax_disparity_tex.compute_root();
+
+    // auto schedule
+    const int kParallelism = 32;
+    const int kLastLevelCacheSize = 314573;
+    const int kBalance = 1; //how much more expensive is the memory vs arithmetic costs. Higher values means less compute_root
+    MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
+    Halide::Pipeline pipeline(argmax_disparity_tex);
+    argmax_disparity_tex.estimate(x, 0, img_output.cols)
+            .estimate(y, 0, img_output.rows);
+    // halide_set_num_threads(1);
+    std::string schedule=pipeline.auto_schedule(Halide::get_jit_target_from_environment(), machine_params);
+    pipeline.compile_jit();
+    std::cout << "schedule is \n" << schedule  << '\n';
+
+
+
+
+
+    //realize
+    argmax_disparity_tex.realize(buf_out);
+    TIME_START("compute_depth_halide");
+    // for (size_t i = 0; i < 10; i++) {
+        argmax_disparity_tex.realize(buf_out);
     // }
-    // TIME_END("compute_depth_halide");
-    // argmax_disparity_tex.compile_to_lowered_stmt("argmax_disparity_tex.html", {}, HTML);
-    //
-    // //view_result
+    TIME_END("compute_depth_halide");
+    argmax_disparity_tex.compile_to_lowered_stmt("argmax_disparity_tex.html", {}, HTML);
+
+
+    m_mesh=disparity_to_mesh(img_output);
+
+    //view_result
+    // debug_img_left=img_output/img_output.cols;
     // debug_img_left=img_output/max_disparity;
-    // // cv:normalize(img_output, debug_img_left, 0, 1.0, cv::NORM_MINMAX);
-    // // debug_img_left=;
+    cv:normalize(img_output, debug_img_left, 0, 1.0, cv::NORM_MINMAX);
+    // debug_img_left=;
 
 
 
@@ -156,6 +221,104 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
     // debug_img_right=frame_right.gray;
 
 }
+
+cv::Mat DepthEstimatorHalide::cost_volume_cpu(const cv::Mat& gray_left, const cv::Mat& gray_right){
+    int max_disparity=50;
+    std::vector<cv::Mat> cost_vol(max_disparity);
+    for (size_t d = 0; d < max_disparity; d++) {
+        cost_vol[d]=cv::Mat(gray_left.rows,gray_left.cols, CV_32F);
+        cost_vol[d]=999999.0;
+    }
+    // cv::Mat cost_vol(gray_left.rows, gray_left.cols, CV_8UC(max_disparity), CV_32F);
+
+    TIME_START("cost_vol_cpu");
+
+    for (size_t y = 0; y < gray_left.rows; y++) {
+        for (size_t x = 0; x < gray_left.cols; x++) {
+
+            //grab a pixel on the left image
+            float pix_left=gray_left.at<float>(y,x);
+
+            //check dispairties
+            for (size_t d = 0; d < max_disparity; d++) {
+                int idx_disp=std::max((int)(x-d), 0);
+                float pix_right=gray_right.at<float>(y,idx_disp);
+
+                float error=std::fabs(pix_left-pix_right);
+
+                cost_vol[d].at<float>(y,x)=error;
+            }
+
+
+        }
+    }
+
+
+    //grab the index with the minimum a error
+    cv::Mat disparity=cv::Mat(gray_left.rows,gray_left.cols, CV_32F);
+    disparity=0.0;
+    for (size_t y = 0; y < gray_left.rows; y++) {
+        for (size_t x = 0; x < gray_left.cols; x++) {
+
+            float min_error=999999;
+            int best_disp=0;
+
+            //check for the minimal error
+            for (size_t d = 0; d < max_disparity; d++) {
+                float error=cost_vol[d].at<float>(y,x);
+                if(error<min_error){
+                    min_error=error;
+                    best_disp=d;
+                }
+            }
+
+            //store the best disp
+            disparity.at<float>(y,x)=best_disp;
+
+
+        }
+    }
+
+
+
+    TIME_END("cost_vol_cpu");
+
+    return disparity;
+}
+
+Mesh DepthEstimatorHalide::disparity_to_mesh(const cv::Mat& disp_img){
+    Mesh mesh;
+
+    int nr_pixels=disp_img.rows*disp_img.cols;
+
+    mesh.V.resize(nr_pixels,3);
+    mesh.V.setZero();
+
+    for (size_t i = 0; i < disp_img.rows; i++) {
+        for (size_t j = 0; j < disp_img.cols; j++) {
+            float d=disp_img.at<float>(i,j);
+
+            int idx_p=i*disp_img.cols+j;
+            mesh.V.row(idx_p) << j,i,d*20;
+        }
+    }
+
+    // //make also some colors based on disparity
+    mesh.C.resize(nr_pixels,3);
+    double min_d, max_d;
+    min_d =  mesh.V.col(2).minCoeff();
+    max_d =  mesh.V.col(2).maxCoeff();
+    std::cout << "min max d is " << min_d << " " << max_d << '\n';
+    for (size_t i = 0; i < mesh.C.rows(); i++) {
+        float gray_val = lerp(mesh.V(i,2), min_d, max_d, 0.0, 1.0 );
+        mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+    }
+
+
+    return mesh;
+
+}
+
 
 cv::Mat DepthEstimatorHalide::guided_filter(const cv::Mat& I_cv, const cv::Mat& p_cv, const float radius, const float eps){
 
@@ -287,13 +450,41 @@ cv::Mat DepthEstimatorHalide::guided_filter(const cv::Mat& I_cv, const cv::Mat& 
 Halide::Func DepthEstimatorHalide::boxfilter(const Halide::Func& I, const int radius){
     Var x("x"),y("y");
     RDom r(-radius,radius,-radius,radius);
-    Expr rx=x+r.x;
-    Expr ry=y+r.y;
+    Expr rx=clamp(x+r.x,0,9999999);
+    Expr ry=clamp(y+r.y,0,9999999);
 
     Func mean_I;
     mean_I(x,y)=sum(I(rx, ry))/(radius*radius);
 
     return mean_I;
+}
+
+Halide::Func DepthEstimatorHalide::boxfilter_slice(const Halide::Func& I, const int radius, const int slice){
+
+    Var x("x"),y("y");
+    RDom r(-radius,radius,-radius,radius);
+    Expr rx=clamp(x+r.x,0,999999);
+    Expr ry=clamp(y+r.y,0,999999);
+
+    Func mean_I;
+    mean_I(x,y)=sum(I(rx, ry, slice))/(radius*radius);
+
+    return mean_I;
+
+}
+
+Halide::Func DepthEstimatorHalide::boxfilter_3D(const Halide::Func& I, const int radius){
+
+    Var x("x"),y("y"),c("c");
+    RDom r(-radius,radius,-radius,radius);
+    Expr rx=clamp(x+r.x,0,999999);
+    Expr ry=clamp(y+r.y,0,999999);
+
+    Func mean_I;
+    mean_I(x,y,c)=sum(I(rx, ry, c))/(radius*radius);
+
+    return mean_I;
+
 }
 
 Halide::Func DepthEstimatorHalide::mul_elem(const Halide::Func& lhs, const Halide::Func& rhs){
@@ -302,6 +493,42 @@ Halide::Func DepthEstimatorHalide::mul_elem(const Halide::Func& lhs, const Halid
     mul(x,y)=lhs(x,y)*rhs(x,y);
     return mul;
 }
+
+Halide::Func mul_elem_3D(const Halide::Func& lhs, const Halide::Func& rhs){
+    Var x("x"),y("y"),c("c");
+    Func mul;
+    mul(x,y,c)=lhs(x,y,c)*rhs(x,y,c);
+    return mul;
+}
+
+Halide::Func DepthEstimatorHalide::mul_elem_slice_lhs(const Halide::Func& lhs, const Halide::Func& rhs, const int slice){
+    Var x("x"),y("y");
+    Func mul;
+    mul(x,y)=lhs(x,y,slice)*rhs(x,y);
+    return mul;
+}
+
+Halide::Func DepthEstimatorHalide::mul_elem_slice_rhs(const Halide::Func& lhs, const Halide::Func& rhs, const int slice){
+    Var x("x"),y("y");
+    Func mul;
+    mul(x,y)=lhs(x,y)*rhs(x,y,slice);
+    return mul;
+}
+
+Halide::Func DepthEstimatorHalide::mul_elem_replicate_lhs(const Halide::Func& lhs, const Halide::Func& rhs){
+    Var x("x"),y("y"),c("c");
+    Func mul;
+    mul(x,y,c)=lhs(x,y)*rhs(x,y,c);
+    return mul;
+}
+Halide::Func DepthEstimatorHalide::mul_elem_replicate_rhs(const Halide::Func& lhs, const Halide::Func& rhs){
+    Var x("x"),y("y"),c("c");
+    Func mul;
+    mul(x,y,c)=lhs(x,y,c)*rhs(x,y);
+    return mul;
+}
+
+
 
 
 
