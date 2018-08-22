@@ -151,7 +151,7 @@ void main(void) {
 
     p[id].m_nr_times_visible++;
 
-    imageStore(debug, ivec2(p[id].m_uv) , vec4(0,0,255,255) );
+
 
 
     //point is visible
@@ -189,7 +189,7 @@ void main(void) {
     }
 
     //if the alive time is bigger than 15 and it was visible less than 5 frames , we ignore this points
-    if(p[id].m_time_alive>15 && p[id].m_nr_times_visible<6){
+    if(p[id].m_time_alive>10 && p[id].m_nr_times_visible<5){
         p[id].depth_filter.m_is_outlier=1; //discard the point
         return;
     }
@@ -201,9 +201,11 @@ void main(void) {
     vec2 second_best_kp = vec2(-1.0,-1.0);
 
 
+    int nr_times_ambigous=0;
 
 
-    for(float l = -half_length; l <= half_length; l += 0.7f)
+    float step_size=0.7f;
+    for(float l = -half_length; l <= half_length; l += step_size)
     {
         float energy = 0;
         vec2 kp = uvMean + l*epi_dir;
@@ -211,6 +213,8 @@ void main(void) {
         if( ( kp.x >= (frame_size.x-min_border) )  || ( kp.y >= (frame_size.y-min_border) ) || ( kp.x < min_border ) || ( kp.y < min_border) ){
             continue ;
         }
+
+
 
         for(int idx=0;idx<pattern_rot_nr_points; ++idx){
             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
@@ -222,6 +226,20 @@ void main(void) {
 
             //for the case when the image is padded
             // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
+
+
+
+            //check if the gradient is perpendicular to the epipolar direction in which case we set the points as outlier because we won't be able to estimate the correct depth
+            vec2 grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x+0.5)/frame_size.x, (kp.y +0.5)/frame_size.y)).yz;
+            //grads stores the gradient direction in x and in y
+            float along_epi=1-abs(dot(epi_dir, normalize(grads))); //increases when the points are ambigous on the epiline
+            float along_epi_agresiv=0.8; //the smaller the value the more aggresive we are in discarding points
+            float min_grad=50; //to avoid discarding points with really small gradients
+            if(along_epi>along_epi_agresiv && length(grads)>min_grad){
+                nr_times_ambigous++;
+                // p[id].depth_filter.m_is_outlier=1; //discard the point
+                // return;
+            }
 
             //(Brightness Constancy Assumption) high qualty filter from openglsuperbible
             float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
@@ -260,6 +278,22 @@ void main(void) {
 
 
     }
+
+
+    float nr_pixel_acceses_along_epi=norm_epi/step_size*pattern_rot_nr_points;
+    //nr_times_along_epi epi is big for the vertical lines that we can triangulate well, and small for the horzontal lines which ar ambigous
+    if(nr_times_ambigous/nr_pixel_acceses_along_epi>0.9 && nr_times_ambigous!=0){ //the higher the value the more aggresive we are in dropping points
+        p[id].depth_filter.m_is_outlier=1; //discard the point
+        imageStore(debug, ivec2(p[id].m_uv) , vec4(255,0,0,255) );
+        return;
+    }
+
+    // if(nr_times_along_epi<10){ //the higher the value the more aggresive we are in dropping points
+    //     p[id].depth_filter.m_is_outlier=1; //discard the point
+    //     return;
+    // }
+
+    imageStore(debug, ivec2(p[id].m_uv) , vec4(0,0,nr_times_ambigous/nr_pixel_acceses_along_epi,255) );
 
 
     // //store in debug the disparity
