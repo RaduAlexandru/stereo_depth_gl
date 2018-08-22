@@ -22,8 +22,9 @@ struct MinimalDepthFilter{
 };
 struct Seed{
     int idx_keyframe; //idx in the array of keyframes which "hosts" this inmature points
+    int m_time_alive;
+    int m_nr_times_visible;
     float m_energyTH;
-    float pad[2]; //padded to 16 until now
     float m_intensity[MAX_RES_PER_POINT]; //gray value for each point on the pattern
     vec2 m_normalized_grad[MAX_RES_PER_POINT];
     mat2 m_gradH; //2x2 matrix for the hessian (gx2, gxgy, gxgy, gy2), used for calculating the alpha value
@@ -119,7 +120,6 @@ uniform mat4 tf_host_cur;
 uniform mat3 K;
 uniform mat3 KRKi_cr;
 uniform vec3 Kt_cr;
-uniform vec2 affine_cr;
 uniform float px_error_angle;
 uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
 uniform int pattern_rot_nr_points;
@@ -130,6 +130,8 @@ void main(void) {
     int min_border=20;
 
     int id = int(gl_GlobalInvocationID.x);
+
+    p[id].m_time_alive++;
 
     // // check if point is visible in the current image
     const vec3 p_backproj_xyz= p[id].depth_filter.m_f.xyz * 1.0f/ p[id].depth_filter.m_mu;
@@ -146,6 +148,10 @@ void main(void) {
     if ( kp_c_h.x < min_border || kp_c_h.x >= frame_size.x-min_border || kp_c_h.y < min_border || kp_c_h.y >= frame_size.y-min_border ) {
         return; // TODO in gl this is a return
     }
+
+    p[id].m_nr_times_visible++;
+
+    imageStore(debug, ivec2(p[id].m_uv) , vec4(0,0,255,255) );
 
 
     //point is visible
@@ -177,14 +183,23 @@ void main(void) {
     const float  half_length = 0.5f * norm_epi;
 
     //the epiline is too long, and it would take too much time to search
-    if(norm_epi>80){
+    if(norm_epi>200){
+        p[id].depth_filter.m_is_outlier=1; //discard the point
         return;
     }
+
+    //if the alive time is bigger than 15 and it was visible less than 5 frames , we ignore this points
+    if(p[id].m_time_alive>15 && p[id].m_nr_times_visible<6){
+        p[id].depth_filter.m_is_outlier=1; //discard the point
+        return;
+    }
+
 
     vec2 bestKp=vec2(-1.0,-1.0);
     float bestEnergy = 1e10;
     float second_best_energy = 1e10;
     vec2 second_best_kp = vec2(-1.0,-1.0);
+
 
 
 
@@ -194,7 +209,7 @@ void main(void) {
         vec2 kp = uvMean + l*epi_dir;
 
         if( ( kp.x >= (frame_size.x-min_border) )  || ( kp.y >= (frame_size.y-min_border) ) || ( kp.x < min_border ) || ( kp.y < min_border) ){
-            return ;
+            continue ;
         }
 
         for(int idx=0;idx<pattern_rot_nr_points; ++idx){
@@ -208,22 +223,22 @@ void main(void) {
             //for the case when the image is padded
             // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
 
-            // //(Brightness Constancy Assumption) high qualty filter from openglsuperbible
-            // float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
-            // const float residual = hit_color - (affine_cr.x * p[id].m_intensity[idx] + affine_cr.y);
-            // float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
-            // energy += hw *residual*residual*(2-hw);
-
-            //Uni modal NGF
-            vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
-            vec2 grads=hit_color_and_grads.yz;
-            grads /= sqrt(dot(grads,grads)+params.eta);
-            const float nn = dot(grads,p[id].m_normalized_grad[idx]);
-            const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf
-            //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
-            const float fr = abs(residual);
-            float hw = fr < params.huberTH ? 1 : params.huberTH / fr;
+            //(Brightness Constancy Assumption) high qualty filter from openglsuperbible
+            float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
+            const float residual = hit_color - (p[id].m_intensity[idx]);
+            float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
             energy += hw *residual*residual*(2-hw);
+
+            // //Uni modal NGF
+            // vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
+            // vec2 grads=hit_color_and_grads.yz;
+            // grads /= sqrt(dot(grads,grads)+params.eta);
+            // const float nn = dot(grads,p[id].m_normalized_grad[idx]);
+            // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf
+            // //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
+            // const float fr = abs(residual);
+            // float hw = fr < params.huberTH ? 1 : params.huberTH / fr;
+            // energy += hw *residual*residual*(2-hw);
 
 
         }
@@ -246,6 +261,17 @@ void main(void) {
 
     }
 
+
+    // //store in debug the disparity
+    // float disparity=(p[id].m_uv.x-bestKp.x)/255.0;
+    // float pseudo_disp=distance(p[id].m_uv, bestKp)/100.0;
+    // imageStore(debug, ivec2(p[id].m_uv) , vec4(0,pseudo_disp,0,255) );
+
+    // //store in debug the best kp
+    // imageStore(debug, ivec2(bestKp) , vec4(255,0,0,255) );
+
+
+
     p[id].m_last_error=bestEnergy;
 
     //check that the best energy is different enough from the second best
@@ -258,9 +284,8 @@ void main(void) {
 
 
     if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
-        //is outlier
         is_outlier=1;
-             // p[id].depth_filter.m_is_outlier=1;
+        // p[id].depth_filter.m_is_outlier=1;
     }
     else
     {

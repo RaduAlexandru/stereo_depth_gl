@@ -30,16 +30,16 @@
 struct Params {
     float maxPerPtError;
     float slackFactor;
-    float residualTH = 0.25;			//ngf		// higher -> less strict
-    // float residualTH = 12*12;					// higher -> less strict
+    // float residualTH = 0.25;			//ngf		// higher -> less strict
+    float residualTH = 12*12;					// higher -> less strict
     float overallEnergyTHWeight = 1;
     float outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
-    float huberTH = 0.5; //ngf // Huber Threshold
-    // float huberTH = 9; // Huber Threshold
+    // float huberTH = 0.5; //ngf // Huber Threshold
+    float huberTH = 9; // Huber Threshold
     float convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
     float eta = 5;
 
-    float gradH_th=800000000; //threshold on the gradient of the pixels. If gradient is above this value we will create immaure point
+    float gradH_th=20000000000; //threshold on the gradient of the pixels. If gradient is above this value we will create immaure point
     int search_epi_method=0; //0=bca, 1=ngf
     //pad to 16 bytes if needed  (blocks of 4 floats)
     // float pad_1;
@@ -153,8 +153,9 @@ struct Seed{
 
 
     int32_t idx_keyframe; //idx in the array of frames of the frame which "hosts" this inmature points
+    int32_t m_time_alive; 
+    int32_t m_nr_times_visible;
     float m_energyTH=0;
-    float pad[2]; //padded to 16 until now
     float m_intensity[MAX_RES_PER_POINT]; //gray value for each point on the pattern
     Eigen::Vector2f m_normalized_grad[MAX_RES_PER_POINT];
     Eigen::Matrix2f m_gradH; //2x2 matrix for the hessian (gx2, gxgy, gxgy, gy2), used for calculating the alpha value
@@ -298,35 +299,43 @@ public:
 
     //for debugging we run only icl nuim
     int m_start_frame;
-    std::vector<Seed> m_immature_points;
+    std::vector<Seed> m_seeds;
     GLuint m_points_gl_buf; //stores all the immature points
     gl::Texture2D m_cur_frame;
     Mesh m_mesh;
     std::vector<Frame> m_frames;
-    Frame ref_frame; //frame containing the seed points
+    Frame m_ref_frame; //frame containing the seed points
     void compute_depth_and_create_mesh_ICL();
 
-    void compute_depth_and_create_mesh_ICL_incremental(const Frame& frame_left, const Frame& frame_right);
+    // void compute_depth_and_create_mesh_ICL_incremental(const Frame& frame_left, const Frame& frame_right);
     std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
 
+    void compute_depth_and_update_mesh(const Frame& frame_left);
+    void compute_depth_and_update_mesh_stereo(const Frame& frame_left, const Frame& frame_right);
 
 private:
     void init_opengl();
     void compile_shaders();
 
     //start with everything
-    std::vector<Seed> create_seeds (const Frame& frame);
-    void trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds_left, const Frame& cur_frame);
+    // std::vector<Seed> create_seeds (const Frame& frame);
+    // void trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds_left, const Frame& cur_frame);
     void print_seed(const Seed& s);
     Frame create_keyframe(const Frame& frame);
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
     Eigen::Vector2f estimate_affine(std::vector<Seed>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
 
 
-    //debug with icl nuim
+    // //debug with icl nuim
+    // std::vector<Seed> create_immature_points (const Frame& frame);
+    // Mesh create_mesh_ICL(const std::vector<Seed>& immature_points, const std::vector<Frame>& frames);
 
-    std::vector<Seed> create_immature_points (const Frame& frame);
-    Mesh create_mesh_ICL(const std::vector<Seed>& immature_points, const std::vector<Frame>& frames);
+    //cleaned up version
+
+    std::vector<Seed> create_seeds (const Frame& frame);
+    void trace(std::vector<Seed>& seeds,const Frame& ref_frame, const Frame& cur_frame);
+    Mesh create_mesh(const std::vector<Seed>& seeds, Frame& ref_frame);
+
 
     // void assign_neighbours_for_points( std::vector<Seed>& immature_points, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
     // void denoise_cpu( std::vector<Seed>& immature_points, const int frame_width, const int frame_height);
