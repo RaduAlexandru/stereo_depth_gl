@@ -1938,10 +1938,30 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
     if(frame_left.frame_idx%50==0){
        m_ref_frame=frame_left;
        m_seeds=create_seeds(frame_left);
+       assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
     }else{
         //trace the created seeds
         trace(m_seeds, m_ref_frame, frame_right);
         //create a mesh
+
+        // //next one we will create a keyframe
+        // if( (frame_left.frame_idx+1) %50==0){
+        //     assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
+        //     denoise_cpu(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
+        // }
+
+        //only after 10 frames from the keyframe because by then we should have a good estimate of the depth
+        if(frame_left.frame_idx%50>20){
+            denoise_cpu(m_seeds, 5,  m_ref_frame.gray.cols, m_ref_frame.gray.rows);
+        }
+
+        // //next one we will create a keyframe
+        if( (frame_left.frame_idx+1) %50==0){
+            remove_grazing_seeds(m_seeds);
+            // denoise_cpu(m_seeds, 200,  m_ref_frame.gray.cols, m_ref_frame.gray.rows);
+        }
+
+
         m_mesh=create_mesh(m_seeds, m_ref_frame);
     }
 }
@@ -2022,6 +2042,18 @@ std::vector<Seed> DepthEstimatorGL::create_seeds(const Frame& frame){
 
                 point.m_last_error = -1;
                 point.depth_filter.m_is_outlier = 0;
+
+
+                //as the neighbours indices set the current points so if we access it we get this point
+                int seed_idx=seeds.size();
+                point.left = seed_idx;
+                point.right = seed_idx;
+                point.above = seed_idx;
+                point.below = seed_idx;
+                point.left_upper = seed_idx;
+                point.right_upper = seed_idx;
+                point.left_lower = seed_idx;
+                point.right_lower = seed_idx;
 
                 seeds.push_back(point);
             }
@@ -2174,4 +2206,379 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
     }
 
     return mesh;
+}
+
+
+
+void DepthEstimatorGL::assign_neighbours_for_points(std::vector<Seed>& seeds, const int frame_width, const int frame_height){
+    //TODO this works for the reference frame because we know there will not be overlaps but for any other frames we would need to just reproject the points into the frame and then get the one with the smallest depth in case they lie in the same pixel. Also it would need to be done after updating their depth of course.
+    //another way to deal with it is to only make the neighbours for their respective host frame, so we would need to pass a parameter to this function that makes it that we only create neighbours for points that have a specific idx_host_frame
+
+
+    //TODO create it of a size of frame and initialize to -1
+    Eigen::MatrixXi texture_indices(frame_height,frame_width);
+    texture_indices.setConstant(-1);
+
+    for (size_t i = 0; i < seeds.size(); i++) {
+        int u=seeds[i].m_uv.x();
+        int v=seeds[i].m_uv.y();
+        texture_indices(v,u)=i;
+    }
+
+
+    //go through the immature points again and assign the neighbours
+    for (size_t i = 0; i < seeds.size(); i++) {
+        int u=seeds[i].m_uv.x();
+        int v=seeds[i].m_uv.y();
+
+        //left
+        int point_left=texture_indices(v,u-1);
+        // std::cout << "point left is " << point_left << '\n';
+        if(point_left!=-1){ seeds[i].left=point_left; }
+
+        //right
+        int point_right=texture_indices(v,u+1);
+        if(point_right!=-1){ seeds[i].right=point_right; }
+
+        //up
+        int point_up=texture_indices(v+1,u);
+        if(point_up!=-1){ seeds[i].above=point_up; }
+
+        //down
+        int point_down=texture_indices(v-1,u);
+        if(point_down!=-1){ seeds[i].below=point_down; }
+
+        //left_upper
+        int point_left_up=texture_indices(v+1,u-1);
+        if(point_left_up!=-1){ seeds[i].left_upper=point_left_up; }
+
+        //righ_upper
+        int point_right_up=texture_indices(v+1,u+1);
+        if(point_right_up!=-1){ seeds[i].right_upper=point_right_up; }
+
+        //left_lower
+        int point_left_down=texture_indices(v-1,u-1);
+        if(point_left_down!=-1){ seeds[i].left_lower=point_left_down; }
+
+        //right_lower
+        int point_right_down=texture_indices(v-1,u+1);
+        if(point_right_down!=-1){ seeds[i].right_lower=point_right_down; }
+
+    }
+
+}
+
+void DepthEstimatorGL::denoise_cpu( std::vector<Seed>& seeds, const int iters, const int frame_width, const int frame_height){
+
+    int depth_range=5;
+    float lambda=0.5;
+    int iterations=iters;
+
+    std::cout << "starting to denoise." << std::endl;
+    const float large_sigma2 = depth_range * depth_range / 72.f;
+
+    // computeWeightsAndMu( )
+    for ( auto &point : seeds){
+        const float E_pi = point.depth_filter.m_alpha / ( point.depth_filter.m_alpha + point.depth_filter.m_beta);
+
+        point.depth_filter.m_g = std::max<float> ( (E_pi * point.depth_filter.m_sigma2 + (1.0f-E_pi) * large_sigma2) / large_sigma2, 1.0f );
+        point.depth_filter.m_mu_denoised = point.depth_filter.m_mu;
+        point.depth_filter.m_mu_head = point.m_uv.x();
+        point.depth_filter.m_p.setZero();
+    }
+
+
+    const float L = sqrt(8.0f);
+    const float tau = (0.02f);
+    const float sigma = ((1 / (L*L)) / tau);
+    const float theta = 0.5f;
+
+    for (size_t i = 0; i < iterations; i++) {
+        // std::cout << "iter " << i << '\n';
+
+        int point_idx=0;
+        // update dual
+        for ( auto &point : seeds ){
+            // std::cout << "update point " << point_idx << '\n';
+            point_idx++;
+            const float g = point.depth_filter.m_g;
+            const Eigen::Vector2f p = point.depth_filter.m_p;
+            Eigen::Vector2f grad_uhead = Eigen::Vector2f::Zero();
+            const float current_u = point.depth_filter.m_mu_denoised;
+
+
+            Seed & right = (seeds[point.right].depth_filter.m_is_outlier==1) ? point : seeds[point.right];
+            Seed & below = (seeds[point.below].depth_filter.m_is_outlier==1) ? point : seeds[point.below];
+
+            // if(point.right != -1){
+            //     std::cout << "------------" << '\n';
+            //     std::cout << "point is " << point.u << " " << point.v << '\n';
+            //     std::cout << "right is " << right.u << " " << right.v << '\n';
+            //     std::cout << "point.right is " << point.right << '\n';
+            // }
+
+
+            grad_uhead[0] = right.depth_filter.m_mu_head - current_u; //->atXY(min<int>(c_img_size.width-1, x+1), y)  - current_u;
+            grad_uhead[1] = below.depth_filter.m_mu_head - current_u; //->atXY(x, min<int>(c_img_size.height-1, y+1)) - current_u;
+            const Eigen::Vector2f temp_p = g * grad_uhead * sigma + p;
+            const float sqrt_p = temp_p.norm(); //sqrt(temp_p[0] * temp_p[0] + temp_p[1] * temp_p[1]);
+            point.depth_filter.m_p = temp_p / std::max<float>(1.0f, sqrt_p);
+        }
+
+        // std::cout << " update primal" << '\n';
+        // update primal:
+        for ( auto &point : seeds ){
+            //debug
+            // std::cout << "point left is " << point.left << '\n';
+
+            const float noisy_depth = point.depth_filter.m_mu;
+            const float old_u = point.depth_filter.m_mu_denoised;
+            const float g = point.depth_filter.m_g;
+
+            Eigen::Vector2f current_p = point.depth_filter.m_p;
+            Seed & left = (seeds[point.left].depth_filter.m_is_outlier==1) ? point : seeds[point.left];
+            Seed & above = (seeds[point.above].depth_filter.m_is_outlier==1) ? point : seeds[point.above];
+            Eigen::Vector2f w_p = left.depth_filter.m_p;
+            Eigen::Vector2f n_p = above.depth_filter.m_p;
+
+            const int x = point.m_uv.x();
+            const int y = point.m_uv.y();
+            if ( x == 0)
+                w_p[0] = 0.f;
+            else if ( x >= frame_width-1 )
+                current_p[0] = 0.f;
+            if ( y == 0 )
+                n_p[1] = 0.f;
+            else if ( y >= frame_height-1 )
+                current_p[1] = 0.f;
+
+            const float divergence = current_p[0] - w_p[0] + current_p[1] - n_p[1];
+
+            const float tauLambda = tau*lambda;
+            const float temp_u = old_u + tau * g * divergence;
+            // std::cout << "tmp u - noisy depth is " << temp_u - noisy_depth << '\n';
+            // std::cout << "tauLambda is " << tauLambda << '\n';
+            if ((temp_u - noisy_depth) > (tauLambda))
+            {
+                point.depth_filter.m_mu_denoised = temp_u - tauLambda;
+            }
+            else if ((temp_u - noisy_depth) < (-tauLambda))
+            {
+                point.depth_filter.m_mu_denoised = temp_u + tauLambda;
+            }
+            else
+            {
+                point.depth_filter.m_mu_denoised = noisy_depth;
+            }
+            point.depth_filter.m_mu_head = point.depth_filter.m_mu_denoised + theta * (point.depth_filter.m_mu_denoised - old_u);
+        }
+    }
+
+
+    for (auto &point : seeds) {
+        // std::cout << "changin mu depth from " << point.mu  << " to " << point.mu_denoised << '\n';
+        point.depth_filter.m_mu=point.depth_filter.m_mu_denoised;
+    }
+}
+
+
+void DepthEstimatorGL::remove_grazing_seeds ( std::vector<Seed>& seeds ){
+
+    //for each seed check the neighbouring ones, if the depth of them is higher than a certain theshold set them as outliers because it most likely a lonely point
+
+    //TODO store in point.left the index to the point itself and not a -1. Therefore we can just index the points without using an if
+
+    int nr_points_removed=0;
+    for ( auto &point : seeds ){
+        // std::cout << "update point " << point_idx << '\n';
+
+        //if the min and max between the neighbours is too high set them as outliers
+
+        float min_mu=std::numeric_limits<float>::max();
+        float max_mu=std::numeric_limits<float>::min();
+
+        int nr_neighbours=0;
+
+
+        if(point.right==-1){
+            std::cout << "what--------------------------------------------------" << '\n';
+        }
+
+        Seed & right=seeds[point.right];
+        Seed & left=seeds[point.left];
+        Seed & below=seeds[point.below];
+        Seed & above=seeds[point.above];
+        Seed & left_upper=seeds[point.left_upper];
+        Seed & right_upper=seeds[point.right_upper];
+        Seed & left_lower=seeds[point.left_lower];
+        Seed & right_lower=seeds[point.right_lower];
+        // if(point.right != -1){
+        //     right=seeds[point.right];
+        //     nr_neighbours++;
+        // }
+        // if(point.left != -1){
+        //     left=seeds[point.left];
+        //     nr_neighbours++;
+        // }
+        // if(point.below != -1){
+        //     below=seeds[point.below];
+        //     nr_neighbours++;
+        // }
+        // if(point.above != -1){
+        //     above=seeds[point.above];
+        //     nr_neighbours++;
+        // }
+        // if(point.left_upper != -1){
+        //     left_upper=seeds[point.left_upper];
+        //     nr_neighbours++;
+        // }
+        // if(point.right_upper != -1){
+        //     right_upper=seeds[point.right_upper];
+        //     nr_neighbours++;
+        // }
+        // if(point.left_lower != -1){
+        //     left_lower=seeds[point.left_lower];
+        //     nr_neighbours++;
+        // }
+        // if(point.right_lower != -1){
+        //     right_lower=seeds[point.right_lower];
+        //     nr_neighbours++;
+        // }
+
+
+
+        // min max
+        if(right.depth_filter.m_mu<min_mu){
+            min_mu=right.depth_filter.m_mu;
+        }
+        if(right.depth_filter.m_mu>max_mu){
+            max_mu=right.depth_filter.m_mu;
+        }
+
+        if(left.depth_filter.m_mu<min_mu){
+            min_mu=left.depth_filter.m_mu;
+        }
+        if(left.depth_filter.m_mu>max_mu){
+            max_mu=left.depth_filter.m_mu;
+        }
+
+
+        if(below.depth_filter.m_mu<min_mu){
+            min_mu=below.depth_filter.m_mu;
+        }
+        if(below.depth_filter.m_mu>max_mu){
+            max_mu=below.depth_filter.m_mu;
+        }
+
+
+        if(above.depth_filter.m_mu<min_mu){
+            min_mu=above.depth_filter.m_mu;
+        }
+        if(above.depth_filter.m_mu>max_mu){
+            max_mu=above.depth_filter.m_mu;
+        }
+
+
+        //diagonals
+        if(left_upper.depth_filter.m_mu<min_mu){
+            min_mu=left_upper.depth_filter.m_mu;
+        }
+        if(left_upper.depth_filter.m_mu>max_mu){
+            max_mu=left_upper.depth_filter.m_mu;
+        }
+
+        if(right_upper.depth_filter.m_mu<min_mu){
+            min_mu=right_upper.depth_filter.m_mu;
+        }
+        if(right_upper.depth_filter.m_mu>max_mu){
+            max_mu=right_upper.depth_filter.m_mu;
+        }
+
+
+        if(left_lower.depth_filter.m_mu<min_mu){
+            min_mu=left_lower.depth_filter.m_mu;
+        }
+        if(left_lower.depth_filter.m_mu>max_mu){
+            max_mu=left_lower.depth_filter.m_mu;
+        }
+
+
+        if(right_lower.depth_filter.m_mu<min_mu){
+            min_mu=right_lower.depth_filter.m_mu;
+        }
+        if(right_lower.depth_filter.m_mu>max_mu){
+            max_mu=right_lower.depth_filter.m_mu;
+        }
+
+
+        if(max_mu-min_mu>0.05){
+            point.depth_filter.m_is_outlier=1;
+
+            // right.depth_filter.m_is_outlier=1;
+            // left.depth_filter.m_is_outlier=1;
+            // above.depth_filter.m_is_outlier=1;
+            // below.depth_filter.m_is_outlier=1;
+            //
+            // left_upper.depth_filter.m_is_outlier=1;
+            // right_upper.depth_filter.m_is_outlier=1;
+            // left_lower.depth_filter.m_is_outlier=1;
+            // right_lower.depth_filter.m_is_outlier=1;
+
+            nr_points_removed++;
+        }
+
+        // //points if left lonely
+        // if(nr_points_removed>=nr_neighbours){
+        //     point.depth_filter.m_is_outlier=1;
+        //     nr_points_removed++;
+        // }
+
+        // std::cout << "max vmin " << max_mu-min_mu << '\n';
+
+        // std::cout << "nr nrihbs" << nr_neighbours << '\n';
+
+
+
+
+    }
+
+
+
+
+
+
+    // if all neighbours are outliers this points is also an outlier
+    int removed_lonely=0;
+    for ( auto &point : seeds ){
+        Seed & right=seeds[point.right];
+        Seed & left=seeds[point.left];
+        Seed & below=seeds[point.below];
+        Seed & above=seeds[point.above];
+        Seed & left_upper=seeds[point.left_upper];
+        Seed & right_upper=seeds[point.right_upper];
+        Seed & left_lower=seeds[point.left_lower];
+        Seed & right_lower=seeds[point.right_lower];
+
+        int nr_neighbours_outliers=0;
+        if(left.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
+        if(right.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
+        if(above.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
+        if(below.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
+        if(left_upper.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
+        if(right_upper.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
+        if(left_lower.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
+        if(right_lower.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
+
+        if(nr_neighbours_outliers>=7){
+            point.depth_filter.m_is_outlier=1;
+            removed_lonely++;
+        }
+
+    }
+
+
+    std::cout << "--------------------------------nr_points_removed " << nr_points_removed << '\n';
+    std::cout << "--------------------------------nr_lonely " << removed_lonely << '\n';
+
+
 }

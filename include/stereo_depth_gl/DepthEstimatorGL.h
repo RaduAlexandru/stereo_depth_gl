@@ -79,7 +79,11 @@ struct MinimalDepthFilter{
     float m_mu;                    //!< Mean of normal distribution.
     float m_z_range;               //!< Max range of the possible depth.
     float m_sigma2;                //!< Variance of normal distribution.
-    float pad[2]; //padded to 16 until now
+    float m_mu_denoised; //for TVL1 denoising
+    float m_mu_head; //for TVL1 denoising
+    Eigen::Vector2f m_p; //for TVL1 denoising
+    float m_g; //for TVL1 denoising
+    float pad;
 };
 struct Seed{
     // int32_t idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
@@ -153,7 +157,7 @@ struct Seed{
 
 
     int32_t idx_keyframe; //idx in the array of frames of the frame which "hosts" this inmature points
-    int32_t m_time_alive; 
+    int32_t m_time_alive;
     int32_t m_nr_times_visible;
     float m_energyTH=0;
     float m_intensity[MAX_RES_PER_POINT]; //gray value for each point on the pattern
@@ -176,6 +180,16 @@ struct Seed{
     float pad2[2]; //padded until 16 now
 
     MinimalDepthFilter depth_filter;
+
+    //for denoising (indexes iinto the array of points of each of the 8 neighbours)
+ int32_t left = -1;
+ int32_t right = -1;
+ int32_t above = -1;
+ int32_t below = -1;
+ int32_t left_upper = -1;
+ int32_t right_upper = -1;
+ int32_t left_lower = -1;
+int32_t right_lower = -1;
 
     float debug[16];
 
@@ -335,6 +349,9 @@ private:
     std::vector<Seed> create_seeds (const Frame& frame);
     void trace(std::vector<Seed>& seeds,const Frame& ref_frame, const Frame& cur_frame);
     Mesh create_mesh(const std::vector<Seed>& seeds, Frame& ref_frame);
+    void assign_neighbours_for_points( std::vector<Seed>& seeds, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
+    void denoise_cpu( std::vector<Seed>& seeds, const int iters,  const int frame_width, const int frame_height);
+    void remove_grazing_seeds ( std::vector<Seed>& seeds );
 
 
     // void assign_neighbours_for_points( std::vector<Seed>& immature_points, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.

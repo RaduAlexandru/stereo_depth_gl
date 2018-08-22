@@ -18,7 +18,11 @@ struct MinimalDepthFilter{
     float m_mu;                    //!< Mean of normal distribution.
     float m_z_range;               //!< Max range of the possible depth.
     float m_sigma2;                //!< Variance of normal distribution.
-    float pad[2]; //padded to 16 until now
+    float m_mu_denoised; //for TVL1 denoising
+    float m_mu_head; //for TVL1 denoising
+    vec2 m_p; //for TVL1 denoising
+    float m_g; //for TVL1 denoising
+    float pad;
 };
 struct Seed{
     int idx_keyframe; //idx in the array of keyframes which "hosts" this inmature points
@@ -45,6 +49,16 @@ struct Seed{
     float pad2[2]; //padded until 16 now
 
     MinimalDepthFilter depth_filter;
+
+    //for denoising (indexes iinto the array of points of each of the 8 neighbours)
+    int  left;
+    int  right;
+    int  above;
+    int  below;
+    int  left_upper;
+    int  right_upper;
+    int  left_lower;
+    int right_lower;
 
     float debug[16];
 };
@@ -230,7 +244,9 @@ void main(void) {
 
 
             //check if the gradient is perpendicular to the epipolar direction in which case we set the points as outlier because we won't be able to estimate the correct depth
-            vec2 grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x+0.5)/frame_size.x, (kp.y +0.5)/frame_size.y)).yz;
+            vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
+            float hit_color=hit_color_and_grads.x;
+            vec2 grads=hit_color_and_grads.yz;
             //grads stores the gradient direction in x and in y
             float along_epi=1-abs(dot(epi_dir, normalize(grads))); //increases when the points are ambigous on the epiline
             float along_epi_agresiv=0.8; //the smaller the value the more aggresive we are in discarding points
@@ -242,7 +258,7 @@ void main(void) {
             }
 
             //(Brightness Constancy Assumption) high qualty filter from openglsuperbible
-            float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
+            // float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
             const float residual = hit_color - (p[id].m_intensity[idx]);
             float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
             energy += hw *residual*residual*(2-hw);
