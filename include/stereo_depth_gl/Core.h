@@ -117,6 +117,7 @@ public:
       int m_preload_mesh_subsample_factor; //keep only a 1/subsample factor of the points in the preload mesh
       bool m_player_paused;
       bool m_player_should_do_one_step;
+      bool m_accumulate_meshes;
 
 
 

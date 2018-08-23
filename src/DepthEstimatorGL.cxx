@@ -43,7 +43,8 @@ DepthEstimatorGL::DepthEstimatorGL():
         m_compute_hessian_pointwise_prog_id(-1),
         m_nr_seeds_left(0),
         m_nr_seeds_right(0),
-        m_start_frame(0)
+        m_start_frame(0),
+        m_started_new_keyframe(false)
         {
 
     init_params();
@@ -1924,6 +1925,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh(const Frame& frame){
     if(frame.frame_idx%50==0){
        m_ref_frame=frame;
        m_seeds=create_seeds(frame);
+
     }else{
         //trace the created seeds
         trace(m_seeds, m_ref_frame, frame);
@@ -1939,7 +1941,10 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
        m_ref_frame=frame_left;
        m_seeds=create_seeds(frame_left);
        assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
+       m_started_new_keyframe=true;
+       m_last_finished_mesh=m_mesh;
     }else{
+        m_started_new_keyframe=false;
         //trace the created seeds
         trace(m_seeds, m_ref_frame, frame_right);
         //create a mesh
@@ -2184,9 +2189,12 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
             point_screen << u, v, 1.0;
             Eigen::Vector3f point_dir=ref_frame.K.inverse()*point_screen;
             Eigen::Vector3f point_cam = point_dir*depth;
-            point_cam(2)=-point_cam(2);
-            point_cam(1)=-point_cam(1);
-            mesh.V.row(i)=point_cam.cast<double>();
+            // point_cam(2)=-point_cam(2);
+            // point_cam(1)=-point_cam(1);
+            // point_cam(2)=-point_cam(2); //flip the depth because opengl 7has a camera which looks at the negative z axis (therefore, more depth means a more negative number)
+            Eigen::Vector3f point_world=ref_frame.tf_cam_world.inverse()*point_cam;
+            // mesh.V.row(i)=point_cam.cast<double>();
+            mesh.V.row(i)=point_world.cast<double>();
         }
 
 

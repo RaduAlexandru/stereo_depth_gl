@@ -226,6 +226,14 @@ void Core::update() {
             m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
         }
 
+        if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
+            Mesh point_cloud=m_depth_estimator_gl->m_last_finished_mesh;
+            std::string cloud_name="finished_cloud";
+            point_cloud.name=cloud_name;
+            point_cloud.m_show_points=true;
+            m_scene.add_mesh(point_cloud, cloud_name);
+        }
+
 
         // //update point cloud
         // Mesh point_cloud=m_depth_estimator_gl->create_point_cloud();
@@ -241,20 +249,20 @@ void Core::update() {
 
 
 
-        // //update camera frustum mesh
-        // for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
-        //     std::string cam_name= "cam_"+std::to_string(cam_id);
-        //     Mesh new_frustum_mesh;
-        //     if(cam_id==0){
-        //         new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-        //     }else if( cam_id==1){
-        //         new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
-        //     }
-        //     // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-        //     new_frustum_mesh.name=cam_name;
-        //     m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
-        //     m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
-        // }
+        //update camera frustum mesh
+        for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
+            std::string cam_name= "cam_"+std::to_string(cam_id);
+            Mesh new_frustum_mesh;
+            if(cam_id==0){
+                new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+            }else if( cam_id==1){
+                new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
+            }
+            // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+            new_frustum_mesh.name=cam_name;
+            m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
+            m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
+        }
 
 
 
@@ -381,6 +389,7 @@ void Core::init_params() {
     m_preload_mesh_path=(std::string)vis_cfg["preload_mesh_path"];
     m_preload_mesh_subsample_factor=vis_cfg["preload_mesh_subsample_factor"];
     m_do_transform_mesh_to_worlGL=vis_cfg["do_transform_mesh_to_worlGL"];
+    m_accumulate_meshes=vis_cfg["accumulate_meshes"];
 
 
 

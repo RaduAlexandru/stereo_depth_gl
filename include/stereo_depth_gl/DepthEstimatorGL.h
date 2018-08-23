@@ -297,6 +297,8 @@ public:
     int m_nr_total_seeds; //calculated from m_nr_buffered_keyframes and m_estimated_seeds_per_keyframe
     std::vector<int> m_nr_times_frame_used_for_seed_creation_per_cam;
     std::vector<std::vector<Frame>> m_keyframes_per_cam;
+    Mesh m_last_finished_mesh;
+    bool m_started_new_keyframe;
 
 
 
