@@ -59,8 +59,13 @@ private:
 
     cv::Mat undistort_rectify_image(const cv::Mat img, const Frame& frame_left, const Frame& frame_right);
     cv::Mat guided_filter(const cv::Mat& I, const cv::Mat& p, const float radius, const float eps);
+
+
+    Halide::Func integral_img_2D(const Halide::Func& I, const int width, const int height);
+    Halide::Func integral_img_3D(const Halide::Func& I, const int width, const int height);
     Halide::Func boxfilter(const Halide::Func& I, const int radius); //box filters a 2d image
     Halide::Func boxfilter_3D(const Halide::Func& I, const int radius); //box filters a 3d image. Returns another 3D image and the filter is ran over the first 2 dimensions(x,y)
+    Halide::Func boxfilter_3D_integral_img(const Halide::Func& I, const int radius); //same as above but using an integral image for each slice of the 3D image I
     Halide::Func boxfilter_slice(const Halide::Func& I, const int radius, const int slice); //box filters a certain slice from a 3D vol. filters a channels indicated by slcie and returns a 2D image
     Halide::Func mul_elem(const Halide::Func& lhs, const Halide::Func& rhs); //element wise multiplication of 2D matrices, returns a 2D matrix
     Halide::Func mul_elem_3D(const Halide::Func& lhs, const Halide::Func& rhs); //element wise multiplication of 3D matrices, returns a 3D matrix
