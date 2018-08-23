@@ -2200,18 +2200,26 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
 
     }
 
-    //make also some colors based on depth
+    // //make also some colors based on depth
+    // mesh.C.resize(seeds.size(),3);
+    // double min_z, max_z;
+    // min_z = mesh.V.col(2).minCoeff();
+    // max_z = mesh.V.col(2).maxCoeff();
+    // min_z=-5.5;
+    // max_z=-2;
+    // std::cout << "min max z is " << min_z << " " << max_z << '\n';
+    // for (size_t i = 0; i < mesh.C.rows(); i++) {
+    //     float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
+    //     mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
+    // }
+
+    //make colors from the intensity value stored in the seeds
     mesh.C.resize(seeds.size(),3);
-    double min_z, max_z;
-    min_z = mesh.V.col(2).minCoeff();
-    max_z = mesh.V.col(2).maxCoeff();
-    min_z=-5.5;
-    max_z=-2;
-    std::cout << "min max z is " << min_z << " " << max_z << '\n';
     for (size_t i = 0; i < mesh.C.rows(); i++) {
-        float gray_val = lerp(mesh.V(i,2), min_z, max_z, 0.0, 1.0 );
+        float gray_val = seeds[i].m_intensity[5]/255.0; //center points of the pattern;
         mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
     }
+
 
     return mesh;
 }
