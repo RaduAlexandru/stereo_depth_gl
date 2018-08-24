@@ -31,11 +31,13 @@ struct Params {
     float maxPerPtError;
     float slackFactor;
     // float residualTH = 0.25;			//ngf		// higher -> less strict
-    float residualTH = 12*12;					// higher -> less strict
+    // float residualTH = 12*12;					// higher -> less strict
+    float residualTH = 0.5*0.5;	 //BCA nromalzied values between [0,1]				// higher -> less strict
     float overallEnergyTHWeight = 1;
     float outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
     // float huberTH = 0.5; //ngf // Huber Threshold
-    float huberTH = 9; // Huber Threshold
+    // float huberTH = 9; // Huber Threshold
+    float huberTH = 0.05; //BCA with normalized values between [0,1] // Huber Threshold
     float convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
     float eta = 5;
 

@@ -239,48 +239,48 @@ void main(void) {
     // imageStore(debug, img_coords , vec4(0,hit_color,0,255) );
 
 
-    // //attempt 4
-    // mat2 gradH=mat2(0.0, 0.0 ,0.0 ,0.0);
-    // for(int p_idx=0;p_idx<pattern_rot_nr_points; ++p_idx){
-    //     vec2 offset=pattern_rot_offsets[p_idx];
-    //     vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords + ivec2(offset), 0 ).xyz;
-    //     vec2 grads_abs=abs(hit_color_and_grads.yz);
-    //     gradH+=outerProduct(grads_abs,grads_abs);
-    // }
-    // float trace=gradH[0][0]+gradH[1][1];
-    // // float determinant=determinant(gradH);
-    // // float grad_length=length(vec2(gradH[0][0],gradH[1][1]));
-    // vec3 hessian=vec3(gradH[0][0], gradH[0][1], gradH[1][1]);
-    // if(trace>8){
-    // // if(determinant>0.2){
-    // // if(grad_length>2.0){
-    //     uint id=atomicCounterIncrement(nr_seeds_created); //increments and returns the previous value
-    //
-    //     // Seed s=create_seed(img_coords,hessian);
-    //
-    //     // p[id+seeds_start_idx]=s;
-    //
-    //     // imageStore(debug, img_coords , vec4(0,255,0,255) );
-    // }
+    //attempt 4
+    mat2 gradH=mat2(0.0, 0.0 ,0.0 ,0.0);
+    for(int p_idx=0;p_idx<pattern_rot_nr_points; ++p_idx){
+        vec2 offset=pattern_rot_offsets[p_idx];
+        vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords + ivec2(offset), 0 ).xyz;
+        vec2 grads_abs=abs(hit_color_and_grads.yz);
+        gradH+=outerProduct(grads_abs,grads_abs);
+    }
+    float trace=gradH[0][0]+gradH[1][1];
+    // float determinant=determinant(gradH);
+    // float grad_length=length(vec2(gradH[0][0],gradH[1][1]));
+    vec3 hessian=vec3(gradH[0][0], gradH[0][1], gradH[1][1]);
+    if(trace>17){
+    // if(determinant>0.2){
+    // if(grad_length>2.0){
+        uint id=atomicCounterIncrement(nr_seeds_created); //increments and returns the previous value
+
+        Seed s=create_seed(img_coords,hessian);
+
+        p[id+seeds_start_idx]=s;
+
+        imageStore(debug, img_coords , vec4(0,255,0,255) );
+    }
     // imageStore(debug, img_coords , vec4(0,trace/8,0,255) );
 
 
-    //attempt 5 debug the gradients because it seems that the absolute value doesnt work
-    vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords, 0).xyz;
-    float hit_color=clamp(abs(hit_color_and_grads.y),0,1);
-    // float hit_color=hit_color_and_grads.y;
-    // float sign=1-sign(hit_color_and_grads.y);
-    // float sign=sign(hit_color_and_grads.y);
-    // float val_sign=0;
-    // if(sign==-1.0){
-    //     val_sign=255.0;
-    // }
-    // float hit_color=hit_color_and_grads.y;
-    // float zeros=0;
-    // if(hit_color==0){
-    //     zeros=1.0;
-    // }
-    imageStore(debug, img_coords , vec4(0,hit_color,0,255) );
+    // //attempt 5 debug the gradients because it seems that the absolute value doesnt work
+    // vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords, 0).xyz;
+    // float hit_color=clamp(abs(hit_color_and_grads.y),0,1);
+    // // float hit_color=hit_color_and_grads.y;
+    // // float sign=1-sign(hit_color_and_grads.y);
+    // // float sign=sign(hit_color_and_grads.y);
+    // // float val_sign=0;
+    // // if(sign==-1.0){
+    // //     val_sign=255.0;
+    // // }
+    // // float hit_color=hit_color_and_grads.y;
+    // // float zeros=0;
+    // // if(hit_color==0){
+    // //     zeros=1.0;
+    // // }
+    // imageStore(debug, img_coords , vec4(0,hit_color,0,255) );
 
 
 

@@ -1952,11 +1952,11 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
     if(frame_left.frame_idx%50==0){
         m_last_ref_frame=m_ref_frame;
         m_ref_frame=frame_left;
-        // m_seeds=create_seeds(frame_left);
-        m_seeds=create_seeds_gpu(frame_left);
-        if(frame_left.frame_idx==0){ //because for some reason the first frame fails to create seeds on gpu...
-            m_seeds=create_seeds_gpu(frame_left);
-        }
+        m_seeds=create_seeds(frame_left);
+        // m_seeds=create_seeds_gpu(frame_left);
+        // if(frame_left.frame_idx==0){ //because for some reason the first frame fails to create seeds on gpu...
+        //     m_seeds=create_seeds_gpu(frame_left);
+        // }
         // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         m_started_new_keyframe=true;
         m_last_finished_mesh=m_mesh;
@@ -2018,7 +2018,7 @@ std::vector<Seed> DepthEstimatorGL::create_seeds(const Frame& frame){
             //determinant is high enough, add the point
             float hessian_det=gradient_hessian.determinant();
             float trace=gradient_hessian.trace();
-            if(trace > 1000000){
+            if(trace > 17){
             // if(hessian_det > 0){
                 Seed point;
                 point.m_uv << j,i;
@@ -2372,7 +2372,7 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
     //make colors from the intensity value stored in the seeds
     mesh.C.resize(seeds.size(),3);
     for (size_t i = 0; i < mesh.C.rows(); i++) {
-        float gray_val = seeds[i].m_intensity[5]/255.0; //center points of the pattern;
+        float gray_val = seeds[i].m_intensity[5]; //center points of the pattern;
         mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
     }
 
