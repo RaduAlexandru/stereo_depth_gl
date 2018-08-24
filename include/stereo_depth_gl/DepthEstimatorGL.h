@@ -318,9 +318,11 @@ public:
     std::vector<Seed> m_seeds;
     GLuint m_points_gl_buf; //stores all the immature points
     gl::Texture2D m_cur_frame;
+    gl::Texture2D m_ref_frame_tex;
     Mesh m_mesh;
     std::vector<Frame> m_frames;
     Frame m_ref_frame; //frame containing the seed points
+    Frame m_last_ref_frame; //last frame which contained the seed points
     void compute_depth_and_create_mesh_ICL();
 
     // void compute_depth_and_create_mesh_ICL_incremental(const Frame& frame_left, const Frame& frame_right);
@@ -349,6 +351,7 @@ private:
     //cleaned up version
 
     std::vector<Seed> create_seeds (const Frame& frame);
+    std::vector<Seed> create_seeds_gpu (const Frame& frame);
     void trace(std::vector<Seed>& seeds,const Frame& ref_frame, const Frame& cur_frame);
     Mesh create_mesh(const std::vector<Seed>& seeds, Frame& ref_frame);
     void assign_neighbours_for_points( std::vector<Seed>& seeds, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
@@ -380,10 +383,11 @@ private:
     TIME_END_2(name,m_profiler);
 
 #define TIME_START_GL(name)\
-    if (m_debug_enabled) std::cout<<name<<std::endl;\
+    if (m_debug_enabled) std::cout<<"START: "<<name<<std::endl;\
     if (m_gl_profiling_enabled) glFinish();\
     TIME_START_2(name,m_profiler);
 
 #define TIME_END_GL(name)\
+    if (m_debug_enabled) std::cout<<"END: "<<name<<std::endl;\
     if (m_gl_profiling_enabled) glFinish();\
     TIME_END_2(name,m_profiler);

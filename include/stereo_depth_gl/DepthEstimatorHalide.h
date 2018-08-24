@@ -24,7 +24,7 @@ class DepthEstimatorHalide{
 public:
     DepthEstimatorHalide();
     ~DepthEstimatorHalide(); //needed so that forward declarations work
-    void init_halide();
+
 
     void compute_depth(const Frame& frame_left, const Frame& frame_right);
     // Halide::Func convolution(Halide::Func f, Halide::Func hx, Halide::Expr kernel_width, Halide::Expr kernel_height);
@@ -40,7 +40,7 @@ public:
 
 
     //databasse
-    bool is_first_frame=true;
+    bool m_is_first_frame=true;
     Frame first_frame; //used for debugging
     cv::Mat m_undistort_map_x; //vector containing the undistort map in x direction for cam right
     cv::Mat m_undistort_map_y; //vector containing the undistort map in x direction for cam right
@@ -51,11 +51,16 @@ public:
     //params
     bool m_use_cost_volume_filtering;
 
+    //Halide funcs
+    Halide::Func m_disparity;
+
 
 
 private:
 
     void init_params();
+    void init_halide();
+    Halide::Func generate_disparity_func(const cv::Mat& gray_left, const cv::Mat& gray_right, const int max_disparity, const int radius);
 
     cv::Mat undistort_rectify_image(const cv::Mat img, const Frame& frame_left, const Frame& frame_right);
     cv::Mat guided_filter(const cv::Mat& I, const cv::Mat& p, const float radius, const float eps);

@@ -18,12 +18,17 @@ struct MinimalDepthFilter{
     float m_mu;                    //!< Mean of normal distribution.
     float m_z_range;               //!< Max range of the possible depth.
     float m_sigma2;                //!< Variance of normal distribution.
-    float pad[2]; //padded to 16 until now
+    float m_mu_denoised; //for TVL1 denoising
+    float m_mu_head; //for TVL1 denoising
+    vec2 m_p; //for TVL1 denoising
+    float m_g; //for TVL1 denoising
+    float pad;
 };
 struct Seed{
     int idx_keyframe; //idx in the array of keyframes which "hosts" this inmature points
+    int m_time_alive;
+    int m_nr_times_visible;
     float m_energyTH;
-    float pad[2]; //padded to 16 until now
     float m_intensity[MAX_RES_PER_POINT]; //gray value for each point on the pattern
     vec2 m_normalized_grad[MAX_RES_PER_POINT];
     mat2 m_gradH; //2x2 matrix for the hessian (gx2, gxgy, gxgy, gy2), used for calculating the alpha value
@@ -44,6 +49,16 @@ struct Seed{
     float pad2[2]; //padded until 16 now
 
     MinimalDepthFilter depth_filter;
+
+    //for denoising (indexes iinto the array of points of each of the 8 neighbours)
+    int  left;
+    int  right;
+    int  above;
+    int  below;
+    int  left_upper;
+    int  right_upper;
+    int  left_lower;
+    int right_lower;
 
     float debug[16];
 };
@@ -177,19 +192,19 @@ void main(void) {
     ivec2 img_coords = ivec2(gl_GlobalInvocationID.xy);
 
 
-    vec3 hessian=texelFetch(hessian_blurred_sampler, img_coords, 0).xyz;
-    float determinant=abs(hessian.x*hessian.z-hessian.y*hessian.y);
-    float trace=hessian.x+hessian.z;
-    // if(determinant>0.005){
-    if(trace>0.9){
-        uint id=atomicCounterIncrement(nr_seeds_created); //increments and returns the previous value
-
-        Seed s=create_seed(img_coords, hessian);
-
-        p[id+seeds_start_idx]=s;
-
-        imageStore(debug, img_coords , vec4(0,255,0,255) );
-    }
+    // vec3 hessian=texelFetch(hessian_blurred_sampler, img_coords, 0).xyz;
+    // float determinant=abs(hessian.x*hessian.z-hessian.y*hessian.y);
+    // float trace=hessian.x+hessian.z;
+    // // if(determinant>0.005){
+    // if(trace>0.9){
+    //     uint id=atomicCounterIncrement(nr_seeds_created); //increments and returns the previous value
+    //
+    //     Seed s=create_seed(img_coords, hessian);
+    //
+    //     p[id+seeds_start_idx]=s;
+    //
+    //     imageStore(debug, img_coords , vec4(0,255,0,255) );
+    // }
 
 
 
@@ -203,14 +218,70 @@ void main(void) {
     // float trace=gradH[0][0]+gradH[1][1];
     // float determinant=determinant(gradH);
     // float grad_length=length(vec2(gradH[0][0],gradH[1][1]));
-    // if(trace>3.0){
+    // vec3 hessian=vec3(gradH[0][0], gradH[0][1], gradH[1][1]);
+    // if(trace>10){
     // // if(determinant>0.2){
     // // if(grad_length>2.0){
     //     uint id=atomicCounterIncrement(nr_seeds_created); //increments and returns the previous value
     //
-    //     Seed s=create_seed();
+    //     Seed s=create_seed(img_coords,hessian);
+    //
+    //     p[id+seeds_start_idx]=s;
     //
     //     imageStore(debug, img_coords , vec4(0,255,0,255) );
     // }
+
+
+
+    // //attempt 3
+    // vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords , 0 ).xyz;
+    // float hit_color=hit_color_and_grads.x;
+    // imageStore(debug, img_coords , vec4(0,hit_color,0,255) );
+
+
+    // //attempt 4
+    // mat2 gradH=mat2(0.0, 0.0 ,0.0 ,0.0);
+    // for(int p_idx=0;p_idx<pattern_rot_nr_points; ++p_idx){
+    //     vec2 offset=pattern_rot_offsets[p_idx];
+    //     vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords + ivec2(offset), 0 ).xyz;
+    //     vec2 grads_abs=abs(hit_color_and_grads.yz);
+    //     gradH+=outerProduct(grads_abs,grads_abs);
+    // }
+    // float trace=gradH[0][0]+gradH[1][1];
+    // // float determinant=determinant(gradH);
+    // // float grad_length=length(vec2(gradH[0][0],gradH[1][1]));
+    // vec3 hessian=vec3(gradH[0][0], gradH[0][1], gradH[1][1]);
+    // if(trace>8){
+    // // if(determinant>0.2){
+    // // if(grad_length>2.0){
+    //     uint id=atomicCounterIncrement(nr_seeds_created); //increments and returns the previous value
+    //
+    //     // Seed s=create_seed(img_coords,hessian);
+    //
+    //     // p[id+seeds_start_idx]=s;
+    //
+    //     // imageStore(debug, img_coords , vec4(0,255,0,255) );
+    // }
+    // imageStore(debug, img_coords , vec4(0,trace/8,0,255) );
+
+
+    //attempt 5 debug the gradients because it seems that the absolute value doesnt work
+    vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords, 0).xyz;
+    float hit_color=clamp(abs(hit_color_and_grads.y),0,1);
+    // float hit_color=hit_color_and_grads.y;
+    // float sign=1-sign(hit_color_and_grads.y);
+    // float sign=sign(hit_color_and_grads.y);
+    // float val_sign=0;
+    // if(sign==-1.0){
+    //     val_sign=255.0;
+    // }
+    // float hit_color=hit_color_and_grads.y;
+    // float zeros=0;
+    // if(hit_color==0){
+    //     zeros=1.0;
+    // }
+    imageStore(debug, img_coords , vec4(0,hit_color,0,255) );
+
+
 
 }

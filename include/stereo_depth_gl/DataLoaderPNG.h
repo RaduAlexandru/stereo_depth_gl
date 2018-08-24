@@ -25,12 +25,25 @@ namespace fs = boost::filesystem;
 
 #define BUFFER_SIZE 16
 
-struct file_timestamp_comparator
-{
+struct file_timestamp_comparator{
     inline bool operator() (const fs::path& lhs, const fs::path& rhs)
     {
         double lhs_val=stod(lhs.stem().string());
         double rhs_val=stod(rhs.stem().string());
+        return (lhs_val < rhs_val);
+    }
+};
+
+struct nts_file_comparator{
+    inline bool operator() (const fs::path& lhs, const fs::path& rhs)
+    {
+        //nts has frame_x, we remove the "frame_"
+        std::string lhs_s = lhs.stem().string();
+        std::string rhs_s = rhs.stem().string();
+        lhs_s.erase(0,6);
+        rhs_s.erase(0,6);
+        double lhs_val=stod(lhs_s );
+        double rhs_val=stod(rhs_s );
         return (lhs_val < rhs_val);
     }
 };
@@ -130,6 +143,7 @@ private:
     //read pose files
     void read_pose_file_eth();
     void read_pose_file_icl();
+    void read_pose_file_nts();
 
     //get poses depending on the datset
     bool get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp, const uint64_t cam_id);

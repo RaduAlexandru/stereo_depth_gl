@@ -264,8 +264,8 @@ void main(void) {
             energy += hw *residual*residual*(2-hw);
 
             // //Uni modal NGF
-            // vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
-            // vec2 grads=hit_color_and_grads.yz;
+            // // vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
+            // // vec2 grads=hit_color_and_grads.yz;
             // grads /= sqrt(dot(grads,grads)+params.eta);
             // const float nn = dot(grads,p[id].m_normalized_grad[idx]);
             // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf
@@ -333,7 +333,7 @@ void main(void) {
     }
 
 
-    if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
+    if ( bestEnergy > p[id].m_energyTH * 1.4f ) {
         is_outlier=1;
         // p[id].depth_filter.m_is_outlier=1;
     }
@@ -405,7 +405,7 @@ void main(void) {
         p[id].depth_filter.m_b++; // increase outlier probability when no match was found
         return;
     }
-
+    //check nans and infs
 
 
     // update_idepth(point,tf_host_cur, z, px_error_angle);

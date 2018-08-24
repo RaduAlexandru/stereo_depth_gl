@@ -43,6 +43,8 @@ DataLoaderPNG::DataLoaderPNG(){
             read_pose_file_eth();
         }else if(m_dataset_type==DatasetType::ICL){
             read_pose_file_icl();
+        }else if(m_dataset_type==DatasetType::NTS){
+            read_pose_file_nts();
         }
     }
 
@@ -81,6 +83,7 @@ void DataLoaderPNG::init_params(){
         std::string dataset_type_string=(std::string)loader_config["dataset_type"];
         if(dataset_type_string=="eth") m_dataset_type=DatasetType::ETH;
         else if(dataset_type_string=="icl") m_dataset_type=DatasetType::ICL;
+        else if(dataset_type_string=="nts") m_dataset_type=DatasetType::NTS;
         else LOG(FATAL) << " Dataset type is not known " << dataset_type_string;
         m_pose_file=(std::string)loader_config["pose_file"];
     }
@@ -190,8 +193,14 @@ void DataLoaderPNG::init_data_reading(){
 
         //TODO sort by name so that we process the frames in the correct order
 
+        if(m_dataset_type==DatasetType::NTS){
+            std::sort(rgb_filenames_all.begin(), rgb_filenames_all.end(), nts_file_comparator());
+        }else{
+            std::sort(rgb_filenames_all.begin(), rgb_filenames_all.end(), file_timestamp_comparator());
+        }
 
-        std::sort(rgb_filenames_all.begin(), rgb_filenames_all.end(), file_timestamp_comparator());
+
+
 
         //read a maximum nr of images HAVE TO DO IT HERE BECAUSE WE HAVE TO SORT THEM FIRST
         for (size_t img_idx = 0; img_idx < rgb_filenames_all.size(); img_idx++) {
@@ -266,9 +275,15 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             frame.frame_idx=nr_frames_read_for_cam;
 
             fs::path rgb_filename=m_rgb_filenames_per_cam[cam_id][ m_idx_img_to_read_per_cam[cam_id] ];
-            // std::cout << "rgb_filename is " << rgb_filename << '\n';
             m_idx_img_to_read_per_cam[cam_id]++;
-            uint64_t timestamp=std::stoull(rgb_filename.stem().string());
+            uint64_t timestamp=-1;
+            if(m_dataset_type==DatasetType::NTS){
+                std::string filename=rgb_filename.stem().string();
+                filename.erase(0,6);
+                timestamp=std::stoull(filename);
+            }else{
+                timestamp=std::stoull(rgb_filename.stem().string());
+            }
             frame.timestamp=timestamp; //store the unrounded one because when we check for the labels we check for the same filename
 
             //POSE---
@@ -293,8 +308,8 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             //gray
             cv::cvtColor ( frame.rgb, frame.gray, CV_BGR2GRAY );
             frame.gray.convertTo(frame.gray, CV_32F);
-            // frame.gray/=255.0; //gray is normalized
-            if(!m_only_rgb){
+            frame.gray/=255.0; //gray is normalized
+            if(!m_only_rgb || !frame.distort_coeffs.isZero() ){
                 frame.gray=undistort_image(frame.gray, frame.K, frame.distort_coeffs, cam_id); //undistort only the gray image because rgb is only used for visualization
                 //TODO remove this as we only use the rgb for visualization and debug
                 frame.rgb=undistort_image(frame.rgb, frame.K, frame.distort_coeffs, cam_id);
@@ -316,6 +331,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             channels.push_back(frame.grad_x);
             channels.push_back(frame.grad_y);
             cv::merge(channels, frame.gray_with_gradients);
+            // frame.gray_with_gradients = cv::abs(frame.gray_with_gradients);
             TIME_END("read_imgs");
 
             // std::cout << "pusing frame with tf corld of " << frame.tf_cam_world.matrix() << '\n';
@@ -539,6 +555,51 @@ void DataLoaderPNG::read_pose_file_icl(){
 
 }
 
+void DataLoaderPNG::read_pose_file_nts(){
+
+    std::ifstream infile( m_pose_file );
+    if(!infile.is_open()){
+        LOG(FATAL) << "Could not open pose file " << m_pose_file;
+    }
+    VLOG(1) << "Reading pose file for NTS dataset";
+
+    std::string line;
+    uint64_t timestamp=0;
+    while (std::getline(infile, line)) {
+        std::istringstream iss(line);
+
+        double tx, ty, tz, ex, ey, ez;
+
+        std::vector<std::string> tokens=split(line,",");
+        tx=stod(tokens[0]);
+        ty=stod(tokens[1]);
+        tz=stod(tokens[2]);
+        ex=stod(tokens[3]);
+        ey=stod(tokens[4]);
+        ez=stod(tokens[5]);
+
+
+        // rad 2 deg
+        ex = ex * M_PI / 180.;
+        ey = (180-ey) * M_PI / 180.;
+        ez = (180-ez) * M_PI / 180.;
+
+        Eigen::Affine3f pose_wb = Eigen::Affine3f::Identity();
+        pose_wb.translation() << tx,ty,tz;
+
+        pose_wb.translation() = pose_wb.translation() / 100.; // cm to m
+        pose_wb.linear () = (Eigen::AngleAxisf(ez, Eigen::Vector3f::UnitZ())
+                * Eigen::AngleAxisf(ey, Eigen::Vector3f::UnitY())
+                * Eigen::AngleAxisf(ex, Eigen::Vector3f::UnitX())).toRotationMatrix();
+
+        m_worldROS_baselink_map[timestamp]=pose_wb;
+        m_worldROS_baselink_vec.push_back ( std::pair<uint64_t, Eigen::Affine3f>(timestamp,pose_wb) );
+
+        timestamp++;
+    }
+
+}
+
 bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp, const uint64_t cam_id){
 
 
@@ -602,6 +663,25 @@ bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t 
 
     }else if(m_dataset_type==DatasetType::ICL){
         pose=pose_from_file.inverse();
+    }else if(m_dataset_type==DatasetType::NTS){
+        //pose from file is only from baselink to world
+
+        Eigen::Affine3f leftPose_cb = Eigen::Affine3f::Identity();
+        Eigen::Affine3f rightPose_cb = Eigen::Affine3f::Identity();
+        leftPose_cb.translation()(0)+=0.05; // 5 cm, since stereo origin is in the middle.
+        rightPose_cb.translation()(0)-=0.05; // 5 cm, since stereo origin is in the middle.
+
+        if(cam_id==0){
+            //pose is only from base to world but we need to return a pose that is tf_cam_world (so from world to cam)
+            pose= leftPose_cb *  pose_from_file.inverse(); //world to base and base to cam
+        }else if(cam_id==1){
+            pose= rightPose_cb *  pose_from_file.inverse(); //world to base and base to cam
+        }else{
+            LOG(FATAL) << "Now a known cam_id at " << cam_id;
+        }
+
+
+
     }else{
         LOG(FATAL) << "Unknown dataset";
     }
@@ -657,6 +737,24 @@ void DataLoaderPNG::get_intrinsics(Eigen::Matrix3f& K, Eigen::Matrix<float, 5, 1
             K(1,1)=-480; //fy
             K(0,2)=319.5; // cx
             K(1,2)=239.5; //cy
+            K(2,2)=1.0;
+            distort_coeffs.setZero();
+        }
+    }else if(m_dataset_type==DatasetType::NTS){
+        K.setIdentity();
+        if(cam_id==0){
+            K(0,0) = 615; //fx
+            K(1,1) = 615; //fy
+            K(0,2) = 320; //cx
+            K(1,2) = 240; //cy
+            K(2,2)=1.0;
+            distort_coeffs.setZero();
+        }else if(cam_id==1){
+            //even the two cameras are the same K
+            K(0,0) = 615; //fx
+            K(1,1) = 615; //fy
+            K(0,2) = 320; //cx
+            K(1,2) = 240; //cy
             K(2,2)=1.0;
             distort_coeffs.setZero();
         }

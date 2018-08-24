@@ -207,6 +207,7 @@ void Gui::update() {
     show_stereo_textures();
     show_rgb_textures();
     show_debug_textures();
+    show_ref_frame_texture();
 
 
 
@@ -411,6 +412,17 @@ void Gui::show_debug_textures(){
         ImGui::End();
     }
 
+
+}
+
+void Gui::show_ref_frame_texture(){
+
+    ImGuiWindowFlags debug_window_flags = 0;
+    if(m_core->m_depth_estimator_gl->m_ref_frame_tex.get_tex_id()!=-1){
+        ImGui::Begin("m_ref_frame_tex", nullptr, debug_window_flags);
+        ImGui::Image((ImTextureID)m_core->m_depth_estimator_gl->m_ref_frame_tex.get_tex_id(), ImGui::GetContentRegionAvail());
+        ImGui::End();
+    }
 
 }
 
