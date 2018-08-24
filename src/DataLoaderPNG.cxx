@@ -336,7 +336,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
 
             // std::cout << "pusing frame with tf corld of " << frame.tf_cam_world.matrix() << '\n';
             // std::cout << "pusing frame with K of " << frame.K << '\n';
-            std::cout << "pushing frame with frame_idxs " << frame.frame_idx << '\n';
+            // std::cout << "pushing frame with frame_idxs " << frame.frame_idx << '\n';
 
             m_frames_buffer_per_cam[cam_id].enqueue(frame);
             nr_frames_read_for_cam++;

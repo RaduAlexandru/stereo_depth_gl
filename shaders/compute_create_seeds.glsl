@@ -129,27 +129,116 @@ uniform int seeds_start_idx;
 uniform int idx_keyframe;
 
 
-Seed create_seed(ivec2 img_coords, vec3 hessian){
+Seed create_seed(ivec2 img_coords, vec3 hessian, int seed_idx){
     Seed s;
+    //TODO scale m_f
 
 
-    //at position nr_seeds_created fill out whatever is necesaary for the seed
-    s.idx_keyframe=idx_keyframe;
-    s.m_uv=img_coords;
+    // //at position nr_seeds_created fill out whatever is necesaary for the seed
+    // s.idx_keyframe=idx_keyframe;
+    // s.m_uv=img_coords;
+    // s.m_gradH=mat2(hessian.x,hessian.y,hessian.y,hessian.z); //column major filling
+    // s.m_time_alive=0;
+    // s.m_nr_times_visible=0;
+    //
+    // for(int p_idx=0;p_idx<pattern_rot_nr_points; ++p_idx){
+    //     vec2 offset=pattern_rot_offsets[p_idx];
+    //
+    //     vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords + ivec2(offset), 0 ).xyz;
+    //
+    //     s.m_intensity[p_idx]=hit_color_and_grads.x;
+    //     float squared_norm=dot(hit_color_and_grads.yz,hit_color_and_grads.yz);
+    //     float grad_normalization= sqrt(squared_norm + params.eta); //TODO would it be faster to add the eta to vector and then use length?
+    //     vec2 grad_normalized=hit_color_and_grads.yz / grad_normalization;
+    //     s.m_normalized_grad[p_idx]=grad_normalized;
+    //
+    //     if(length(grad_normalized)<1e-3){
+    //         s.m_zero_grad[p_idx]=1;
+    //     }else{
+    //         s.m_zero_grad[p_idx]=0;
+    //         s.m_active_pattern_points++;
+    //     }
+    //
+    // }
+    // s.m_energyTH = s.m_active_pattern_points * params.residualTH;
+    //
+    //
+    // //stuff for the depthfilter
+    // //stuff in reinit
+    // s.depth_filter.m_converged = 0;
+    // s.depth_filter.m_is_outlier = 0;
+    // s.depth_filter.m_alpha = 10;
+    // s.depth_filter.m_beta = 10;
+    // s.depth_filter.m_z_range = (1.0/min_starting_depth);
+    // s.depth_filter.m_sigma2 = (s.depth_filter.m_z_range*s.depth_filter.m_z_range/36);
+    // s.depth_filter.m_mu = (1.0/mean_starting_depth);
+    // //stuff in the constructor
+    // s.depth_filter.m_f.xyz = K_inv * vec3(img_coords,1.0);
+    // // s.depth_filter.m_f_scale = length(s.depth_filter.m_f.xyz);
+    // // s.depth_filter.m_f.xyz /= s.depth_filter.m_f_scale;
+    //
+    //
+    // s.m_idepth_minmax.x = s.depth_filter.m_mu + sqrt(s.depth_filter.m_sigma2);
+    // s.m_idepth_minmax.y = max(s.depth_filter.m_mu - sqrt(s.depth_filter.m_sigma2), 0.00000001f);
+    //
+    // s.m_last_error = -1;
+    // s.depth_filter.m_is_outlier = 0;
+    //
+    //
+    // s.left = seed_idx;
+    // s.right = seed_idx;
+    // s.above = seed_idx;
+    // s.below = seed_idx;
+    // s.left_upper = seed_idx;
+    // s.right_upper = seed_idx;
+    // s.left_lower = seed_idx;
+    // s.right_lower = seed_idx;
+    //
+    //
+    // //debug
+    // for(int i = 0; i < 16; i++){
+    //     s.debug[i]=0;
+    // }
+
+
+
+    // attempt 2
+    s.m_uv =img_coords;
     s.m_gradH=mat2(hessian.x,hessian.y,hessian.y,hessian.z); //column major filling
+    s.m_time_alive=0;
+    s.m_nr_times_visible=0;
 
-    for(int p_idx=0;p_idx<pattern_rot_nr_points; ++p_idx){
+    //Seed::Seed
+    s.depth_filter.m_f.xyz = normalize(K_inv * vec3(img_coords,1.0));
+    s.depth_filter.m_f.w=1.0;
+    s.depth_filter.m_mu = (1.0/mean_starting_depth);
+    s.depth_filter.m_z_range = (1.0/min_starting_depth);
+    s.depth_filter.m_sigma2 = (s.depth_filter.m_z_range*s.depth_filter.m_z_range/36);
+
+    float z_inv_min = s.depth_filter.m_mu + sqrt(s.depth_filter.m_sigma2);
+    float z_inv_max = max(s.depth_filter.m_mu- sqrt(s.depth_filter.m_sigma2), 0.00000001f);
+    s.m_idepth_minmax =vec2(z_inv_min, z_inv_max );
+
+    s.depth_filter.m_alpha=10.0;
+    s.depth_filter.m_beta=10.0;
+
+
+
+    //get data for the color of that point (depth_point->ImmaturePoint::ImmaturePoint)---------------------
+    for(int p_idx=0;p_idx<pattern_rot_nr_points;p_idx++){
+
         vec2 offset=pattern_rot_offsets[p_idx];
 
         vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords + ivec2(offset), 0 ).xyz;
+        float hit_color=hit_color_and_grads.x;
+        vec2 grads=hit_color_and_grads.yz;
 
-        s.m_intensity[p_idx]=hit_color_and_grads.x;
-        float squared_norm=dot(hit_color_and_grads.yz,hit_color_and_grads.yz);
-        float grad_normalization= sqrt(squared_norm + params.eta); //TODO would it be faster to add the eta to vector and then use length?
-        vec2 grad_normalized=hit_color_and_grads.yz / grad_normalization;
-        s.m_normalized_grad[p_idx]=grad_normalized;
+        s.m_intensity[p_idx]=hit_color;
 
-        if(length(grad_normalized)<1e-3){
+        //for ngf
+        s.m_normalized_grad[p_idx] = grads;
+        s.m_normalized_grad[p_idx] /= sqrt( dot(grads,grads) + params.eta);
+        if( length(s.m_normalized_grad[p_idx])<1e-3){
             s.m_zero_grad[p_idx]=1;
         }else{
             s.m_zero_grad[p_idx]=0;
@@ -157,32 +246,29 @@ Seed create_seed(ivec2 img_coords, vec3 hessian){
         }
 
     }
-    s.m_energyTH = s.m_active_pattern_points * params.maxPerPtError * params.slackFactor;
+    s.m_energyTH = pattern_rot_nr_points * params.residualTH;
+    // point.m_energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
 
-
-    //stuff for the depthfilter
-    //stuff in reinit
-    s.depth_filter.m_converged = 0;
+    s.m_last_error = -1;
     s.depth_filter.m_is_outlier = 0;
-    s.depth_filter.m_alpha = 10;
-    s.depth_filter.m_beta = 10;
-    s.depth_filter.m_z_range = (1.0/min_starting_depth);
-    s.depth_filter.m_sigma2 = (s.depth_filter.m_z_range*s.depth_filter.m_z_range/36);
-    s.depth_filter.m_mu = (1.0/mean_starting_depth);
-    //stuff in the constructor
-    s.depth_filter.m_f.xyz = K_inv * vec3(img_coords,1.0);
-    s.depth_filter.m_f_scale = length(s.depth_filter.m_f.xyz);
-    s.depth_filter.m_f.xyz /= s.depth_filter.m_f_scale;
 
 
-    s.m_idepth_minmax.x = s.depth_filter.m_mu + sqrt(s.depth_filter.m_sigma2);
-    s.m_idepth_minmax.y = max(s.depth_filter.m_mu - sqrt(s.depth_filter.m_sigma2), 0.00000001f);
+    //as the neighbours indices set the current points so if we access it we get this point
+    s.left = seed_idx;
+    s.right = seed_idx;
+    s.above = seed_idx;
+    s.below = seed_idx;
+    s.left_upper = seed_idx;
+    s.right_upper = seed_idx;
+    s.left_lower = seed_idx;
+    s.right_lower = seed_idx;
 
 
-    //debug
-    for(int i = 0; i < 16; i++){
-        s.debug[i]=0;
-    }
+
+
+
+
+
 
     return s;
 }
@@ -256,9 +342,10 @@ void main(void) {
     // if(grad_length>2.0){
         uint id=atomicCounterIncrement(nr_seeds_created); //increments and returns the previous value
 
-        Seed s=create_seed(img_coords,hessian);
+        Seed s=create_seed(img_coords,hessian,int(id));
 
-        p[id+seeds_start_idx]=s;
+        p[id]=s;
+        // p[id+seeds_start_idx]=s;
 
         imageStore(debug, img_coords , vec4(0,255,0,255) );
     }

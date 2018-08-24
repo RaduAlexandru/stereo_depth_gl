@@ -1952,11 +1952,11 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
     if(frame_left.frame_idx%50==0){
         m_last_ref_frame=m_ref_frame;
         m_ref_frame=frame_left;
-        m_seeds=create_seeds(frame_left);
-        // m_seeds=create_seeds_gpu(frame_left);
-        // if(frame_left.frame_idx==0){ //because for some reason the first frame fails to create seeds on gpu...
-        //     m_seeds=create_seeds_gpu(frame_left);
-        // }
+        // m_seeds=create_seeds(frame_left);
+        m_seeds=create_seeds_gpu(frame_left);
+        if(frame_left.frame_idx==0){ //because for some reason the first frame fails to create seeds on gpu...
+            m_seeds=create_seeds_gpu(frame_left);
+        }
         // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         m_started_new_keyframe=true;
         m_last_finished_mesh=m_mesh;
@@ -1979,7 +1979,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
         // //next one we will create a keyframe
         if( (frame_left.frame_idx+1) %50==0){
-            remove_grazing_seeds(m_seeds);
+            // remove_grazing_seeds(m_seeds);
             // we will create a new keyframe but before that, do a trace on the previous keyframe
             if(!m_last_ref_frame.gray.empty()){ //if it's the first keyframe then the last one will be empty
                 trace(m_seeds, m_ref_frame, m_last_ref_frame);
@@ -2201,17 +2201,19 @@ std::vector<Seed> DepthEstimatorGL::create_seeds_gpu (const Frame& frame){
 
 
     //debug read the seeds back to cpu
-    std::vector<Seed> seeds(nr_seeds_created);
+    std::vector<Seed> seeds;
     std::cout << "cam " << frame.cam_id << '\n';
-    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_right_gl_buf);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+    std::cout << "mapping" << '\n';
     Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+    std::cout << "did the mapping " << '\n';
     for (size_t i = 0; i < nr_seeds_created; i++) {
         // // for (size_t d = 0; d < 16; d++) {
         // //     std::cout << "debug val is " << ptr[i].debug[d] << '\n';
         // // }
         // // std::cout << "uv of seed is " << ptr[i].m_uv.transpose() << '\n';
         // print_seed(ptr[i]);
-        seeds[i]=ptr[i];
+        seeds.push_back(ptr[i]);
     }
     glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
