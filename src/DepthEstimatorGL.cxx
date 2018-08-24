@@ -1949,6 +1949,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh(const Frame& frame){
 void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_left, const Frame& frame_right){
 
     std::cout << "RECEIVED FRAME " << '\n';
+    TIME_START_GL("ALL");
     if(frame_left.frame_idx%50==0){
         m_last_ref_frame=m_ref_frame;
         m_ref_frame=frame_left;
@@ -1961,7 +1962,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         m_started_new_keyframe=true;
         m_last_finished_mesh=m_mesh;
     }else{
-        m_started_new_keyframe=false;
+
         //trace the created seeds
         trace(m_seeds, m_ref_frame, frame_right);
         //create a mesh
@@ -1979,18 +1980,21 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
         // //next one we will create a keyframe
         if( (frame_left.frame_idx+1) %50==0){
+            // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
             // remove_grazing_seeds(m_seeds);
             // we will create a new keyframe but before that, do a trace on the previous keyframe
-            if(!m_last_ref_frame.gray.empty()){ //if it's the first keyframe then the last one will be empty
-                trace(m_seeds, m_ref_frame, m_last_ref_frame);
-            }
+            // if(!m_last_ref_frame.gray.empty()){ //if it's the first keyframe then the last one will be empty
+            //     trace(m_seeds, m_ref_frame, m_last_ref_frame);
+            // }
 
             // denoise_cpu(m_seeds, 200,  m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         }
 
 
         m_mesh=create_mesh(m_seeds, m_ref_frame);
+        m_started_new_keyframe=false;
     }
+    TIME_END_GL("ALL");
 }
 
 std::vector<Seed> DepthEstimatorGL::create_seeds(const Frame& frame){
@@ -2195,9 +2199,9 @@ std::vector<Seed> DepthEstimatorGL::create_seeds_gpu (const Frame& frame){
 
     // get how many seeds were created
     GLuint* atomic_nr_seeds_created_cpu= (GLuint*)glMapBufferRange(GL_ATOMIC_COUNTER_BUFFER,0,sizeof(GLuint),GL_MAP_READ_BIT);
-    int nr_seeds_created=atomic_nr_seeds_created_cpu[0]; //need to store it in another buffer because we will unmap this pointer
+    m_nr_seeds_created=atomic_nr_seeds_created_cpu[0]; //need to store it in another buffer because we will unmap this pointer
     glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
-    std::cout << "nr_seeds_created " << nr_seeds_created << '\n';
+    std::cout << "nr_seeds_created " << m_nr_seeds_created << '\n';
 
 
     //debug read the seeds back to cpu
@@ -2207,7 +2211,7 @@ std::vector<Seed> DepthEstimatorGL::create_seeds_gpu (const Frame& frame){
     std::cout << "mapping" << '\n';
     Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
     std::cout << "did the mapping " << '\n';
-    for (size_t i = 0; i < nr_seeds_created; i++) {
+    for (size_t i = 0; i < m_nr_seeds_created; i++) {
         // // for (size_t d = 0; d < 16; d++) {
         // //     std::cout << "debug val is " << ptr[i].debug[d] << '\n';
         // // }
@@ -2234,10 +2238,15 @@ void DepthEstimatorGL::trace(std::vector<Seed>& seeds,const Frame& ref_frame, co
     std::cout << "Tracing with " << seeds.size() << " seeds" << '\n';
 
     //upload to gpu the inmature points
-    TIME_START_GL("upload_immature_points");
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, seeds.size() * sizeof(Seed), seeds.data(), GL_DYNAMIC_COPY);
-    TIME_END_GL("upload_immature_points");
+    if(m_started_new_keyframe){
+        TIME_START_GL("upload_immature_points");
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_points_gl_buf);
+        //have to do it subdata because we want to keep the big size of the buffer so that create_seeds_gpu can write to it
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, seeds.size() * sizeof(Seed), seeds.data());
+        // glBufferData(GL_SHADER_STORAGE_BUFFER, seeds.size() * sizeof(Seed), seeds.data(), GL_DYNAMIC_COPY);
+        TIME_END_GL("upload_immature_points");
+    }
+
 
 
     glUseProgram(m_compute_trace_seeds_icl_prog_id);

@@ -345,9 +345,9 @@ void main(void) {
         Seed s=create_seed(img_coords,hessian,int(id));
 
         p[id]=s;
-        // p[id+seeds_start_idx]=s;
+        p[id+seeds_start_idx]=s;
 
-        imageStore(debug, img_coords , vec4(0,255,0,255) );
+        // imageStore(debug, img_coords , vec4(0,255,0,255) );
     }
     // imageStore(debug, img_coords , vec4(0,trace/8,0,255) );
 

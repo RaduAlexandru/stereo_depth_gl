@@ -318,6 +318,7 @@ public:
     //for debugging we run only icl nuim
     int m_start_frame;
     std::vector<Seed> m_seeds;
+    int m_nr_seeds_created;
     GLuint m_points_gl_buf; //stores all the immature points
     gl::Texture2D m_cur_frame;
     gl::Texture2D m_ref_frame_tex;
