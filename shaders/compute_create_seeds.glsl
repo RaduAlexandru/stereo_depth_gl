@@ -326,6 +326,8 @@ void main(void) {
 
 
     //attempt 4
+    //total time of seed creation is 70ms out of which 50ms is spent on checking if the trace is high and incrementing the counter
+    //the time for just incrementing the counter for all pixels is 300ms... so it seems that the counter is the bottleneck
     mat2 gradH=mat2(0.0, 0.0 ,0.0 ,0.0);
     for(int p_idx=0;p_idx<pattern_rot_nr_points; ++p_idx){
         vec2 offset=pattern_rot_offsets[p_idx];
@@ -345,7 +347,7 @@ void main(void) {
         Seed s=create_seed(img_coords,hessian,int(id));
 
         p[id]=s;
-        p[id+seeds_start_idx]=s;
+        // p[id+seeds_start_idx]=s;
 
         // imageStore(debug, img_coords , vec4(0,255,0,255) );
     }
