@@ -1,9 +1,6 @@
 [submodule "deps/imgui"]
 	path = deps/imgui
 	url = https://github.com/RaduAlexandru/imgui.git
-[submodule "deps/libigl"]
-	path = deps/libigl
-	url = https://github.com/RaduAlexandru/libigl.git
 [submodule "deps/loguru"]
 	path = deps/loguru
 	url = https://github.com/RaduAlexandru/loguru.git
