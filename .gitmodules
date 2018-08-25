@@ -16,3 +16,6 @@
 [submodule "deps/readerwriterqueue"]
 	path = deps/readerwriterqueue
 	url = https://github.com/cameron314/readerwriterqueue.git
+[submodule "deps/Configuru"]
+	path = deps/Configuru
+	url = https://github.com/RaduAlexandru/Configuru.git
