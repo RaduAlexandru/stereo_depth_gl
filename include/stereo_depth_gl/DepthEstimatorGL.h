@@ -292,6 +292,7 @@ public:
     GLuint m_compute_create_seeds_prog_id;
     GLuint m_compute_trace_seeds_prog_id;
     GLuint m_compute_trace_seeds_icl_prog_id;
+    GLuint m_compute_init_seeds_prog_id; //initializey a vector of seeds for which we already know the size
 
 
     //databasse
@@ -355,6 +356,7 @@ private:
 
     std::vector<Seed> create_seeds (const Frame& frame);
     std::vector<Seed> create_seeds_gpu (const Frame& frame);
+    std::vector<Seed> create_seeds_hybrid (const Frame& frame); //used gpu for hessian calculation and cpu for thresholding on trace
     void trace(std::vector<Seed>& seeds,const Frame& ref_frame, const Frame& cur_frame);
     Mesh create_mesh(const std::vector<Seed>& seeds, Frame& ref_frame);
     void assign_neighbours_for_points( std::vector<Seed>& seeds, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.

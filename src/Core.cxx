@@ -390,6 +390,9 @@ void Core::init_params() {
     m_do_transform_mesh_to_worlGL=vis_cfg["do_transform_mesh_to_worlGL"];
     m_accumulate_meshes=vis_cfg["accumulate_meshes"];
 
+    Config loader_cfg = cfg["loader"];
+    m_player_paused=loader_cfg["player_paused"];
+
 
 
 

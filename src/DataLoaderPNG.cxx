@@ -330,6 +330,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             channels.push_back(frame.gray);
             channels.push_back(frame.grad_x);
             channels.push_back(frame.grad_y);
+            // channels.push_back(frame.grad_y);
             cv::merge(channels, frame.gray_with_gradients);
             // frame.gray_with_gradients = cv::abs(frame.gray_with_gradients);
             TIME_END("read_imgs");
