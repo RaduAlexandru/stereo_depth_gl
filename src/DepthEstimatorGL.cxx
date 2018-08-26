@@ -169,17 +169,17 @@ void DepthEstimatorGL::init_opengl(){
 void DepthEstimatorGL::compile_shaders(){
 
 
-    m_update_depth_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
+    m_update_depth_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
 
-    m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_hessian_pointwise.glsl");
+    m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_hessian_pointwise.glsl");
 
-    m_compute_hessian_blurred_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_hessian_blurred.glsl");
+    m_compute_hessian_blurred_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_hessian_blurred.glsl");
 
-    m_compute_create_seeds_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_create_seeds.glsl");
+    m_compute_create_seeds_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_create_seeds.glsl");
 
-    m_compute_trace_seeds_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_trace_seeds.glsl");
+    m_compute_trace_seeds_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_trace_seeds.glsl");
 
-    m_compute_trace_seeds_icl_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_trace_seeds_icl.glsl");
+    m_compute_trace_seeds_icl_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_trace_seeds_icl.glsl");
 
     // m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
 

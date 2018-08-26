@@ -29,9 +29,9 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
-#include "ceres/ceres.h"
-#include "ceres/cubic_interpolation.h"
-#include "ceres/rotation.h"
+// #include "ceres/ceres.h"
+// #include "ceres/cubic_interpolation.h"
+// #include "ceres/rotation.h"
 #include <algorithm>
 #include <chrono>
 #include <opencv2/opencv.hpp>

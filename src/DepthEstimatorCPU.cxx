@@ -545,65 +545,67 @@ std::vector<ImmaturePoint> DepthEstimatorCPU::create_immature_points (const Fram
 }
 
 Eigen::Vector2f DepthEstimatorCPU::estimate_affine(std::vector<ImmaturePoint>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr){
-    ceres::Problem problem;
-    ceres::LossFunction * loss_function = new ceres::HuberLoss(1);
-    double scaleA = 1;
-    double offsetB = 0;
+    // ceres::Problem problem;
+    // ceres::LossFunction * loss_function = new ceres::HuberLoss(1);
+    // double scaleA = 1;
+    // double offsetB = 0;
+    //
+    // TIME_START("creating ceres problem");
+    // for ( int i = 0; i < immature_points.size(); ++i )
+    // {
+    //     ImmaturePoint& point = immature_points[i];
+    //     if ( i % 100 != 0 )
+    //         continue;
+    //
+    //     //get colors at the current frame
+    //     float color_cur_frame[MAX_RES_PER_POINT];
+    //     float color_host_frame[MAX_RES_PER_POINT];
+    //
+    //
+    //     if ( 1.0/point.gt_depth > 0 ) {
+    //
+    //         const Eigen::Vector3f p = KRKi_cr * Eigen::Vector3f(point.u,point.v,1) + Kt_cr*  (1.0/point.gt_depth);
+    //         point.kp_GT = p.hnormalized();
+    //
+    //
+    //         if ( point.kp_GT(0) > 4 && point.kp_GT(0) < cur_frame.gray.cols-4 && point.kp_GT(1) > 3 && point.kp_GT(1) < cur_frame.gray.rows-4 ) {
+    //
+    //             Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
+    //
+    //             for(int idx=0;idx<m_pattern.get_nr_points();++idx) {
+    //                 Eigen::Vector2f offset=pattern_rot.get_offset(idx);
+    //
+    //                 color_cur_frame[idx]=texture_interpolate(cur_frame.gray, point.kp_GT(0)+offset(0), point.kp_GT(1)+offset(1) , InterpolationType::LINEAR);
+    //                 color_host_frame[idx]=point.color[idx];
+    //
+    //             }
+    //         }
+    //     }
+    //
+    //
+    //     for ( int i = 0; i < m_pattern.get_nr_points(); ++i) {
+    //         if ( !std::isfinite(color_host_frame[i]) || ! std::isfinite(color_cur_frame[i]) )
+    //             continue;
+    //         if ( color_host_frame[i] <= 0 || color_host_frame[i] >= 255 || color_cur_frame[i] <= 0 || color_cur_frame[i] >= 255  )
+    //             continue;
+    //         ceres::CostFunction * cost_function = AffineAutoDiffCostFunctor::Create( color_cur_frame[i], color_host_frame[i] );
+    //         problem.AddResidualBlock( cost_function, loss_function, &scaleA, & offsetB );
+    //     }
+    // }
+    // TIME_END("creating ceres problem");
+    // ceres::Solver::Options solver_options;
+    // //solver_options.linear_solver_type = ceres::DENSE_QR;//DENSE_SCHUR;//QR;
+    // solver_options.minimizer_progress_to_stdout = false;
+    // solver_options.max_num_iterations = 1000;
+    // solver_options.function_tolerance = 1e-6;
+    // solver_options.num_threads = 8;
+    // ceres::Solver::Summary summary;
+    // ceres::Solve( solver_options, & problem, & summary );
+    // //std::cout << summary.FullReport() << std::endl;
+    // std::cout << "scale= " << scaleA << " offset= "<< offsetB << std::endl;
+    // return Eigen::Vector2f ( scaleA, offsetB );
 
-    TIME_START("creating ceres problem");
-    for ( int i = 0; i < immature_points.size(); ++i )
-    {
-        ImmaturePoint& point = immature_points[i];
-        if ( i % 100 != 0 )
-            continue;
-
-        //get colors at the current frame
-        float color_cur_frame[MAX_RES_PER_POINT];
-        float color_host_frame[MAX_RES_PER_POINT];
-
-
-        if ( 1.0/point.gt_depth > 0 ) {
-
-            const Eigen::Vector3f p = KRKi_cr * Eigen::Vector3f(point.u,point.v,1) + Kt_cr*  (1.0/point.gt_depth);
-            point.kp_GT = p.hnormalized();
-
-
-            if ( point.kp_GT(0) > 4 && point.kp_GT(0) < cur_frame.gray.cols-4 && point.kp_GT(1) > 3 && point.kp_GT(1) < cur_frame.gray.rows-4 ) {
-
-                Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr.topLeftCorner<2,2>() );
-
-                for(int idx=0;idx<m_pattern.get_nr_points();++idx) {
-                    Eigen::Vector2f offset=pattern_rot.get_offset(idx);
-
-                    color_cur_frame[idx]=texture_interpolate(cur_frame.gray, point.kp_GT(0)+offset(0), point.kp_GT(1)+offset(1) , InterpolationType::LINEAR);
-                    color_host_frame[idx]=point.color[idx];
-
-                }
-            }
-        }
-
-
-        for ( int i = 0; i < m_pattern.get_nr_points(); ++i) {
-            if ( !std::isfinite(color_host_frame[i]) || ! std::isfinite(color_cur_frame[i]) )
-                continue;
-            if ( color_host_frame[i] <= 0 || color_host_frame[i] >= 255 || color_cur_frame[i] <= 0 || color_cur_frame[i] >= 255  )
-                continue;
-            ceres::CostFunction * cost_function = AffineAutoDiffCostFunctor::Create( color_cur_frame[i], color_host_frame[i] );
-            problem.AddResidualBlock( cost_function, loss_function, &scaleA, & offsetB );
-        }
-    }
-    TIME_END("creating ceres problem");
-    ceres::Solver::Options solver_options;
-    //solver_options.linear_solver_type = ceres::DENSE_QR;//DENSE_SCHUR;//QR;
-    solver_options.minimizer_progress_to_stdout = false;
-    solver_options.max_num_iterations = 1000;
-    solver_options.function_tolerance = 1e-6;
-    solver_options.num_threads = 8;
-    ceres::Solver::Summary summary;
-    ceres::Solve( solver_options, & problem, & summary );
-    //std::cout << summary.FullReport() << std::endl;
-    std::cout << "scale= " << scaleA << " offset= "<< offsetB << std::endl;
-    return Eigen::Vector2f ( scaleA, offsetB );
+    return Eigen::Vector2f ( 1.0, 0.0 );
 }
 
 float DepthEstimatorCPU::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolationType type){

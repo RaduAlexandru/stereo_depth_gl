@@ -58,7 +58,7 @@ find_package(GLM REQUIRED)
 # find_package(nanoflann)
 # find_package(Boost 1.64 REQUIRED COMPONENTS system thread filesystem)
 # find_package(kqueue REQUIRED)
-find_package(Ceres REQUIRED)
+# find_package(Ceres REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system thread filesystem)
 find_package(kqueue REQUIRED)
 find_package(Halide REQUIRED)
@@ -108,7 +108,7 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${GLM_INCLUDE_DIRS})
 # include_directories(${nanoflann_INCLUDE_DIRS})
 # include_directories(${KQUEUE_INCLUDE_DIRS})
-include_directories(${CERES_INCLUDE_DIR})
+# include_directories(${CERES_INCLUDE_DIR})
 include_directories(${HALIDE_INCLUDE_DIRS})
 #add_definitions(${GLM_DEFINITIONS})
 #include_directories("/media/alex/Data/Master/SHK/c_ws/src/laser_mesher/deps/libigl/external/nanogui/ext/glew/include/")
@@ -145,14 +145,12 @@ set_target_properties(TINY_PROCESS_LIB PROPERTIES LINKER_LANGUAGE C)
 
 
 # #Boost 1.64 libraries
-# file(GLOB Boost_libs_164 /media/alex/Data/Programs_linux/boost/boost_1_64_0/*.so /media/alex/Data/Programs_linux/boost/boost_1_64_0/*.a)
 
 
 add_executable(stereo_depth_gl ${MY_SRC}  deps/GL/glad.c deps/dir_watcher/dir_watcher.cpp  ${IMGUI_SRC}   )
 target_link_libraries(stereo_depth_gl ${catkin_LIBRARIES}  ${OpenCV_LIBS}  TINY_PROCESS_LIB
           ${KQUEUE_LIBRARIES}
           igl::core igl::opengl igl::opengl_glfw
-          ceres
         ${HALIDE_LIBRARIES}
 )
 #definitions for cmake variables that are necesarry during runtime

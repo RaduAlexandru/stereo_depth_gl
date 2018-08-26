@@ -15,9 +15,9 @@
 #include "stereo_depth_gl/Frame.h"
 
 //ceres
-#include "ceres/ceres.h"
-#include "ceres/cubic_interpolation.h"
-#include "ceres/rotation.h"
+// #include "ceres/ceres.h"
+// #include "ceres/cubic_interpolation.h"
+// #include "ceres/rotation.h"
 
 
 //TODO settings that should be refactored into a config file
@@ -86,25 +86,25 @@ enum InterpolationType {
 
 
 
-struct  AffineAutoDiffCostFunctor
-{
-	explicit AffineAutoDiffCostFunctor( const double & refColor, const double & newColor )
-			:  m_refColor( refColor ), m_newColor( newColor ){ }
-
-	template<typename T>
-	bool operator() (const T* scaleA, const T* offsetB, T* residuals) const {
-		residuals[0] = T(m_newColor) - (scaleA[0] * T(m_refColor) + offsetB[0]);
-		return true;
-	}
-	static ceres::CostFunction * Create ( const double & refColor, const double & newColor )
-	{
-		return new ceres::AutoDiffCostFunction<AffineAutoDiffCostFunctor,1,1,1>( new AffineAutoDiffCostFunctor( refColor, newColor ) );
-	}
-
-private:
-	const double m_refColor;
-	const double m_newColor;
-};
+// struct  AffineAutoDiffCostFunctor
+// {
+// 	explicit AffineAutoDiffCostFunctor( const double & refColor, const double & newColor )
+// 			:  m_refColor( refColor ), m_newColor( newColor ){ }
+//
+// 	template<typename T>
+// 	bool operator() (const T* scaleA, const T* offsetB, T* residuals) const {
+// 		residuals[0] = T(m_newColor) - (scaleA[0] * T(m_refColor) + offsetB[0]);
+// 		return true;
+// 	}
+// 	static ceres::CostFunction * Create ( const double & refColor, const double & newColor )
+// 	{
+// 		return new ceres::AutoDiffCostFunction<AffineAutoDiffCostFunctor,1,1,1>( new AffineAutoDiffCostFunctor( refColor, newColor ) );
+// 	}
+//
+// private:
+// 	const double m_refColor;
+// 	const double m_newColor;
+// };
 
 
 //forward declarations

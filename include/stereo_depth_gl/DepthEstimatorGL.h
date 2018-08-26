@@ -16,9 +16,9 @@
 #include "Texture2D.h"
 
 //ceres
-#include "ceres/ceres.h"
-#include "ceres/cubic_interpolation.h"
-#include "ceres/rotation.h"
+// #include "ceres/ceres.h"
+// #include "ceres/cubic_interpolation.h"
+// #include "ceres/rotation.h"
 
 //GL
 #define GLM_SWIZZLE // https://stackoverflow.com/questions/14657303/convert-glmvec4-to-glmvec3
@@ -203,25 +203,25 @@ enum class InterpolType {
     CUBIC
 };			// not even traced once.
 
-struct  AffineAutoDiffCostFunctorGL
-{
-    explicit AffineAutoDiffCostFunctorGL( const double & refColor, const double & newColor )
-            :  m_refColor( refColor ), m_newColor( newColor ){ }
-
-    template<typename T>
-    bool operator() (const T* scaleA, const T* offsetB, T* residuals) const {
-        residuals[0] = T(m_newColor) - (scaleA[0] * T(m_refColor) + offsetB[0]);
-        return true;
-    }
-    static ceres::CostFunction * Create ( const double & refColor, const double & newColor )
-    {
-        return new ceres::AutoDiffCostFunction<AffineAutoDiffCostFunctorGL,1,1,1>( new AffineAutoDiffCostFunctorGL( refColor, newColor ) );
-    }
-
-private:
-    const double m_refColor;
-    const double m_newColor;
-};
+// struct  AffineAutoDiffCostFunctorGL
+// {
+//     explicit AffineAutoDiffCostFunctorGL( const double & refColor, const double & newColor )
+//             :  m_refColor( refColor ), m_newColor( newColor ){ }
+//
+//     template<typename T>
+//     bool operator() (const T* scaleA, const T* offsetB, T* residuals) const {
+//         residuals[0] = T(m_newColor) - (scaleA[0] * T(m_refColor) + offsetB[0]);
+//         return true;
+//     }
+//     static ceres::CostFunction * Create ( const double & refColor, const double & newColor )
+//     {
+//         return new ceres::AutoDiffCostFunction<AffineAutoDiffCostFunctorGL,1,1,1>( new AffineAutoDiffCostFunctorGL( refColor, newColor ) );
+//     }
+//
+// private:
+//     const double m_refColor;
+//     const double m_newColor;
+// };
 
 // struct Keyframe:Frame{
 //     // int32_t idx_host_frame; //idx of the frame from which this keyframe was created

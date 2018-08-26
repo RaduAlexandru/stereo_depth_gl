@@ -9,7 +9,7 @@
 # if(NOT LIBIGL_FOUND)
 # 	find_path(LIBIGL_INCLUDE_DIR
 # 		NAMES igl/readOBJ.h
-# 	   	PATHS /media/alex/Data/Programs_linux/libigl/include
+# 	   	PATHS /home/local/rosu/progs/libigl/include
 # 		DOC "The libigl include directory"
 # 		NO_DEFAULT_PATH)
 #
@@ -43,7 +43,7 @@ find_path(LIBIGL_INCLUDE_DIR igl/readOBJ.h
         ENV LIBIGL_DIR
     PATHS
         ${PROJECT_SOURCE_DIR}/deps/libigl/include
-		/media/alex/Data/Programs_linux/libigl/include
+		/home/local/rosu/progs/libigl/include
     PATH_SUFFIXES include
 )
 
