@@ -167,14 +167,15 @@ void DepthEstimatorGL::init_opengl(){
 void DepthEstimatorGL::init_context(){
 
     // /* Initialize the library */
-    // if (!glfwInit())
-    //     return -1;
+    // if (!glfwInit()){
+    //     LOG(FATAL) << "init_context glfwInit failure";
+    // }
     //
     // /* Create a ofscreen context and its OpenGL context */
     // GLFWwindow* offscreen_context = glfwCreateWindow(640, 480, "", NULL, NULL);
     // if (!offscreen_context) {
     //     glfwTerminate();
-    //     return -1;
+    //     LOG(FATAL) << "Failed to create the window or the GL context";
     // }
     //
     // /* Make the window's context current */
@@ -308,13 +309,16 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         m_last_ref_frame=m_ref_frame;
         m_ref_frame=frame_left;
 
+        //CPU implementation, rather slow
         // create_seeds_cpu(frame_left);
 
+        //FULL GPU implementation, faster but not enough, bottleneck is the atomic counter
         // create_seeds_gpu(frame_left);
         // if(frame_left.frame_idx==0){ //because for some reason the first frame fails to create seeds on gpu...
         //     create_seeds_gpu(frame_left);
         // }
 
+        //HYBRID implementation, fastest!
         create_seeds_hybrid(frame_left);
 
 
@@ -759,16 +763,6 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
     }
 
     VLOG(2) << "Tracing with " << nr_seeds_created << " seeds";
-
-    // //upload to gpu the inmature points
-    // if(m_started_new_keyframe){
-    //     TIME_START_GL("upload_immature_points");
-    //     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
-    //     //have to do it subdata because we want to keep the big size of the buffer so that create_seeds_gpu can write to it
-    //     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, seeds.size() * sizeof(Seed), seeds.data());
-    //     // glBufferData(GL_SHADER_STORAGE_BUFFER, seeds.size() * sizeof(Seed), seeds.data(), GL_DYNAMIC_COPY);
-    //     TIME_END_GL("upload_immature_points");
-    // }
 
     //we assume the seeds are already on the GPU in the m_seeds_gl_buf
 
