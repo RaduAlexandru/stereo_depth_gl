@@ -22,4 +22,6 @@ public:
 
     int cam_id; //id of the camera depending on how many cameras we have (it gos from 0 to 1 in the case of stereo)
     int frame_idx; //frame idx monotonically increasing
+
+    bool is_last=false; //is true when this image is the last in the dataset
 };

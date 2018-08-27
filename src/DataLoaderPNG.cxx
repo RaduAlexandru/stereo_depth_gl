@@ -278,6 +278,10 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             frame.cam_id=cam_id;
             frame.frame_idx=nr_frames_read_for_cam;
 
+            if(m_idx_img_to_read_per_cam[cam_id]==m_rgb_filenames_per_cam[cam_id].size()-1){
+                frame.is_last=true; //is the last frame in the dataset
+            }
+
             fs::path rgb_filename=m_rgb_filenames_per_cam[cam_id][ m_idx_img_to_read_per_cam[cam_id] ];
             m_idx_img_to_read_per_cam[cam_id]++;
             uint64_t timestamp=-1;

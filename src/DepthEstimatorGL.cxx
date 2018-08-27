@@ -300,6 +300,8 @@ void DepthEstimatorGL::print_seed(const Seed& s){
 
 void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_left, const Frame& frame_right){
 
+    bool do_post_process=true;
+
     LOG(INFO) << "Received frame";
     TIME_START_GL("ALL");
     if(frame_left.frame_idx%50==0){
@@ -338,7 +340,8 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         }
 
         // // //next one we will create a keyframe
-        if( (frame_left.frame_idx+1) %50==0){
+
+        if( (  do_post_process && (frame_left.frame_idx+1) %50==0 || frame_left.is_last ) ){
             sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
             assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
             remove_grazing_seeds(m_seeds);
@@ -360,7 +363,6 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
     //we need to do a sync because we need the data on the cpu side
     sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
-
     m_mesh=create_mesh(m_seeds, m_ref_frame);
     TIME_END_GL("ALL");
 }
@@ -478,7 +480,7 @@ void DepthEstimatorGL::create_seeds_cpu(const Frame& frame){
 
     m_nr_seeds_created=m_seeds.size();
 
-    m_seeds_cpu_dirty=false;
+    m_seeds_cpu_dirty=true;
     sync_seeds_buf();
 
 
@@ -497,15 +499,6 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     std::cout << "size bytes is " << size_bytes << '\n';
     GL_C(m_ref_frame_tex.upload_data(GL_RGB32F, frame.gray_with_gradients.cols, frame.gray_with_gradients.rows, GL_RGB, GL_FLOAT, frame.gray_with_gradients.ptr(), size_bytes));
     TIME_END_GL("upload_gray_and_grad");
-
-
-    // //testing why the allocation fails
-    // GLuint textureID;
-    // glGenTextures(1, &textureID);
-    // std::cout << "textureID is " << textureID << '\n';
-    // glBindTexture(GL_TEXTURE_2D, textureID);
-    // std::cout << "we have bounded and now we allocate" << '\n';
-    // glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 640, 480);
 
 
     TIME_START_GL("hessian_det_matrix");
