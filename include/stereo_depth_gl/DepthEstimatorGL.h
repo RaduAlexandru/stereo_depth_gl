@@ -15,15 +15,7 @@
 #include "stereo_depth_gl/Frame.h"
 #include "Texture2D.h"
 
-//ceres
-// #include "ceres/ceres.h"
-// #include "ceres/cubic_interpolation.h"
-// #include "ceres/rotation.h"
 
-//GL
-#define GLM_SWIZZLE // https://stackoverflow.com/questions/14657303/convert-glmvec4-to-glmvec3
-#include <GL/glad.h>
-#include <glm/glm.hpp>
 
 #define MAX_RES_PER_POINT 16 //IMPORTANT to change this value also in the shaders
 
@@ -92,76 +84,6 @@ struct MinimalDepthFilter{
     float pad;
 };
 struct Seed{
-    // int32_t idx_host_frame; //idx in the array of frames of the frame which "hosts" this inmature points
-    // float u,v; //position in host frame of the point
-    // float a;                     //!< a of Beta distribution: When high, probability of inlier is large.
-    // float b;                     //!< b of Beta distribution: When high, probability of outlier is large.
-    // float mu;                    //!< Mean of normal distribution.
-    // float z_range;               //!< Max range of the possible depth.
-    // float sigma2;                //!< Variance of normal distribution.
-    // float idepth_min;
-    // float idepth_max;
-    // float energyTH;
-    // float quality;
-    // //-----------------up until here we have 48 bytes so it's padded correctly to 16 bytes
-    //
-    // glm::vec4 f; // heading range = Ki * (u,v,1) //make it float 4 becuse float 3 gets padded to 4 either way
-    // // Eigen::Vector4f f;
-    // SeedStatus lastTraceStatus;
-    // int32_t converged;
-    // int32_t is_outlier;
-    // int32_t pad_1;
-    // //
-    // float color[MAX_RES_PER_POINT]; 		// colors in host frame
-    // float weights[MAX_RES_PER_POINT]; 		// host-weights for respective residuals.
-    // Eigen::Vector2f colorD[MAX_RES_PER_POINT];  //gradient in x and y at the pixel of the pattern normalized by the sqrt
-    // Eigen::Vector2f colorGrad[MAX_RES_PER_POINT]; //just the raw gradient in x and y at the pixel offset of the pattern
-    //
-    //
-    // float ncc_sum_templ;
-    // float ncc_const_templ;
-    // float pad_2;
-    // float pad_3;
-    //
-    // //Stuff that may be to be removed
-    // glm::mat2 gradH;
-    // // Eigen::Matrix2f gradH;
-    //
-    //
-    // //for denoising (indexes iinto the array of points of each of the 8 neighbours)
-    // int32_t left = -1;
-    // int32_t right = -1;
-    // int32_t above = -1;
-    // int32_t below = -1;
-    // int32_t left_upper = -1;
-    // int32_t right_upper = -1;
-    // int32_t left_lower = -1;
-    // int32_t right_lower = -1;
-    //
-    // //some other things for denoising
-    // float g;
-    // float mu_denoised;
-    // float mu_head;
-    // float pad_6;
-    // Eigen::Vector2f p;
-    // // glm::vec2 p;
-    // float pad_7;
-    // float pad_8;
-    //
-    //
-    // //debug stuff
-    // float gradient_hessian_det;
-    // float gt_depth;
-    // int32_t last_visible_frame;
-    //
-    // float debug; //serves as both debug and padding to 16 bytes
-    // // float padding_1; //to gt the struc to be aligned to 16 bytes
-    //
-    // float debug2[16];
-
-
-
-
     int32_t idx_keyframe; //idx in the array of frames of the frame which "hosts" this inmature points
     int32_t m_time_alive;
     int32_t m_nr_times_visible;
@@ -188,14 +110,14 @@ struct Seed{
     MinimalDepthFilter depth_filter;
 
     //for denoising (indexes iinto the array of points of each of the 8 neighbours)
- int32_t left = -1;
- int32_t right = -1;
- int32_t above = -1;
- int32_t below = -1;
- int32_t left_upper = -1;
- int32_t right_upper = -1;
- int32_t left_lower = -1;
-int32_t right_lower = -1;
+    int32_t left = -1;
+    int32_t right = -1;
+    int32_t above = -1;
+    int32_t below = -1;
+    int32_t left_upper = -1;
+    int32_t right_upper = -1;
+    int32_t left_lower = -1;
+    int32_t right_lower = -1;
 
     float debug[16];
 
@@ -205,40 +127,9 @@ enum class InterpolType {
     NEAREST=0,
     LINEAR,
     CUBIC
-};			// not even traced once.
-
-// struct  AffineAutoDiffCostFunctorGL
-// {
-//     explicit AffineAutoDiffCostFunctorGL( const double & refColor, const double & newColor )
-//             :  m_refColor( refColor ), m_newColor( newColor ){ }
-//
-//     template<typename T>
-//     bool operator() (const T* scaleA, const T* offsetB, T* residuals) const {
-//         residuals[0] = T(m_newColor) - (scaleA[0] * T(m_refColor) + offsetB[0]);
-//         return true;
-//     }
-//     static ceres::CostFunction * Create ( const double & refColor, const double & newColor )
-//     {
-//         return new ceres::AutoDiffCostFunction<AffineAutoDiffCostFunctorGL,1,1,1>( new AffineAutoDiffCostFunctorGL( refColor, newColor ) );
-//     }
-//
-// private:
-//     const double m_refColor;
-//     const double m_newColor;
-// };
-
-// struct Keyframe:Frame{
-//     // int32_t idx_host_frame; //idx of the frame from which this keyframe was created
-// };
-
-struct EpiData{
-    // EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Eigen::Matrix4f tf_cur_host; //the of corresponds to a 4x4 matrix
-    Eigen::Matrix4f tf_host_cur;
-    Eigen::Matrix4f KRKi_cr; //should be 4x4 but we make it 4x4 for alignment to gpu https://stackoverflow.com/a/47227584
-    Eigen::Vector4f Kt_cr;
-    Eigen::Matrix<float,MAX_RES_PER_POINT,2> pattern_rot_offsets; //its it made sure to have nr of rows the same as MAX_RES_PER_POINT so we can easily pass it to gl
 };
+
+
 
 
 //forward declarations
@@ -250,20 +141,14 @@ class DepthEstimatorGL{
 public:
     DepthEstimatorGL();
     ~DepthEstimatorGL(); //needed so that forward declarations work
-    void init_params();
 
-    // void compute_depth_and_create_mesh(); //from all the immature points created triangulate depth for them, updates the mesh
-    // void compute_depth_and_create_mesh_cpu();
-    // void save_depth_image();
-    // Mesh get_mesh();
 
-    void upload_gray_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right); //mostly for visualization
+    void compute_depth_and_update_mesh_stereo(const Frame& frame_left, const Frame& frame_right);
+
+    //mostly for visualization
+    void upload_gray_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void upload_rgb_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
     void upload_gray_and_grad_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right);
-    void compute_depth(const Frame& frame_left, const Frame& frame_right);
-    void compute_depth_icl(const Frame& frame_left, const Frame& frame_right);
-    Mesh create_point_cloud();
-
 
 
     //objects
@@ -272,10 +157,6 @@ public:
 
     //gl stuff
     GLuint m_ubo_params; //stores all parameters that may be needed inside the shader
-    GLuint m_seeds_left_gl_buf; //stores all the depth_seeds
-    GLuint m_seeds_right_gl_buf; //stores all the depth_seeds
-    int m_nr_seeds_left; //how many seeds were created in the left frame, set by create_seeds()
-    int m_nr_seeds_right;
     gl::Texture2D m_frame_left; //stored the gray image and the grad_x and grad_y in the other channels, the 4th channel is unused
     gl::Texture2D m_frame_right; //the right camera, same as above
     gl::Texture2D m_frame_rgb_left; //mostly for visualization purposes we upload here the gray image
@@ -286,7 +167,6 @@ public:
     gl::Texture2D m_high_hessian_tex; //thresholded version of the m_hessian_tex which stores 1 for the high ones and 0 for the low ones
     gl::Texture2D m_debug_tex;
     GLuint m_atomic_nr_seeds_created;
-    GLuint m_epidata_vec_gl_buf; //stores the epidata for all keyrames that relates them to the current frames
 
 
     //gl shaders
@@ -295,15 +175,10 @@ public:
     GLuint m_compute_hessian_blurred_prog_id;
     GLuint m_compute_create_seeds_prog_id;
     GLuint m_compute_trace_seeds_prog_id;
-    GLuint m_compute_trace_seeds_icl_prog_id;
     GLuint m_compute_init_seeds_prog_id; //initializey a vector of seeds for which we already know the size
 
 
     //databasse
-    // std::vector<Seed> m_seeds;
-    int m_nr_total_seeds; //calculated from m_nr_buffered_keyframes and m_estimated_seeds_per_keyframe
-    std::vector<int> m_nr_times_frame_used_for_seed_creation_per_cam;
-    std::vector<std::vector<Frame>> m_keyframes_per_cam;
     Mesh m_last_finished_mesh;
     bool m_started_new_keyframe;
 
@@ -325,56 +200,39 @@ public:
     int m_start_frame;
     std::vector<Seed> m_seeds;
     int m_nr_seeds_created;
-    GLuint m_points_gl_buf; //stores all the immature points
+    GLuint m_seeds_gl_buf; //stores all the immature points
     gl::Texture2D m_cur_frame;
     gl::Texture2D m_ref_frame_tex;
     Mesh m_mesh;
-    std::vector<Frame> m_frames;
     Frame m_ref_frame; //frame containing the seed points
     Frame m_last_ref_frame; //last frame which contained the seed points
-    void compute_depth_and_create_mesh_ICL();
 
-    // void compute_depth_and_create_mesh_ICL_incremental(const Frame& frame_left, const Frame& frame_right);
-    std::vector<Frame> loadDataFromICLNUIM ( const std::string & dataset_path, const int num_images_to_read );
 
-    void compute_depth_and_update_mesh(const Frame& frame_left);
-    void compute_depth_and_update_mesh_stereo(const Frame& frame_left, const Frame& frame_right);
+    // void compute_depth_and_update_mesh(const Frame& frame_left);
+
 
 private:
+    void init_params();
     void init_opengl();
     void compile_shaders();
 
-    //start with everything
-    // std::vector<Seed> create_seeds (const Frame& frame);
-    // void trace(const GLuint m_seeds_gl_buf, const int m_nr_seeds_left, const Frame& cur_frame);
-    void print_seed(const Seed& s);
-    Frame create_keyframe(const Frame& frame);
-    float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
-    Eigen::Vector2f estimate_affine(std::vector<Seed>& immature_points, const Frame&  cur_frame, const Eigen::Matrix3f& KRKi_cr, const Eigen::Vector3f& Kt_cr);
-
-
-    // //debug with icl nuim
-    // std::vector<Seed> create_immature_points (const Frame& frame);
-    // Mesh create_mesh_ICL(const std::vector<Seed>& immature_points, const std::vector<Frame>& frames);
 
     //cleaned up version
-
-    std::vector<Seed> create_seeds (const Frame& frame);
-    std::vector<Seed> create_seeds_gpu (const Frame& frame);
-    std::vector<Seed> create_seeds_hybrid (const Frame& frame); //used gpu for hessian calculation and cpu for thresholding on trace
-    void trace(std::vector<Seed>& seeds,const Frame& ref_frame, const Frame& cur_frame);
+    void create_seeds_cpu(const Frame& frame);
+    void create_seeds_gpu (const Frame& frame);
+    void create_seeds_hybrid (const Frame& frame); //used gpu for hessian calculation and cpu for thresholding on trace
+    void trace(const int nr_seeds_created, const Frame& ref_frame, const Frame& cur_frame);
     Mesh create_mesh(const std::vector<Seed>& seeds, Frame& ref_frame);
     void assign_neighbours_for_points( std::vector<Seed>& seeds, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
     void denoise_cpu( std::vector<Seed>& seeds, const int iters,  const int frame_width, const int frame_height);
     void remove_grazing_seeds ( std::vector<Seed>& seeds );
 
+    void print_seed(const Seed& s);
+    float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
 
-    // void assign_neighbours_for_points( std::vector<Seed>& immature_points, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
-    // void denoise_cpu( std::vector<Seed>& immature_points, const int frame_width, const int frame_height);
-    // void denoise_gpu_vector(std::vector<Seed>& immature_points);
-    // void denoise_gpu_texture(std::vector<Seed>& immature_points,  const int frame_width, const int frame_height);
-    // void denoise_gpu_framebuffer(std::vector<Seed>& immature_points,  const int frame_width, const int frame_height);
-    // Mesh create_mesh(const std::vector<Seed>& immature_points, const std::vector<Frame>& frames);
+
+    std::vector<Seed> seeds_download(const GLuint& seeds_gl_buf, const int& nr_seeds_created); //downloa from the buffer to the cpu and store in a vec
+    void seeds_upload(const std::vector<Seed>& seeds, const GLuint& seeds_gl_buf); //upload the seeds onto m_seeds_gl_buf
 
 };
 
