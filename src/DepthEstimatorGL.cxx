@@ -514,9 +514,11 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     GL_C( glUseProgram(m_compute_hessian_pointwise_prog_id) );
     GL_C(bind_for_sampling(m_ref_frame_tex, 1, glGetUniformLocation(m_compute_hessian_pointwise_prog_id,"gray_with_gradients_img_sampler") ) );
     GL_C( glBindImageTexture(0, m_hessian_pointwise_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F) );
-    GL_C( glDispatchCompute(frame.gray.cols/32, frame.gray.rows/16, 1) ); //TODO need to ceil the size otherwise you will have block of the image that are not computed
+    GL_C( glDispatchCompute(round_up_to_nearest_multiple(frame.gray.cols,32)/32,
+                            round_up_to_nearest_multiple(frame.gray.rows,16)/16, 1) );
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     TIME_END_GL("hessian_det_matrix");
+
 
 
 
@@ -531,7 +533,8 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     GL_C( glUseProgram(m_compute_hessian_blurred_prog_id) );
     bind_for_sampling(m_hessian_pointwise_tex, 1, glGetUniformLocation(m_compute_hessian_blurred_prog_id,"hessian_pointwise_tex_sampler") );
     GL_C( glBindImageTexture(0, m_hessian_blurred_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F) );
-    GL_C( glDispatchCompute(frame.gray.cols/32, frame.gray.rows/16, 1) ); //TODO need to ceil the size otherwise you will have block of the image that are not computed
+    GL_C( glDispatchCompute(round_up_to_nearest_multiple(frame.gray.cols,32)/32,
+                            round_up_to_nearest_multiple(frame.gray.rows,16)/16, 1) );
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     TIME_END_GL("hessian_blurred_matrix");
 
@@ -611,8 +614,9 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     bind_for_sampling(m_hessian_blurred_tex, 2, glGetUniformLocation(m_compute_init_seeds_prog_id,"hessian_blurred_sampler") );
 
     std::cout << "launching with size " << m_seeds.size() << '\n';
-    glDispatchCompute(m_seeds.size()/256, 1, 1);
+    glDispatchCompute(round_up_to_nearest_multiple(m_seeds.size(),256)/256, 1, 1);
     // glMemoryBarrier(GL_ALL_BARRIER_BITS);
+
 
     TIME_END_GL("initialize_seeds");
 
@@ -718,7 +722,8 @@ void DepthEstimatorGL::create_seeds_gpu (const Frame& frame){
     //TODO maybe change the 0 in the previous m_keyframes_per_cam to something else because we now assume that if we make a keyframe for left cam we also make for right
 
 
-    glDispatchCompute(frame.gray.cols/32, frame.gray.rows/16, 1);
+    GL_C( glDispatchCompute(round_up_to_nearest_multiple(frame.gray.cols,32)/32,
+                            round_up_to_nearest_multiple(frame.gray.rows,16)/16, 1) );
     // m_nr_times_frame_used_for_seed_creation_per_cam[frame.cam_id]++;
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -840,7 +845,7 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
     TIME_START_GL("depth_update_kernel");
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_gl_buf);
     bind_for_sampling(m_cur_frame, 1, glGetUniformLocation(m_compute_trace_seeds_prog_id,"gray_img_sampler") );
-    glDispatchCompute(nr_seeds_created/256, 1, 1); //TODO adapt the local size to better suit the gpu
+    glDispatchCompute(round_up_to_nearest_multiple(nr_seeds_created,256)/256, 1, 1); //TODO adapt the local size to better suit the gpu
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     TIME_END_GL("depth_update_kernel");
 
