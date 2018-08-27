@@ -122,6 +122,7 @@ private:
 
     //params
     bool m_only_rgb;
+    fs::path m_data_path; //path of the global datasets like the mappilary and the new tsukuba
     float m_tf_worldGL_worldROS_angle;
     std::string m_tf_worldGL_worldROS_axis;
     // std::string m_dataset_type;

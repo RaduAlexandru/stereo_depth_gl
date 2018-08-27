@@ -3,7 +3,6 @@ project(stereo_depth_gl)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-list(APPEND CMAKE_MODULE_PATH /media/alex/Data/Programs_linux/libigl/shared/cmake/)
 set(PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include
                         ${CMAKE_SOURCE_DIR}/deps
                         ${CMAKE_SOURCE_DIR}/deps/imgui

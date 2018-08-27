@@ -43,7 +43,7 @@ find_path(LIBIGL_INCLUDE_DIR igl/readOBJ.h
         ENV LIBIGL_DIR
     PATHS
         ${PROJECT_SOURCE_DIR}/deps/libigl/include
-		/home/local/rosu/progs/libigl/include
+		/media/alex/Data/Programs_linux/libigl/include
     PATH_SUFFIXES include
 )
 

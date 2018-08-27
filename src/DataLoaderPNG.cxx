@@ -72,8 +72,12 @@ void DataLoaderPNG::init_params(){
     m_nr_cams = loader_config["nr_cams"];
     m_imgs_to_skip=loader_config["imgs_to_skip"];
     m_nr_images_to_read=loader_config["nr_images_to_read"];
+
+    Config paths_config=cfg["paths"];
+    m_data_path=(std::string)paths_config["data_path"];
+
     for (size_t i = 0; i < m_nr_cams; i++) {
-        m_rgb_imgs_path_per_cam.push_back( (std::string)loader_config["rgb_path_cam_"+std::to_string(i)] );
+        m_rgb_imgs_path_per_cam.push_back( m_data_path / (std::string)loader_config["rgb_path_cam_"+std::to_string(i)] );
         m_frames_buffer_per_cam.push_back( moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
     }
 
@@ -85,7 +89,7 @@ void DataLoaderPNG::init_params(){
         else if(dataset_type_string=="icl") m_dataset_type=DatasetType::ICL;
         else if(dataset_type_string=="nts") m_dataset_type=DatasetType::NTS;
         else LOG(FATAL) << " Dataset type is not known " << dataset_type_string;
-        m_pose_file=(std::string)loader_config["pose_file"];
+        m_pose_file= (m_data_path / (std::string)loader_config["pose_file"]).string();
     }
 
 

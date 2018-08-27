@@ -49,7 +49,7 @@ DepthEstimatorGL::DepthEstimatorGL():
 
     init_params();
     init_opengl();
-    m_pattern.init_pattern(m_pattern_file);
+    m_pattern.init_pattern( (fs::path(CMAKE_SOURCE_DIR)/"data"/m_pattern_file).string() );
 
     // //sanity check the pattern
     // std::cout << "pattern has nr of points " << m_pattern.get_nr_points() << '\n';
@@ -90,6 +90,7 @@ void DepthEstimatorGL::init_params(){
     m_nr_buffered_keyframes=depth_config["nr_buffered_keyframes"];
     m_min_starting_depth=depth_config["min_starting_depth"];
     m_mean_starting_depth=depth_config["mean_starting_depth"];
+
 
     m_nr_times_frame_used_for_seed_creation_per_cam.resize(20,0); //TODO kinda HACK because we will never have that many cameras
     m_keyframes_per_cam.resize(20);
@@ -177,19 +178,19 @@ void DepthEstimatorGL::init_opengl(){
 void DepthEstimatorGL::compile_shaders(){
 
 
-    m_update_depth_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
+    m_update_depth_prog_id=gl::program_init_from_files( std::string(CMAKE_SOURCE_DIR)+"/shaders/compute_update_depth.glsl" );
 
-    m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_hessian_pointwise.glsl");
+    m_compute_hessian_pointwise_prog_id=gl::program_init_from_files( std::string(CMAKE_SOURCE_DIR)+"/shaders/compute_hessian_pointwise.glsl" );
 
-    m_compute_hessian_blurred_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_hessian_blurred.glsl");
+    m_compute_hessian_blurred_prog_id=gl::program_init_from_files( std::string(CMAKE_SOURCE_DIR)+"/shaders/compute_hessian_blurred.glsl" );
 
-    m_compute_create_seeds_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_create_seeds.glsl");
+    m_compute_create_seeds_prog_id=gl::program_init_from_files( std::string(CMAKE_SOURCE_DIR)+"/shaders/compute_create_seeds.glsl" );
 
-    m_compute_trace_seeds_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_trace_seeds.glsl");
+    m_compute_trace_seeds_prog_id=gl::program_init_from_files( std::string(CMAKE_SOURCE_DIR)+"/shaders/compute_trace_seeds.glsl" );
 
-    m_compute_trace_seeds_icl_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_trace_seeds_icl.glsl");
+    m_compute_trace_seeds_icl_prog_id=gl::program_init_from_files( std::string(CMAKE_SOURCE_DIR)+"/shaders/compute_trace_seeds_icl.glsl" );
 
-    m_compute_init_seeds_prog_id=gl::program_init_from_files("/home/local/rosu/c_ws/src/stereo_depth_gl/shaders/compute_init_seeds.glsl");
+    m_compute_init_seeds_prog_id=gl::program_init_from_files( std::string(CMAKE_SOURCE_DIR)+"/shaders/compute_init_seeds.glsl" );
 
     // m_compute_hessian_pointwise_prog_id=gl::program_init_from_files("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/compute_update_depth.glsl");
 

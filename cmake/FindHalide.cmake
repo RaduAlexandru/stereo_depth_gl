@@ -9,7 +9,7 @@
 if(NOT HALIDE_FOUND)
 	find_path(HALIDE_INCLUDE_DIR
 		NAMES Halide.h
-	   	PATHS /home/local/rosu/progs/Halide/build/include
+	   	PATHS /media/alex/Data/Programs_linux/Halide/build/include
 		DOC "The Halide include directory"
 		NO_DEFAULT_PATH)
 
@@ -27,7 +27,7 @@ if(NOT HALIDE_FOUND)
 	#library
 	find_library(HALIDE_LIBRARY_DIR
 		NAMES libHalide.so
-	   	HINTS /home/local/rosu/progs/Halide/build/lib/
+	   	HINTS /media/alex/Data/Programs_linux/Halide/build/lib/
 		DOC "The Halide lib directory"
 		NO_DEFAULT_PATH)
 

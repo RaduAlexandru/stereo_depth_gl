@@ -27,6 +27,10 @@
 
 #define MAX_RES_PER_POINT 16 //IMPORTANT to change this value also in the shaders
 
+//boost
+#include <boost/filesystem.hpp>
+namespace fs = boost::filesystem;
+
 struct Params {
     float maxPerPtError;
     float slackFactor;
@@ -306,6 +310,7 @@ public:
 
 
     //params
+    fs::path m_shaders_path;
     bool m_gl_profiling_enabled;
     bool m_debug_enabled;
     std::string m_pattern_file;
