@@ -558,6 +558,18 @@ inline T clamp(const T val, const T min, const T max){
 }
 
 
+inline int next_power_of_two(int x) { // https://github.com/LWJGL/lwjgl3-wiki/wiki/2.6.1.-Ray-tracing-with-OpenGL-Compute-Shaders-(Part-I)
+  x--;
+  x |= x >> 1; // handle 2 bit numbers
+  x |= x >> 2; // handle 4 bit numbers
+  x |= x >> 4; // handle 8 bit numbers
+  x |= x >> 8; // handle 16 bit numbers
+  x |= x >> 16; // handle 32 bit numbers
+  x++;
+  return x;
+}
+
+
 namespace configuru {
     // template<>
     // inline Eigen::Vector2f as(const configuru::Config& config)

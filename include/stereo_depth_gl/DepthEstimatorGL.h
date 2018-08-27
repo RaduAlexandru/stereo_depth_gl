@@ -201,6 +201,8 @@ public:
     std::vector<Seed> m_seeds;
     int m_nr_seeds_created;
     GLuint m_seeds_gl_buf; //stores all the immature points
+    bool m_seeds_gpu_dirty; //the data changed on te gpu buffer, we need to do a download
+    bool m_seeds_cpu_dirty; //the data changed on te cpu vector, we need to do a upload
     gl::Texture2D m_cur_frame;
     gl::Texture2D m_ref_frame_tex;
     Mesh m_mesh;
@@ -214,6 +216,7 @@ public:
 private:
     void init_params();
     void init_opengl();
+    void init_context(); //for the time when this class should be ripped outside and we don't have anymore the context created by libigl
     void compile_shaders();
 
 
@@ -231,6 +234,7 @@ private:
     float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
 
 
+    void sync_seeds_buf(); //if the gpu has more recent data, do a download, if the cpu has more recent data, do an upload
     std::vector<Seed> seeds_download(const GLuint& seeds_gl_buf, const int& nr_seeds_created); //downloa from the buffer to the cpu and store in a vec
     void seeds_upload(const std::vector<Seed>& seeds, const GLuint& seeds_gl_buf); //upload the seeds onto m_seeds_gl_buf
 

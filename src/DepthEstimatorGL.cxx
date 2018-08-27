@@ -42,7 +42,9 @@ DepthEstimatorGL::DepthEstimatorGL():
         m_mean_starting_depth(4.0),
         m_compute_hessian_pointwise_prog_id(-1),
         m_start_frame(0),
-        m_started_new_keyframe(false)
+        m_started_new_keyframe(false),
+        m_seeds_gpu_dirty(false),
+        m_seeds_cpu_dirty(false)
         {
 
     init_params();
@@ -160,6 +162,23 @@ void DepthEstimatorGL::init_opengl(){
 
     compile_shaders();
 
+}
+
+void DepthEstimatorGL::init_context(){
+
+    // /* Initialize the library */
+    // if (!glfwInit())
+    //     return -1;
+    //
+    // /* Create a ofscreen context and its OpenGL context */
+    // GLFWwindow* offscreen_context = glfwCreateWindow(640, 480, "", NULL, NULL);
+    // if (!offscreen_context) {
+    //     glfwTerminate();
+    //     return -1;
+    // }
+    //
+    // /* Make the window's context current */
+    // glfwMakeContextCurrent(offscreen_context);
 }
 
 void DepthEstimatorGL::compile_shaders(){
@@ -281,19 +300,22 @@ void DepthEstimatorGL::print_seed(const Seed& s){
 
 void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_left, const Frame& frame_right){
 
-    std::cout << "RECEIVED FRAME " << '\n';
+    LOG(INFO) << "Received frame";
     TIME_START_GL("ALL");
     if(frame_left.frame_idx%50==0){
         m_last_ref_frame=m_ref_frame;
         m_ref_frame=frame_left;
-        // m_seeds=create_seeds(frame_left);
 
-        // m_seeds=create_seeds_gpu(frame_left);
+        // create_seeds_cpu(frame_left);
+
+        // create_seeds_gpu(frame_left);
         // if(frame_left.frame_idx==0){ //because for some reason the first frame fails to create seeds on gpu...
-        //     m_seeds=create_seeds_gpu(frame_left);
+        //     create_seeds_gpu(frame_left);
         // }
 
         create_seeds_hybrid(frame_left);
+
+
 
         // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         m_started_new_keyframe=true;
@@ -315,11 +337,12 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
             // denoise_cpu(m_seeds, 5,  m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         }
 
-        // //next one we will create a keyframe
+        // // //next one we will create a keyframe
         if( (frame_left.frame_idx+1) %50==0){
-            // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
-            // remove_grazing_seeds(m_seeds);
-            // we will create a new keyframe but before that, do a trace on the previous keyframe
+            sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
+            assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
+            remove_grazing_seeds(m_seeds);
+            // // we will create a new keyframe but before that, do a trace on the previous keyframe
             // if(!m_last_ref_frame.gray.empty()){ //if it's the first keyframe then the last one will be empty
             //     trace(m_seeds, m_ref_frame, m_last_ref_frame);
             // }
@@ -331,14 +354,20 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
         m_started_new_keyframe=false;
     }
-    std::vector<Seed> seeds=seeds_download(m_seeds_gl_buf, m_nr_seeds_created);
-    m_mesh=create_mesh(seeds, m_ref_frame);
+    // std::vector<Seed> seeds=seeds_download(m_seeds_gl_buf, m_nr_seeds_created);
+    // m_seeds=seeds_download(m_seeds_gl_buf, m_nr_seeds_created);
+
+
+    //we need to do a sync because we need the data on the cpu side
+    sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
+
+    m_mesh=create_mesh(m_seeds, m_ref_frame);
     TIME_END_GL("ALL");
 }
 
 void DepthEstimatorGL::create_seeds_cpu(const Frame& frame){
     TIME_START_GL("create_seeds");
-    std::vector<Seed> seeds;
+    m_seeds.clear();
     for (size_t i = 10; i < frame.gray.rows-10; i++) {  //--------Do not look around the borders to avoid pattern accesing outside img
         for (size_t j = 10; j < frame.gray.cols-10; j++) {
 
@@ -422,7 +451,7 @@ void DepthEstimatorGL::create_seeds_cpu(const Frame& frame){
 
 
                 //as the neighbours indices set the current points so if we access it we get this point
-                int seed_idx=seeds.size();
+                int seed_idx=m_seeds.size();
                 point.left = seed_idx;
                 point.right = seed_idx;
                 point.above = seed_idx;
@@ -432,7 +461,7 @@ void DepthEstimatorGL::create_seeds_cpu(const Frame& frame){
                 point.left_lower = seed_idx;
                 point.right_lower = seed_idx;
 
-                seeds.push_back(point);
+                m_seeds.push_back(point);
             }
 
         }
@@ -445,10 +474,12 @@ void DepthEstimatorGL::create_seeds_cpu(const Frame& frame){
 
 
     TIME_END_GL("create_seeds");
-    std::cout << "-------------------------seeds size is " << seeds.size() << '\n';
+    std::cout << "-------------------------seeds size is " << m_seeds.size() << '\n';
 
-    m_nr_seeds_created=seeds.size();
-    seeds_upload(seeds, m_seeds_gl_buf);
+    m_nr_seeds_created=m_seeds.size();
+
+    m_seeds_cpu_dirty=false;
+    sync_seeds_buf();
 
 
     // return seeds;
@@ -458,7 +489,7 @@ void DepthEstimatorGL::create_seeds_cpu(const Frame& frame){
 
 void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     TIME_START_GL("create_seeds");
-    std::vector<Seed> seeds;
+    m_seeds.clear();
 
     //upload img
     TIME_START_GL("upload_gray_and_grad");
@@ -513,7 +544,8 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     GL_C(glGetTexImage(GL_TEXTURE_2D,0, GL_RGB, GL_FLOAT, hessian_blurred_cv.data));
 
     //--------Do not look around the borders to avoid pattern accesing outside img
-    seeds.reserve(40000);
+    m_seeds.clear();
+    m_seeds.reserve(40000);
     for (size_t i = 10; i < frame.gray.rows-10; i++) {
         for (size_t j = 10; j < frame.gray.cols-10; j++) {
 
@@ -531,18 +563,18 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
             if(trace>3){
                 Seed point;
                 point.m_uv << j,i;
-                seeds.push_back(point);
+                m_seeds.push_back(point);
             }
 
         }
     }
-    m_nr_seeds_created=seeds.size();
+    m_nr_seeds_created=m_seeds.size();
 
 
     //upload the seeds we have because we need the shader to see the uv coordinates
     TIME_START_GL("upload_immature_points");
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, seeds.size() * sizeof(Seed), seeds.data());   //have to do it subdata because we want to keep the big size of the buffer so that create_seeds_gpu can write to it
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, m_seeds.size() * sizeof(Seed), m_seeds.data());   //have to do it subdata because we want to keep the big size of the buffer so that create_seeds_gpu can write to it
     TIME_END_GL("upload_immature_points");
 
 
@@ -581,29 +613,21 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     bind_for_sampling(m_ref_frame_tex, 1, glGetUniformLocation(m_compute_init_seeds_prog_id,"gray_with_gradients_img_sampler") );
     bind_for_sampling(m_hessian_blurred_tex, 2, glGetUniformLocation(m_compute_init_seeds_prog_id,"hessian_blurred_sampler") );
 
-    std::cout << "launching with size " << seeds.size() << '\n';
-    glDispatchCompute(seeds.size()/256, 1, 1);
+    std::cout << "launching with size " << m_seeds.size() << '\n';
+    glDispatchCompute(m_seeds.size()/256, 1, 1);
     // glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
     TIME_END_GL("initialize_seeds");
 
 
 
-    // //read the points back to cpu
-    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
-    // Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-    // for (size_t i = 0; i < seeds.size(); i++) {
-    //     seeds[i]=ptr[i];
-    // }
-    // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-
-
+    m_seeds_gpu_dirty=true; //we intialized the seeds on the gpu side so we would need to download
 
 
 
 
     TIME_END_GL("create_seeds");
-    std::cout << "-------------------------seeds size is " << seeds.size() << '\n';
+    std::cout << "-------------------------seeds size is " << m_seeds.size() << '\n';
     // return seeds;
 
 
@@ -707,6 +731,8 @@ void DepthEstimatorGL::create_seeds_gpu (const Frame& frame){
     glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
     std::cout << "nr_seeds_created " << m_nr_seeds_created << '\n';
 
+    m_seeds_gpu_dirty=true; //we intialized the seeds on the gpu side so we would need to download
+
 
     // //debug read the seeds back to cpu
     // std::vector<Seed> seeds;
@@ -739,7 +765,7 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
         return;
     }
 
-    std::cout << "Tracing with " << nr_seeds_created << " seeds" << '\n';
+    VLOG(2) << "Tracing with " << nr_seeds_created << " seeds";
 
     // //upload to gpu the inmature points
     // if(m_started_new_keyframe){
@@ -831,14 +857,7 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     TIME_END_GL("depth_update_kernel");
 
-
-    // //read the points back to cpu
-    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
-    // Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-    // for (size_t i = 0; i < seeds.size(); i++) {
-    //     seeds[i]=ptr[i];
-    // }
-    // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+    m_seeds_gpu_dirty=true; //the data changed on the gpu side, we should download it
 
 }
 
@@ -958,6 +977,7 @@ void DepthEstimatorGL::assign_neighbours_for_points(std::vector<Seed>& seeds, co
 
     }
 
+    m_seeds_cpu_dirty=true;
 }
 
 void DepthEstimatorGL::denoise_cpu( std::vector<Seed>& seeds, const int iters, const int frame_width, const int frame_height){
@@ -1071,6 +1091,8 @@ void DepthEstimatorGL::denoise_cpu( std::vector<Seed>& seeds, const int iters, c
         // std::cout << "changin mu depth from " << point.mu  << " to " << point.mu_denoised << '\n';
         point.depth_filter.m_mu=point.depth_filter.m_mu_denoised;
     }
+
+    m_seeds_cpu_dirty=true;
 }
 
 
@@ -1203,7 +1225,7 @@ void DepthEstimatorGL::remove_grazing_seeds ( std::vector<Seed>& seeds ){
         }
 
 
-        if(max_mu-min_mu>0.05){
+        if(max_mu-min_mu>0.01){
             point.depth_filter.m_is_outlier=1;
 
             // right.depth_filter.m_is_outlier=1;
@@ -1261,7 +1283,7 @@ void DepthEstimatorGL::remove_grazing_seeds ( std::vector<Seed>& seeds ){
         if(left_lower.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
         if(right_lower.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
 
-        if(nr_neighbours_outliers>=7){
+        if(nr_neighbours_outliers>=6){
             point.depth_filter.m_is_outlier=1;
             removed_lonely++;
         }
@@ -1272,9 +1294,29 @@ void DepthEstimatorGL::remove_grazing_seeds ( std::vector<Seed>& seeds ){
     std::cout << "--------------------------------nr_points_removed " << nr_points_removed << '\n';
     std::cout << "--------------------------------nr_lonely " << removed_lonely << '\n';
 
+    m_seeds_cpu_dirty=true;
 
 }
 
+
+void DepthEstimatorGL::sync_seeds_buf(){
+
+    if(m_seeds_cpu_dirty && m_seeds_gpu_dirty){
+        LOG(FATAL) << "Both buffer are dirty. We don't know whether we should do an upload or a download";
+    }
+
+    //the data on the cpu has changed we should upload it
+    if(m_seeds_cpu_dirty){
+        seeds_upload(m_seeds, m_seeds_gl_buf);
+        m_seeds_cpu_dirty=false;
+    }
+
+    if(m_seeds_gpu_dirty){
+        m_seeds=seeds_download(m_seeds_gl_buf, m_nr_seeds_created);
+        m_seeds_gpu_dirty=false;
+    }
+
+}
 std::vector<Seed> DepthEstimatorGL::seeds_download(const GLuint& seeds_gl_buf, const int& nr_seeds_created){
     //download from the buffer to the cpu and store in a vec
     std::vector<Seed> seeds(nr_seeds_created);

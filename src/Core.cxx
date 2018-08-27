@@ -334,7 +334,6 @@ void Core::update() {
                     set_mesh(mesh);  // the scene is internally broken down into various independent meshes
                 }
                 if (mesh.m_show_points) {
-                    std::cout << "settting point......." << '\n';
                     set_points(mesh);
                 }
                 if (mesh.m_show_edges) {
@@ -443,7 +442,7 @@ void Core::set_mesh(const Mesh &mesh) {
 
 void Core::set_points(const Mesh &mesh) {
     if(mesh.is_empty()){
-        std::cout << "returning because mesh is empty" << '\n';
+        VLOG(1) << "set_points: returning because mesh is empty";
         return;
     }
 
@@ -456,10 +455,7 @@ void Core::set_points(const Mesh &mesh) {
 
    m_view->data().point_size = 2;
 
-   std::cout << "setting " << '\n';
-
    if (!m_viewer_initialized) {
-       std::cout << "initialize" << '\n';
        m_viewer_initialized = true;
        m_view->core.align_camera_center(mesh.V);
    }
