@@ -300,7 +300,7 @@ void main(void) {
     //nr_times_along_epi epi is big for the vertical lines that we can triangulate well, and small for the horzontal lines which ar ambigous
     if(nr_times_ambigous/nr_pixel_acceses_along_epi>0.9 && nr_times_ambigous!=0){ //the higher the value the more aggresive we are in dropping points
         p[id].depth_filter.m_is_outlier=1; //discard the point
-        imageStore(debug, ivec2(p[id].m_uv) , vec4(255,0,0,255) );
+        // imageStore(debug, ivec2(p[id].m_uv) , vec4(255,0,0,255) );
         return;
     }
 
@@ -309,7 +309,7 @@ void main(void) {
     //     return;
     // }
 
-    imageStore(debug, ivec2(p[id].m_uv) , vec4(0,0,nr_times_ambigous/nr_pixel_acceses_along_epi,255) );
+    // imageStore(debug, ivec2(p[id].m_uv) , vec4(0,0,nr_times_ambigous/nr_pixel_acceses_along_epi,255) );
 
 
     // //store in debug the disparity

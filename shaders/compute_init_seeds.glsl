@@ -234,6 +234,8 @@ Seed create_seed(ivec2 img_coords, vec3 hessian, int seed_idx){
 
         s.m_intensity[p_idx]=hit_color;
 
+
+
         //for ngf
         s.m_normalized_grad[p_idx] = grads;
         s.m_normalized_grad[p_idx] /= sqrt( dot(grads,grads) + params.eta);
@@ -282,14 +284,23 @@ void main(void) {
     // float trace=hessian.x+hessian.z;
     // if(determinant>0.005){
 
-    //TODO get hessian
+    // //TODO get hessian
     ivec2 img_coords=ivec2(p[id].m_uv); //TODO........
     vec3 hessian=texelFetch(hessian_blurred_sampler, img_coords, 0).xyz;
-    // Seed s=create_seed(img_coords, hessian, id);
-    Seed s;
-    s.m_uv.x+=1;
+    Seed s=create_seed(img_coords, hessian, id);
+    // Seed s;
+    // s.m_uv.x+=1;
     p[id]=s;
 
+    // //debug why are the colors different
+    // vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords, 0 ).xyz;
+    // float hit_color=hit_color_and_grads.y;
+    // imageStore(debug, img_coords , vec4(0,hit_color,0,255) );
+
+    // //attempt 2 debug why are the colors different
+    // vec3 hit_color_and_grads=texelFetch(gray_with_gradients_img_sampler, img_coords, 0 ).xyz;
+    // // float hit_color=hit_color_and_grads.y;
+    // imageStore(debug, img_coords , vec4(hit_color_and_grads,255) );
 
 
 

@@ -1966,12 +1966,12 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         m_ref_frame=frame_left;
         // m_seeds=create_seeds(frame_left);
 
-        m_seeds=create_seeds_gpu(frame_left);
-        if(frame_left.frame_idx==0){ //because for some reason the first frame fails to create seeds on gpu...
-            m_seeds=create_seeds_gpu(frame_left);
-        }
+        // m_seeds=create_seeds_gpu(frame_left);
+        // if(frame_left.frame_idx==0){ //because for some reason the first frame fails to create seeds on gpu...
+        //     m_seeds=create_seeds_gpu(frame_left);
+        // }
 
-        // m_seeds=create_seeds_hybrid(frame_left);
+        m_seeds=create_seeds_hybrid(frame_left);
 
         // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         m_started_new_keyframe=true;
@@ -2223,6 +2223,15 @@ std::vector<Seed> DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     TIME_START_GL("initialize_seeds");
     GL_C( glUseProgram(m_compute_init_seeds_prog_id) );
 
+    //debug texture
+    if(!m_debug_tex.get_tex_storage_initialized()){
+      m_debug_tex.allocate_tex_storage_inmutable(GL_RGBA32F,frame.gray.cols, frame.gray.rows);
+    }
+    //clear the debug texture
+    std::vector<GLuint> clear_color(4,0);
+    GL_C ( glClearTexSubImage(m_debug_tex.get_tex_id(), 0,0,0,0, frame.gray.cols,frame.gray.rows,1,GL_RGBA, GL_FLOAT, clear_color.data()) );
+    glBindImageTexture(2, m_debug_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
     TIME_START_GL("upload_params");
     //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
     glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
@@ -2243,7 +2252,7 @@ std::vector<Seed> DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     //TODO maybe change the 0 in the previous m_keyframes_per_cam to something else because we now assume that if we make a keyframe for left cam we also make for right
 
     bind_for_sampling(m_ref_frame_tex, 1, glGetUniformLocation(m_compute_init_seeds_prog_id,"gray_with_gradients_img_sampler") );
-    bind_for_sampling(m_hessian_blurred_tex, 1, glGetUniformLocation(m_compute_init_seeds_prog_id,"hessian_blurred_sampler") );
+    bind_for_sampling(m_hessian_blurred_tex, 2, glGetUniformLocation(m_compute_init_seeds_prog_id,"hessian_blurred_sampler") );
 
     std::cout << "launching with size " << seeds.size() << '\n';
     glDispatchCompute(seeds.size()/256, 1, 1);
@@ -2505,6 +2514,7 @@ void DepthEstimatorGL::trace(std::vector<Seed>& seeds,const Frame& ref_frame, co
 }
 
 Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_frame){
+    VLOG(1) << "creating mesh from nr of seeds " << seeds.size();
     Mesh mesh;
     mesh.V.resize(seeds.size(),3);
     mesh.V.setZero();
@@ -2515,6 +2525,8 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
         // float depth=immature_points[i].gt_depth;
         // float depth=1.0;
         float depth=1/seeds[i].depth_filter.m_mu;
+
+        // std::cout << "seeds has x y and depth " << u << " " << v << " " << depth << '\n';
 
         if(std::isfinite(seeds[i].depth_filter.m_mu) && seeds[i].depth_filter.m_mu>=0.1
             && seeds[i].depth_filter.m_is_outlier==0 ){
