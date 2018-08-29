@@ -12,7 +12,7 @@
 //My stuff
 #include "stereo_depth_gl/Profiler.h"
 #include "stereo_depth_gl/MiscUtils.h"
-#include "cv_interpolation.h"
+// #include "cv_interpolation.h"
 #include "UtilsGL.h"
 #include "Shader.h"
 #include "Texture2DArray.h"
@@ -21,17 +21,12 @@
 //ros
 #include "stereo_depth_gl/RosTools.h"
 
-//Libigl
-#include <igl/opengl/glfw/Viewer.h>
-
 //cv
 #include <cv_bridge/cv_bridge.h>
 
 //loguru
 #include <loguru.hpp>
 
-//gl
-#include <glm/gtc/type_ptr.hpp>
 
 // using namespace glm;
 using namespace configuru;
@@ -48,6 +43,7 @@ DepthEstimatorGL::DepthEstimatorGL():
         {
 
     init_params();
+    init_context();
     init_opengl();
     m_pattern.init_pattern( (fs::path(CMAKE_SOURCE_DIR)/"data"/m_pattern_file).string() );
 
@@ -199,28 +195,28 @@ void DepthEstimatorGL::compile_shaders(){
 
 }
 
-float DepthEstimatorGL::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type){
-    //sample only from a cv mat that is of type float with 1 channel
-    if(type2string(img.type())!="32FC1"){
-        LOG(FATAL) << "trying to use texture inerpolate on an image that is not float valued with 1 channel. Image is of type " <<
-        type2string(img.type());
-    }
-
-    //Dumb nearest interpolation
-   // int clamped_y=clamp((int)y,0,img.rows);
-   // int clamped_x=clamp((int)x,0,img.cols);
-   // float val=img.at<float>(clamped_y,clamped_x);
-
-    //from oepncv https://github.com/opencv/opencv/blob/master/modules/cudawarping/test/interpolation.hpp
-    if(type==InterpolType::NEAREST){
-        return NearestInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
-    }else if(type==InterpolType::LINEAR){
-        return LinearInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
-    }else if(type==InterpolType::CUBIC){
-        return CubicInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
-    }
-
-}
+// float DepthEstimatorGL::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type){
+//     //sample only from a cv mat that is of type float with 1 channel
+//     if(type2string(img.type())!="32FC1"){
+//         LOG(FATAL) << "trying to use texture inerpolate on an image that is not float valued with 1 channel. Image is of type " <<
+//         type2string(img.type());
+//     }
+//
+//     //Dumb nearest interpolation
+//    // int clamped_y=clamp((int)y,0,img.rows);
+//    // int clamped_x=clamp((int)x,0,img.cols);
+//    // float val=img.at<float>(clamped_y,clamped_x);
+//
+//     //from oepncv https://github.com/opencv/opencv/blob/master/modules/cudawarping/test/interpolation.hpp
+//     if(type==InterpolType::NEAREST){
+//         return NearestInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
+//     }else if(type==InterpolType::LINEAR){
+//         return LinearInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
+//     }else if(type==InterpolType::CUBIC){
+//         return CubicInterpolator<float>::getValue(img,y,x,0,cv::BORDER_REPLICATE);
+//     }
+//
+// }
 
 void DepthEstimatorGL::upload_gray_stereo_pair(const cv::Mat& image_left, const cv::Mat& image_right){
     TIME_START_GL("upload_rgb_stereo_pair");

@@ -10,7 +10,6 @@
 
 //My stuff
 #include "stereo_depth_gl/Mesh.h"
-#include "stereo_depth_gl/Scene.h"
 #include "stereo_depth_gl/Pattern.h"
 #include "stereo_depth_gl/Frame.h"
 #include "Texture2D.h"
@@ -231,7 +230,7 @@ private:
     void remove_grazing_seeds ( std::vector<Seed>& seeds );
 
     void print_seed(const Seed& s);
-    float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
+    // float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
 
 
     void sync_seeds_buf(); //if the gpu has more recent data, do a download, if the cpu has more recent data, do an upload

@@ -314,6 +314,26 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             }
 
 
+            // //debug HACK remember to disable the smallest_timestamp_diff in the get_timestamp so you process all frames
+            // if(frame.frame_idx==149&& cam_id==0){
+            //     std::cout << "pose at 149 for cam_" << cam_id << "\n" << frame.tf_cam_world.matrix()  << '\n';
+            //
+            //     //return the closest one
+            //     uint64_t closest_idx=-1;
+            //     double smallest_timestamp_diff=std::numeric_limits<double>::max();
+            //     for (size_t i = 0; i < m_worldROS_baselink_vec.size(); i++) {
+            //         uint64_t recorded_timestamp=m_worldROS_baselink_vec[i].first;
+            //         Eigen::Affine3f pose=m_worldROS_baselink_vec[i].second;
+            //         double diff=fabs((double)timestamp- (double)recorded_timestamp);
+            //         if (  diff < smallest_timestamp_diff){
+            //             closest_idx=i;
+            //             smallest_timestamp_diff=diff;
+            //         }
+            //     }
+            //     Eigen::Affine3f pose_from_file=m_worldROS_baselink_vec[closest_idx].second;
+            //
+            //     std::cout << "pose_world_base is " << pose_from_file.matrix() << '\n';
+            // }
 
 
 
@@ -511,7 +531,7 @@ void DataLoaderPNG::read_pose_file_eth(){
             continue;
         }
 
-        std::vector<std::string> tokens=split(line,",");
+        std::vector<std::string> tokens=split(line," ");
         timestamp=stod(tokens[0]);
         position(0)=stod(tokens[1]);
         position(1)=stod(tokens[2]);
@@ -520,6 +540,9 @@ void DataLoaderPNG::read_pose_file_eth(){
         quat.x()=stod(tokens[5]);
         quat.y()=stod(tokens[6]);
         quat.z()=stod(tokens[7]);
+
+        quat.normalize();
+        // quat=quat.conjugate();
 
         // std::cout << "input is \n" << " " << timestamp << " " << position << " " << quat.matrix()  << "\n";
         Eigen::Affine3f pose;
@@ -657,20 +680,33 @@ bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t 
         if(cam_id==0){
             // camera to base link
             Eigen::Matrix4f tf_baselink_cam;
-            tf_baselink_cam.row(0) << 0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975;
-            tf_baselink_cam.row(1) << 0.999557249008, 0.0149672133247, 0.025715529948, -0.064676986768;
-            tf_baselink_cam.row(2) << -0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949;
-            tf_baselink_cam.row(3) <<  0.0, 0.0, 0.0, 1.0;
+            tf_baselink_cam.setIdentity();
+            // tf_baselink_cam.row(0) << 0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975;
+            // tf_baselink_cam.row(1) << 0.999557249008, 0.0149672133247, 0.025715529948, -0.064676986768;
+            // tf_baselink_cam.row(2) << -0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949;
+            // tf_baselink_cam.row(3) <<  0.0, 0.0, 0.0, 1.0;
 
             //pose is only from base to world but we need to return a pose that is tf_cam_world (so from world to cam)
             pose= Eigen::Affine3f(tf_baselink_cam).inverse() *  pose_from_file.inverse(); //world to base and base to cam
         }else if(cam_id==1){
             // camera to base link
+
+            Eigen::Matrix4f tf_baselink_cam_left;
+            // tf_baselink_cam.setIdentity();
+            tf_baselink_cam_left.row(0) << 0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975;
+            tf_baselink_cam_left.row(1) << 0.999557249008, 0.0149672133247, 0.025715529948, -0.064676986768;
+            tf_baselink_cam_left.row(2) << -0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949;
+            tf_baselink_cam_left.row(3) <<  0.0, 0.0, 0.0, 1.0;
+
+            Eigen::Matrix4f tf_baselink_cam_right;
+            tf_baselink_cam_right.row(0) << 0.0125552670891, -0.999755099723, 0.0182237714554, -0.0198435579556;
+            tf_baselink_cam_right.row(1) << 0.999598781151, 0.0130119051815, 0.0251588363115, 0.0453689425024;
+            tf_baselink_cam_right.row(2) << -0.0253898008918, 0.0179005838253, 0.999517347078, 0.00786212447038;
+            tf_baselink_cam_right.row(3) << 0.0, 0.0, 0.0, 1.0;
+
             Eigen::Matrix4f tf_baselink_cam;
-            tf_baselink_cam.row(0) << 0.0125552670891, -0.999755099723, 0.0182237714554, -0.0198435579556;
-            tf_baselink_cam.row(1) << 0.999598781151, 0.0130119051815, 0.0251588363115, 0.0453689425024;
-            tf_baselink_cam.row(2) << -0.0253898008918, 0.0179005838253, 0.999517347078, 0.00786212447038;
-            tf_baselink_cam.row(3) << 0.0, 0.0, 0.0, 1.0;
+            tf_baselink_cam=tf_baselink_cam_left.inverse()*tf_baselink_cam_right;
+
 
             //pose is only from base to world but we need to return a pose that is tf_cam_world (so from world to cam)
             pose= Eigen::Affine3f(tf_baselink_cam).inverse() *  pose_from_file.inverse(); //world to base and base to cam
