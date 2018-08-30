@@ -125,17 +125,17 @@ void DataLoaderRos::callback(const stereo_ros_msg::StereoPair& stereo_pair){
             return;
     }
 
-    VLOG(1) << "Managed to read the images";
+    // VLOG(1) << "Managed to read the images";
 
     //read poses
     frame_left.tf_cam_world.matrix() = Eigen::Map<Eigen::Matrix4f, Eigen::Unaligned>((float*)stereo_pair.tf_cam_world_left.data(), 4,4);
     frame_right.tf_cam_world.matrix() = Eigen::Map<Eigen::Matrix4f, Eigen::Unaligned>((float*)stereo_pair.tf_cam_world_right.data(), 4,4);
-    VLOG(1) << "loaded pose \n" << frame_left.tf_cam_world.matrix() ;
+    // VLOG(1) << "loaded pose \n" << frame_left.tf_cam_world.matrix() ;
 
     //read K
     frame_left.K = Eigen::Map<Eigen::Matrix3f, Eigen::Unaligned>((float*)stereo_pair.K_left.data(), 3,3);
     frame_right.K = Eigen::Map<Eigen::Matrix3f, Eigen::Unaligned>((float*)stereo_pair.K_right.data(), 3,3);
-    VLOG(1) << "loaded K \n" << frame_left.K;
+    // VLOG(1) << "loaded K \n" << frame_left.K;
 
     frame_left.is_keyframe=stereo_pair.is_keyframe;
     frame_right.is_keyframe=stereo_pair.is_keyframe;

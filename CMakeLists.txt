@@ -21,6 +21,13 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w") #supress all warnings
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DAPC_CAPTURE_DEBUG=1")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -O2") #optimizations
 
+#global options https://stackoverflow.com/questions/15201064/cmake-conditional-preprocessor-define-on-code
+option(CORE_WITH_VIEWER "Use a libigl viewer, or if we don't have it available we will still publish to RViz" OFF)
+option(CORE_WITH_HALIDE "Compile Halide" ON)
+
+
+
+
 
 # libigl options: choose between header only and compiled static library
 # Header-only is preferred for small projects. For larger projects the static build
@@ -137,7 +144,42 @@ catkin_package(
 
 
 file(GLOB IMGUI_SRC ${CMAKE_SOURCE_DIR}/deps/imgui/*.c* ${CMAKE_SOURCE_DIR}/deps/imgui/examples/opengl3_example/imgui_impl_glfw_gl3.cpp)
-file(GLOB MY_SRC ${CMAKE_SOURCE_DIR}/src/*.c* )
+
+
+# file(GLOB MY_SRC ${CMAKE_SOURCE_DIR}/src/*.c* )
+
+set(MY_SRC  ${CMAKE_SOURCE_DIR}/src/Core.cxx
+            ${CMAKE_SOURCE_DIR}/src/main.cxx
+            ${CMAKE_SOURCE_DIR}/src/DataLoaderPNG.cxx
+            ${CMAKE_SOURCE_DIR}/src/DataLoaderRos.cxx
+            ${CMAKE_SOURCE_DIR}/src/DepthEstimatorCPU.cxx
+            ${CMAKE_SOURCE_DIR}/src/DepthEstimatorGL.cxx
+            ${CMAKE_SOURCE_DIR}/src/Mesh.cxx
+            ${CMAKE_SOURCE_DIR}/src/Pattern.cxx  )
+if(CORE_WITH_VIEWER)
+    set(MY_SRC ${MY_SRC} ${CMAKE_SOURCE_DIR}/src/Gui.cxx
+                         ${CMAKE_SOURCE_DIR}/src/Scene.cxx)
+endif()
+if(CORE_WITH_HALIDE)
+    set(MY_SRC ${MY_SRC} ${CMAKE_SOURCE_DIR}/src/DepthEstimatorHalide.cxx )
+endif()
+
+
+
+
+##set all the global options
+if(CORE_WITH_VIEWER)
+    message("USING LIBGIL")
+    add_definitions(-DWITH_VIEWER)
+else()
+    message("USING OFFSCREEN")
+endif()
+if(CORE_WITH_HALIDE)
+    message("USING HALIDE")
+    add_definitions(-DWITH_HALIDE)
+else()
+    message("NOT USING HALIDE")
+endif()
 
 
 #TINY PROCESS LIBRARY

@@ -180,6 +180,7 @@ public:
     //databasse
     Mesh m_last_finished_mesh;
     bool m_started_new_keyframe;
+    int m_nr_frames_traced;
 
 
 

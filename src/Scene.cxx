@@ -18,11 +18,10 @@ Scene::Scene():
 
 
 void Scene::add_mesh(const Mesh& mesh, const std::string name){
-    if(!m_is_first_appended_mesh){ //The viewer start already with one empty dummy mesh data, so on the first one we don't need to allocate anything
+    if( !m_is_first_appended_mesh){ //The viewer start already with one empty dummy mesh data, so on the first one we don't need to allocate anything
         m_view->append_mesh();
     }
 
-    VLOG(1) << "scene got mesh " << name << " with V " << mesh.V.rows(); 
     m_meshes.push_back(mesh);
     m_meshes.back().name=name;
     m_is_first_appended_mesh=false;

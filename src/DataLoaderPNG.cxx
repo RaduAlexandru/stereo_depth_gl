@@ -929,22 +929,22 @@ void DataLoaderPNG::publish_stereo_frame(const Frame& frame_left, const Frame& f
     cv_msg_left.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
     cv_msg_left.image    = frame_left.gray; // Your cv::Mat
     stereo_pair.img_gray_left=*cv_msg_left.toImageMsg();
-    VLOG(1) << "stereo_pair.img_gray_left.height and width is " << stereo_pair.img_gray_left.height << " " << stereo_pair.img_gray_left.width;
+    // VLOG(1) << "stereo_pair.img_gray_left.height and width is " << stereo_pair.img_gray_left.height << " " << stereo_pair.img_gray_left.width;
 
     cv_bridge::CvImage cv_msg_right;
     cv_msg_right.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
     cv_msg_right.image    = frame_right.gray; // Your cv::Mat
     stereo_pair.img_gray_right=*cv_msg_right.toImageMsg();
-    VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width;
+    // VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width;
 
     //store the pose
-    VLOG(1) << "storing pose \n" << frame_left.tf_cam_world.matrix();
+    // VLOG(1) << "storing pose \n" << frame_left.tf_cam_world.matrix();
     Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_left.data(), 4,4) = frame_left.tf_cam_world.matrix();
     Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_right.data(), 4,4) = frame_right.tf_cam_world.matrix();
 
 
     //store the K
-    VLOG(1) << "storing K \n" << frame_left.K;
+    // VLOG(1) << "storing K \n" << frame_left.K;
     Eigen::Matrix3f::Map(stereo_pair.K_left.data(), 3,3) = frame_left.K;
     Eigen::Matrix3f::Map(stereo_pair.K_right.data(), 3,3) = frame_right.K;
 
@@ -957,45 +957,6 @@ void DataLoaderPNG::publish_stereo_frame(const Frame& frame_left, const Frame& f
 
 
 void DataLoaderPNG::publish_map(const Mesh& mesh){
-
-    // ros::NodeHandle n("~");
-    // m_cloud_pub = n.advertise<visualization_msgs::Marker> ( "semi_dense_map", 10 );
-    //
-    //
-    // if ( m_cloud_pub.getNumSubscribers() == 0 ) return;
-    // const double fPointSize = 0.04;
-    // const char * MAP_FRAME_ID = "/world";
-    // const char * POINTS_NAMESPACE = "GlMapPoints";
-    // visualization_msgs::Marker allGLPoints;
-    // if ( allGLPoints.points.empty() ){
-    //    allGLPoints.header.frame_id = MAP_FRAME_ID;
-    //    allGLPoints.ns = POINTS_NAMESPACE;
-    //    allGLPoints.id = 42;
-    //    allGLPoints.type = visualization_msgs::Marker::POINTS;
-    //    allGLPoints.scale.x = fPointSize;
-    //    allGLPoints.scale.y = fPointSize;
-    //    allGLPoints.pose.orientation.w = 1.0;
-    //    allGLPoints.action = visualization_msgs::Marker::ADD;
-    //    allGLPoints.color.a = 1.0;
-    //    allGLPoints.color.b = 1.0;
-    //    allGLPoints.color.r = 1.0;
-    // }
-    //
-    // // draw all points
-    // allGLPoints.points.clear();
-    // for ( int i = 0; i < mesh.V.rows(); ++i){
-    //    if ( !mesh.V.row(i).allFinite() ) continue;
-    //    geometry_msgs::Point p;
-    //    p.x = mesh.V(i,0);
-    //    p.y = mesh.V(i,1);
-    //    p.z = mesh.V(i,2);
-    //    allGLPoints.points.push_back ( p );
-    // }
-    // // allGLPoints.header.stamp = ;
-    //
-    // m_cloud_pub.publish(allGLPoints);
-
-
 
     ros::NodeHandle n("~");
     m_cloud_pub = n.advertise<pcl::PointCloud<pcl::PointXYZRGB> > ( "semi_dense_map", 10 );

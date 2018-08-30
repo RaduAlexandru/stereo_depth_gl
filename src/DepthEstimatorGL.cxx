@@ -39,7 +39,8 @@ DepthEstimatorGL::DepthEstimatorGL():
         m_start_frame(0),
         m_started_new_keyframe(false),
         m_seeds_gpu_dirty(false),
-        m_seeds_cpu_dirty(false)
+        m_seeds_cpu_dirty(false),
+        m_nr_frames_traced(0)
         {
 
     init_params();
@@ -334,11 +335,21 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         m_started_new_keyframe=true;
         // m_last_finished_mesh=m_mesh;
+        m_nr_frames_traced=0;
     }else{
         VLOG(1) << "Frame is NOT keyframe we will trace";
 
+        //if more than 10 frames passed we can remove the grazing seeds
+        if(   do_post_process &&  m_nr_frames_traced>10 ){
+            sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
+            assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
+            remove_grazing_seeds(m_seeds);
+            sync_seeds_buf();
+        }
+
         //trace the created seeds
         trace(m_nr_seeds_created, m_ref_frame, frame_right);
+
         //create a mesh
 
         // //next one we will create a keyframe
@@ -851,6 +862,8 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
 
     m_seeds_gpu_dirty=true; //the data changed on the gpu side, we should download it
 
+    m_nr_frames_traced++;
+
 }
 
 Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_frame){
@@ -889,7 +902,7 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
 
     }
 
-    VLOG(1) << "nr seeds valid " << nr_seeds_valid; 
+    VLOG(1) << "nr seeds valid " << nr_seeds_valid;
 
     // //make also some colors based on depth
     // mesh.C.resize(seeds.size(),3);

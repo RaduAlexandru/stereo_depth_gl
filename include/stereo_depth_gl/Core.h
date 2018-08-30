@@ -8,8 +8,10 @@
 
 //My stuff
 #include "stereo_depth_gl/Mesh.h"
-#include "stereo_depth_gl/Scene.h"
 #include "stereo_depth_gl/Frame.h"
+#ifdef WITH_VIEWER
+    #include "stereo_depth_gl/Scene.h"
+#endif
 
 
 //ROS
@@ -37,7 +39,10 @@ class Profiler;
 class DataLoaderPNG;
 class DataLoaderRos;
 // class SurfelSplatter;
-namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
+
+#ifdef WITH_VIEWER
+    namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
+#endif
 
 
 #define TIME_SCOPE(name)\
@@ -49,10 +54,14 @@ namespace igl {  namespace opengl {namespace glfw{ class Viewer; }}}
 
 class Core{
 public:
-    Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Profiler> profiler);
+    Core();
+
     void update();
     void init_params();
+    void init_links(); //links the object to other object that they need
     void init_ros();
+    void start(); // to be executed by main after all the core objcts have been linked together correctly
+
     void read_ros_msgs();
 
     void read_scene(std::string file_path);
@@ -60,19 +69,25 @@ public:
     Mesh split_mesh_from_uv(const Mesh& mesh, const Mesh& uv_mesh);
     Mesh read_mesh_from_file(std::string file_path);
     void append_mesh(const Mesh& mesh, const std::string name);
-    void set_mesh(const Mesh& mesh);
-    void set_points(const Mesh& mesh);
-    void set_edges(const Mesh& mesh);
+    #ifdef WITH_VIEWER
+        void set_mesh(const Mesh& mesh);
+        void set_points(const Mesh& mesh);
+        void set_edges(const Mesh& mesh);
+        void write_ply();
+        void write_obj();
+    #endif
     Eigen::MatrixXd color_points(const Mesh& mesh)const;  //creates color for all the points in the mesh depending on the m_color_type value
-    void write_ply();
-    void write_obj();
+
 
     Mesh compute_camera_frustum_mesh(const Frame& frame, const float scale_multiplier);
     Mesh subsample_point_cloud(const Mesh& mesh);
 
 
     //objects dependencies
-    std::shared_ptr<igl::opengl::glfw::Viewer> m_view;
+    #ifdef WITH_VIEWER
+        Scene m_scene;
+        std::shared_ptr<igl::opengl::glfw::Viewer> m_view;
+    #endif
     std::shared_ptr<Profiler> m_profiler;
     // std::shared_ptr<DepthEstimatorCPU> m_depth_estimator; //does a cpu implementation
     // std::shared_ptr<DepthEstimatorRenegade> m_depth_estimator_renegade; //just reads the file written by renegade
@@ -88,7 +103,6 @@ public:
 
 
     //Misc
-    Scene m_scene;
     // std::unordered_map<std::string> m_object_name2idx;  //for each object name in the scene we store the selected_data_index
     char m_exported_filename[32] = "./scene";
     uint64_t m_last_timestamp;

@@ -46,7 +46,7 @@ namespace fs = boost::filesystem;
 using namespace configuru;
 
 
-Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Profiler> profiler) :
+Core::Core() :
         m_viewer_initialized(false),
         // m_player(new RosBagPlayer),
         // m_depth_estimator(new DepthEstimatorCPU),
@@ -65,99 +65,53 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
         m_preload_mesh_subsample_factor(1){
 
     init_params();
-    m_view = view;
-    m_profiler=profiler;
-    // m_depth_estimator->m_profiler=profiler;
-    // m_depth_estimator->m_view=m_view;
-    // m_depth_estimator_renegade->m_profiler=profiler;
-    // m_depth_estimator_renegade->m_view=m_view;
-    m_depth_estimator_gl->m_profiler=profiler;
-    m_depth_estimator_halide->m_profiler=profiler;
-    // m_depth_estimator_gl2->m_profiler=profiler;
-    // m_depth_estimator_gl2->m_view=m_view;
-    // m_splatter->m_view=m_view;
-    // m_loader->m_profiler=profiler;
-    // m_loader->m_player=m_player;
-    m_loader_png->m_profiler=profiler;
+
+}
+
+void Core::init_links(){
+
+    m_depth_estimator_gl->m_profiler=m_profiler;
+    m_depth_estimator_halide->m_profiler=m_profiler;
+
+    m_loader_png->m_profiler=m_profiler;
+
+    m_loader_ros->m_profiler=m_profiler;
+
+    #ifdef WITH_VIEWER
+        m_scene.m_view=m_view;
+    #endif
+
+}
+
+void Core::start(){
+
+    init_links(); //link all the object to what they need
+
     m_loader_png->start_reading(); //can only do it from here because only now we have linked with the profiler
 
-    m_loader_ros->m_profiler=profiler;
     m_loader_ros->start_reading();
 
-    // for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
-    //     m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_"+std::to_string(i)+".png", i);
-    //
-    // }
-    // m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_1.png", 1);
-    m_scene.m_view=m_view;
-
-
-
-
-    // m_player->play(m_bag_args); //the bag seems to need to be started from the main thread therwise it segment faults when starting playing..
-
-
-     // boost::thread t(&DataLoader::load_data, m_loader);
-
-     // m_depth_estimator->run_speed_test();
-
-     Frame dummy_frame;
-     // Mesh depth_mesh=m_depth_estimator->compute_depth2(dummy_frame);
-     // Mesh depth_mesh=m_depth_estimator->compute_depth_simplified();  // works on cpu
-     // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth(dummy_frame);  //just reads the things that were written from RENEGADE
-     // // Mesh depth_mesh=m_depth_estimator_gl->compute_depth();
-     // depth_mesh.m_show_points=true;
-     // m_scene.add_mesh(depth_mesh, "depth_mesh");
-
-
-     //good one
-     // m_depth_estimator_gl->init_data();
-     // m_depth_estimator_gl->compute_depth_and_create_mesh();
-     // m_depth_estimator_gl->compute_depth_and_create_mesh_cpu();
-
-
-     std::cout << "finished computing depth-------------------" << '\n';
-     // Mesh depth_mesh=m_depth_estimator_gl2->compute_depth_simplified();  // works
-     // depth_mesh.m_show_points=true;
-     // m_scene.add_mesh(depth_mesh, "depth_mesh");
-
-
      // //add a mesh for the camera frustum (WORKS FOR THE BAG LOADER AND MULTIPLE CAMERAS)
-     for (size_t i = 0; i < m_loader_png->get_nr_cams(); i++) {
-         Mesh mesh_cam_frustum;
-         mesh_cam_frustum.m_show_edges=true;
-         std::string cam_name="cam_" + std::to_string(i);
-         m_scene.add_mesh(mesh_cam_frustum, cam_name);
-     }
+     #ifdef WITH_VIEWER
+         for (size_t i = 0; i < m_loader_png->get_nr_cams(); i++) {
+             Mesh mesh_cam_frustum;
+             mesh_cam_frustum.m_show_edges=true;
+             std::string cam_name="cam_" + std::to_string(i);
+             m_scene.add_mesh(mesh_cam_frustum, cam_name);
+         }
 
+         //add also a preloaded mesh if needed
+         if(m_preload_mesh){
+             Mesh mesh=read_mesh_from_file(m_preload_mesh_path);
+             std::cout << "Mesh is " << mesh << '\n';
+             mesh=subsample_point_cloud(mesh);
+             mesh.m_show_points=true;
+             mesh.m_color_type=0; //jetcolor
+             // mesh.m_color_type=1; //graysclae
+             m_scene.add_mesh(mesh,"geom");
+         }
+     #endif
 
-     //add also a preloaded mesh if needed
-     if(m_preload_mesh){
-         Mesh mesh=read_mesh_from_file(m_preload_mesh_path);
-         std::cout << "Mesh is " << mesh << '\n';
-         mesh=subsample_point_cloud(mesh);
-         mesh.m_show_points=true;
-         mesh.m_color_type=0; //jetcolor
-         // mesh.m_color_type=1; //graysclae
-         m_scene.add_mesh(mesh,"geom");
-     }
-
-
-     //batch one works
-     // m_depth_estimator_gl->compute_depth_and_create_mesh_ICL();
-     // //update point cloud
-     // Mesh point_cloud=m_depth_estimator_gl->m_mesh;
-     // std::string cloud_name="point_cloud";
-     // point_cloud.name=cloud_name;
-     // point_cloud.m_show_points=true;
-     // if(m_scene.does_mesh_with_name_exist(cloud_name)){
-     //     m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
-     // }else{
-     //     m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
-     // }
-
-
-     // m_depth_estimator_gl->m_frames=m_depth_estimator_gl->loadDataFromICLNUIM("/media/alex/Data/Master/Thesis/data/ICL_NUIM/living_room_traj2_frei_png", 60);
 
 }
 
@@ -309,7 +263,7 @@ void Core::update() {
         //update mesh from the debug icl_incremental
         Mesh point_cloud=m_depth_estimator_gl->m_mesh;
         m_loader_png->publish_map(point_cloud);
-        VLOG(1) << "got point cloud with V.rows " << point_cloud.V.rows();
+        #ifdef WITH_VIEWER
         std::string cloud_name="point_cloud";
         point_cloud.name=cloud_name;
         point_cloud.m_show_points=true;
@@ -318,18 +272,21 @@ void Core::update() {
         }else{
             m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
         }
+        #endif
         if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
             Mesh last_cloud=m_depth_estimator_gl->m_last_finished_mesh;
             m_loader_png->publish_map_finished(last_cloud);
-            VLOG(1) << "gotm_last_finished_meshwith V.rows " << last_cloud.V.rows();
+            #ifdef WITH_VIEWER
             std::string cloud_name="finished_cloud";
             last_cloud.name=cloud_name;
             last_cloud.m_show_points=true;
             m_scene.add_mesh(last_cloud, cloud_name);
+            #endif
         }
 
 
 
+        #ifdef WITH_VIEWER
         //update camera frustum mesh
         for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
             std::string cam_name= "cam_"+std::to_string(cam_id);
@@ -341,10 +298,10 @@ void Core::update() {
             }
             // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
             new_frustum_mesh.name=cam_name;
-            std::cout << "new_frustum_mesh \n" << new_frustum_mesh.V << '\n';
             m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
             m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
         }
+        #endif
 
 
     }
@@ -356,7 +313,7 @@ void Core::update() {
 
 
 
-
+    #ifdef WITH_VIEWER
     for (size_t i = 0; i < m_scene.get_nr_meshes(); i++) {
         if(m_scene.get_mesh_with_idx(i).m_visualization_should_change){
             LOG_F(INFO, "Core:: saw that the scene was modified");
@@ -364,7 +321,6 @@ void Core::update() {
             m_view->data().clear();
 
             Mesh& mesh=m_scene.get_mesh_with_idx(i);
-            VLOG(1) << "setting mesh " << mesh.name << "with V " << mesh.V.rows();
             TIME_START("set_mesh");
             if(mesh.m_is_visible){
                 if(m_do_transform_mesh_to_worlGL){
@@ -386,25 +342,11 @@ void Core::update() {
             mesh.m_visualization_should_change=false;
         }
     }
+    #endif
 
 
 
-    // if(m_player->is_paused() &&  m_player->m_player_should_continue_after_step){
-    //     m_player->m_player_should_do_one_step=true; //so that when it starts the callback it puts the bag back into pause
-    //     m_player->pause(); //starts the bag
-    // }
 
-
-    //render
-    // if(m_surfel_rendering){
-    //     m_splatter->render(m_scene.get_mesh_with_name("few_scans"));
-    // }else{
-    // if (m_viewer_initialized) {
-    //     m_view->draw();
-    // } else {
-    //     m_view->core.clear_framebuffers(); //if there is no mesh to draw then just put the color of the background
-    // }
-    // }
 
 
 }
@@ -455,80 +397,97 @@ Mesh Core::read_mesh_from_file(std::string file_path) {
    return mesh;
 }
 
-void Core::set_mesh(const Mesh &mesh) {
-    if(mesh.is_empty() || mesh.F.rows()==0){
-        VLOG(1) << "set_mesh: returning because mesh " << mesh.name << " is empty";
-        return;
+
+#ifdef WITH_VIEWER
+
+    void Core::set_mesh(const Mesh &mesh) {
+        if(mesh.is_empty() || mesh.F.rows()==0){
+            VLOG(1) << "set_mesh: returning because mesh " << mesh.name << " is empty";
+            return;
+        }
+
+
+       m_view->data().set_mesh(mesh.V, mesh.F);
+       if (mesh.C.rows() == mesh.V.rows() || mesh.C.rows() == mesh.F.rows()) {
+           m_view->data().set_colors(mesh.C);
+       }else{
+           m_view->data().set_colors(color_points(mesh));
+       }
+
+       if(mesh.UV.size()){
+           m_view->data().set_uv(mesh.UV);
+       }
+
+
+       if (!m_viewer_initialized) {
+          VLOG(1) << "aligning camera";
+          m_viewer_initialized = true;
+          m_view->core.align_camera_center(mesh.V, mesh.F);
+       }
     }
 
-
-   m_view->data().set_mesh(mesh.V, mesh.F);
-   if (mesh.C.rows() == mesh.V.rows() || mesh.C.rows() == mesh.F.rows()) {
-       m_view->data().set_colors(mesh.C);
-   }else{
-       m_view->data().set_colors(color_points(mesh));
-   }
-
-   if(mesh.UV.size()){
-       m_view->data().set_uv(mesh.UV);
-   }
+    void Core::set_points(const Mesh &mesh) {
+        if(mesh.is_empty()){
+            VLOG(1) << "set_points: returning because mesh " << mesh.name << " is empty";
+            return;
+        }
 
 
-   if (!m_viewer_initialized) {
-      VLOG(1) << "aligning camera";
-      m_viewer_initialized = true;
-      m_view->core.align_camera_center(mesh.V, mesh.F);
-   }
-}
+        // if there are none, then make some colors based on height
+       if (mesh.C.rows() != mesh.V.rows()) {
+           m_view->data().set_points(mesh.V, color_points(mesh));
+       } else {
+           m_view->data().set_points(mesh.V, mesh.C);
+       }
 
-void Core::set_points(const Mesh &mesh) {
-    if(mesh.is_empty()){
-        VLOG(1) << "set_points: returning because mesh " << mesh.name << " is empty";
-        return;
-    }
-    VLOG(1) << "set_points: setting " << mesh.name;
+       m_view->data().point_size = 2;
 
-
-    // if there are none, then make some colors based on height
-   if (mesh.C.rows() != mesh.V.rows()) {
-       m_view->data().set_points(mesh.V, color_points(mesh));
-   } else {
-       m_view->data().set_points(mesh.V, mesh.C);
-   }
-
-   m_view->data().point_size = 2;
-
-   if (!m_viewer_initialized) {
-       VLOG(1) << "aligning camera";
-       m_viewer_initialized = true;
-       m_view->core.align_camera_center(mesh.V);
-   }
-}
-
-void Core::set_edges(const Mesh &mesh) {
-    if(mesh.is_empty()){
-        VLOG(1) << "set_edges: returning because mesh " << mesh.name << " is empty";
-        return;
+       if (!m_viewer_initialized) {
+           VLOG(1) << "aligning camera";
+           m_viewer_initialized = true;
+           m_view->core.align_camera_center(mesh.V);
+       }
     }
 
-    //make some colors
-    Eigen::MatrixXd C(mesh.E.rows(), 3);
-    for (size_t i = 0; i < C.rows(); i++) {
-        C(i, 0) = 1.0;
-        C(i, 1) = 0.0;
-        C(i, 2) = 0.0;
+    void Core::set_edges(const Mesh &mesh) {
+        if(mesh.is_empty()){
+            VLOG(1) << "set_edges: returning because mesh " << mesh.name << " is empty";
+            return;
+        }
+
+        //make some colors
+        Eigen::MatrixXd C(mesh.E.rows(), 3);
+        for (size_t i = 0; i < C.rows(); i++) {
+            C(i, 0) = 1.0;
+            C(i, 1) = 0.0;
+            C(i, 2) = 0.0;
+        }
+
+       m_view->data().set_edges(mesh.V, mesh.E, C);
+
+
+       if (!m_viewer_initialized) {
+           VLOG(1) << "aligning camera";
+           m_viewer_initialized = true;
+           m_view->core.align_camera_center(mesh.V);
+       }
     }
 
-   m_view->data().set_edges(mesh.V, mesh.E, C);
+    void Core::write_ply(){
+        int idx= m_view->selected_data_index;
+        Mesh& mesh = m_scene.get_mesh_with_idx(idx);
+        strcat (m_exported_filename,".ply");
+        igl::writePLY(m_exported_filename, mesh.V, mesh.F);
+    }
 
+    void Core::write_obj(){
+        int idx= m_view->selected_data_index;
+        Mesh& mesh = m_scene.get_mesh_with_idx(idx);
+        strcat (m_exported_filename,".obj");
+        igl::writeOBJ(m_exported_filename, mesh.V, mesh.F);
+    }
 
-   if (!m_viewer_initialized) {
-       VLOG(1) << "aligning camera";
-       m_viewer_initialized = true;
-       m_view->core.align_camera_center(mesh.V);
-   }
-}
-
+#endif
 
 Eigen::MatrixXd Core::color_points(const Mesh& mesh)const{
     Eigen::MatrixXd C = mesh.V;
@@ -626,19 +585,7 @@ Eigen::MatrixXd Core::color_points(const Mesh& mesh)const{
     return C;
 }
 
-void Core::write_ply(){
-    int idx= m_view->selected_data_index;
-    Mesh& mesh = m_scene.get_mesh_with_idx(idx);
-    strcat (m_exported_filename,".ply");
-    igl::writePLY(m_exported_filename, mesh.V, mesh.F);
-}
 
-void Core::write_obj(){
-    int idx= m_view->selected_data_index;
-    Mesh& mesh = m_scene.get_mesh_with_idx(idx);
-    strcat (m_exported_filename,".obj");
-    igl::writeOBJ(m_exported_filename, mesh.V, mesh.F);
-}
 
 
 Mesh Core::compute_camera_frustum_mesh(const Frame& frame, const float scale_multiplier){
