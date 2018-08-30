@@ -34,7 +34,9 @@ using namespace configuru;
 
 
 
-DataLoaderRos::DataLoaderRos(){
+DataLoaderRos::DataLoaderRos():
+    m_nr_callbacks(0)
+    {
 
     init_params();
     create_transformation_matrices();
@@ -102,8 +104,8 @@ void DataLoaderRos::callback(const stereo_ros_msg::StereoPair& stereo_pair){
 
     VLOG(1) << "callback";
 
-    VLOG(1) << "stereo_pair.img_gray_left.height and width is " << stereo_pair.img_gray_left.height << " " << stereo_pair.img_gray_left.width;
-    VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width;
+    // VLOG(1) << "stereo_pair.img_gray_left.height and width is " << stereo_pair.img_gray_left.height << " " << stereo_pair.img_gray_left.width;
+    // VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width;
 
     //Get images
     Frame frame_left, frame_right;
@@ -126,35 +128,37 @@ void DataLoaderRos::callback(const stereo_ros_msg::StereoPair& stereo_pair){
     VLOG(1) << "Managed to read the images";
 
     //read poses
-
     frame_left.tf_cam_world.matrix() = Eigen::Map<Eigen::Matrix4f, Eigen::Unaligned>((float*)stereo_pair.tf_cam_world_left.data(), 4,4);
     frame_right.tf_cam_world.matrix() = Eigen::Map<Eigen::Matrix4f, Eigen::Unaligned>((float*)stereo_pair.tf_cam_world_right.data(), 4,4);
+    VLOG(1) << "loaded pose \n" << frame_left.tf_cam_world.matrix() ;
 
     //read K
     frame_left.K = Eigen::Map<Eigen::Matrix3f, Eigen::Unaligned>((float*)stereo_pair.K_left.data(), 3,3);
     frame_right.K = Eigen::Map<Eigen::Matrix3f, Eigen::Unaligned>((float*)stereo_pair.K_right.data(), 3,3);
+    VLOG(1) << "loaded K \n" << frame_left.K;
 
     frame_left.is_keyframe=stereo_pair.is_keyframe;
     frame_right.is_keyframe=stereo_pair.is_keyframe;
 
+    frame_left.frame_idx=m_nr_callbacks;
+    frame_right.frame_idx=m_nr_callbacks;
+
+    frame_left.cam_id=0;
+    frame_right.cam_id=1;
+
 
     //process it
-    VLOG(1) << "trying to get gradients";
     cv::Scharr( frame_left.gray, frame_left.grad_x, CV_32F, 1, 0);
     cv::Scharr( frame_left.gray, frame_left.grad_y, CV_32F, 0, 1);
     cv::Scharr( frame_right.gray, frame_right.grad_x, CV_32F, 1, 0);
     cv::Scharr( frame_right.gray, frame_right.grad_y, CV_32F, 0, 1);
 
-    VLOG(1) << "merging channels left";
     std::vector<cv::Mat> channels_left;
     channels_left.push_back(frame_left.gray);
     channels_left.push_back(frame_left.grad_x);
     channels_left.push_back(frame_left.grad_y);
-    VLOG(1) << "gray, and grads type " << type2string(frame_left.gray.type()) << " " << type2string(frame_left.grad_x.type()) << " " << type2string(frame_left.grad_y.type());
-    VLOG(1) << "cv merge left";
     cv::merge(channels_left, frame_left.gray_with_gradients);
 
-    VLOG(1) << "merging channels right";
     std::vector<cv::Mat> channels_right;
     channels_right.push_back(frame_right.gray);
     channels_right.push_back(frame_right.grad_x);
@@ -166,7 +170,7 @@ void DataLoaderRos::callback(const stereo_ros_msg::StereoPair& stereo_pair){
         m_frames_buffer_per_cam[1].enqueue(frame_right);
     }
 
-
+    m_nr_callbacks++;
 
 
     // int nr_frames_read_for_cam=0;

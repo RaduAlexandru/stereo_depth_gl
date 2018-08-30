@@ -22,6 +22,7 @@ void Scene::add_mesh(const Mesh& mesh, const std::string name){
         m_view->append_mesh();
     }
 
+    VLOG(1) << "scene got mesh " << name << " with V " << mesh.V.rows(); 
     m_meshes.push_back(mesh);
     m_meshes.back().name=name;
     m_is_first_appended_mesh=false;

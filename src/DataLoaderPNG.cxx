@@ -928,16 +928,18 @@ void DataLoaderPNG::publish_stereo_frame(const Frame& frame_left, const Frame& f
     cv_msg_right.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
     cv_msg_right.image    = frame_right.gray; // Your cv::Mat
     stereo_pair.img_gray_right=*cv_msg_right.toImageMsg();
-    VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width; 
+    VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width;
 
     //store the pose
+    VLOG(1) << "storing pose \n" << frame_left.tf_cam_world.matrix();
     Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_left.data(), 4,4) = frame_left.tf_cam_world.matrix();
     Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_right.data(), 4,4) = frame_right.tf_cam_world.matrix();
 
 
     //store the K
-    Eigen::Matrix3f::Map(stereo_pair.K_left.data(), 3,3) = frame_left.K.matrix();
-    Eigen::Matrix3f::Map(stereo_pair.K_right.data(), 3,3) = frame_right.K.matrix();
+    VLOG(1) << "storing K \n" << frame_left.K;
+    Eigen::Matrix3f::Map(stereo_pair.K_left.data(), 3,3) = frame_left.K;
+    Eigen::Matrix3f::Map(stereo_pair.K_right.data(), 3,3) = frame_right.K;
 
     stereo_pair.is_keyframe=frame_left.is_keyframe;
 

@@ -186,172 +186,43 @@ void Core::update() {
     // }
 
 
-    // if ( m_loader_png->has_data_for_all_cams() ) {
-    if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
-        m_player_should_do_one_step=false;
-        Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
-        Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
-        // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
-        // m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
-        // m_depth_estimator_gl->upload_gray_and_grad_stereo_pair(frame_left.gray_with_gradients, frame_right.gray_with_gradients);
-        // m_depth_estimator_gl->compute_depth_and_create_mesh_ICL_incremental(frame_left,frame_right);
-
-        // //halide one
-        // m_depth_estimator_halide->compute_depth(frame_left,frame_right);
-        // //to visualize what halide is doing
-        // m_depth_estimator_gl->upload_gray_stereo_pair(m_depth_estimator_halide->debug_img_left, m_depth_estimator_halide->debug_img_right);
-
-        //depth estimator gl cleaned up
-        m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
-        // m_depth_estimator_gl->compute_depth_and_update_mesh(frame_left);
-            if(frame_left.frame_idx%30==0){
-                frame_left.is_keyframe=true;
-                frame_right.is_keyframe=true;
-            }
-        m_depth_estimator_gl->compute_depth_and_update_mesh_stereo(frame_left,frame_right);
-
-
-
-        // // //update mesh from the depth_estimator_halide
-        // Mesh point_cloud=m_depth_estimator_halide->m_mesh;
-        // std::string cloud_name="point_cloud";
-        // point_cloud.name=cloud_name;
-        // point_cloud.m_show_points=true;
-        // // std::cout << "point_cloud " << point_cloud.V << '\n';
-        // if(m_scene.does_mesh_with_name_exist(cloud_name)){
-        //     m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
-        // }else{
-        //     m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
-        // }
-
-
-        //update mesh from the debug icl_incremental
-        Mesh point_cloud=m_depth_estimator_gl->m_mesh;
-        std::string cloud_name="point_cloud";
-        point_cloud.name=cloud_name;
-        point_cloud.m_show_points=true;
-        if(m_scene.does_mesh_with_name_exist(cloud_name)){
-            m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
-        }else{
-            m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
-        }
-        if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
-            Mesh point_cloud=m_depth_estimator_gl->m_last_finished_mesh;
-            std::string cloud_name="finished_cloud";
-            point_cloud.name=cloud_name;
-            point_cloud.m_show_points=true;
-            m_scene.add_mesh(point_cloud, cloud_name);
-        }
-
-
-        // //update point cloud
-        // Mesh point_cloud=m_depth_estimator_gl->create_point_cloud();
-        // std::string cloud_name="point_cloud";
-        // point_cloud.name=cloud_name;
-        // point_cloud.m_show_points=true;
-        // if(m_scene.does_mesh_with_name_exist(cloud_name)){
-        //     m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
-        // }else{
-        //     m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
-        // }
-
-
-
-
-        //update camera frustum mesh
-        for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
-            std::string cam_name= "cam_"+std::to_string(cam_id);
-            Mesh new_frustum_mesh;
-            if(cam_id==0){
-                new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-            }else if( cam_id==1){
-                new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
-            }
-            // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-            new_frustum_mesh.name=cam_name;
-            m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
-            m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
-        }
-
-
-
-        // for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
-        //     if(m_loader->is_cam_modified(i)){
-        //         // m_texturer->commit_pages();
-        //         // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-        //         // // display_frame(frame);
-        //         // TIME_START("upload frame");
-        //         // m_texturer->upload_rgb_texture(frame.rgb);
-        //         // m_texturer->upload_mask_texture(frame.mask);
-        //         // m_texturer->upload_frame_classes_and_probs_texture(frame.classes, frame.probs);
-        //         // TIME_END("upload frame");
-        //         // m_texturer->texture_scene(m_scene.get_idx_for_name("geom"), frame);
-        //         //
-        //         // //update camera frustum mesh
-        //         // std::string cam_name= "cam_" + std::to_string(frame.cam_id);
-        //         // compute_camera_frustum_mesh(m_scene.get_mesh_with_name(cam_name), frame);
-        //         // m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
-        //
-        //         // //debug update the position of a certain debug point
-        //         // Eigen::Vector3d eye_pos=frame.tf_cam_world.inverse().translation();
-        //         // m_scene.get_mesh_with_name("debug_mesh").V=eye_pos.transpose();
-        //         // m_scene.get_mesh_with_name("debug_mesh").m_visualization_should_change=true;
-        //
-        //
-        //         // // cl depth
-        //         // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-        //         // m_depth_estimator->compute_depth2(frame);
-        //         // // display_frame(frame);
-        //
-        //
-        //
-        //         // //renegade depth
-        //         // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-        //         // Mesh depth_mesh=m_depth_estimator_renegade->compute_depth2(frame);
-        //         // m_scene.add_mesh(depth_mesh, "depth_mesh");
-        //         // display_frame(frame);
-        //
-        //         //----------the good one
-        //         // Frame frame=m_loader->get_frame_for_cam(i); //get frame for cam i
-        //         // Mesh depth_mesh=m_depth_estimator->compute_depth2(frame);
-        //         // depth_mesh.m_show_points=true;
-        //         // m_scene.add_mesh(depth_mesh, "depth_mesh");
-        //         // display_frame(frame);
-        //
-        //
-        //
-        //         // nr_cams_processed++;
-        //     }
-        // }
-        // VLOG(1) << "nr_cams_processed " << nr_cams_processed;
-    }
-
-
     // // if ( m_loader_png->has_data_for_all_cams() ) {
     // if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
     //     m_player_should_do_one_step=false;
     //     Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
     //     Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
+    //     // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
+    //     // m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
+    //     // m_depth_estimator_gl->upload_gray_and_grad_stereo_pair(frame_left.gray_with_gradients, frame_right.gray_with_gradients);
+    //     // m_depth_estimator_gl->compute_depth_and_create_mesh_ICL_incremental(frame_left,frame_right);
+    //
+    //     // //halide one
+    //     // m_depth_estimator_halide->compute_depth(frame_left,frame_right);
+    //     // //to visualize what halide is doing
+    //     // m_depth_estimator_gl->upload_gray_stereo_pair(m_depth_estimator_halide->debug_img_left, m_depth_estimator_halide->debug_img_right);
     //
     //     //depth estimator gl cleaned up
     //     m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
-    //
-    //
-    //     //don't do anything with this but rather just republish it
-    //     if(frame_left.frame_idx%50==0){
-    //         frame_left.is_keyframe=true;
-    //         frame_right.is_keyframe=true;
-    //     }
-    //     m_loader_png->publish_stereo_frame(frame_left, frame_right);
-    //
-    // }
-    //
-    // if(  m_loader_ros->has_data_for_all_cams()  ){
-    //
-    //     Frame frame_left=m_loader_ros->get_next_frame_for_cam(0);
-    //     Frame frame_right=m_loader_ros->get_next_frame_for_cam(1);
-    //
+    //     // m_depth_estimator_gl->compute_depth_and_update_mesh(frame_left);
+    //         if(frame_left.frame_idx%30==0){
+    //             frame_left.is_keyframe=true;
+    //             frame_right.is_keyframe=true;
+    //         }
     //     m_depth_estimator_gl->compute_depth_and_update_mesh_stereo(frame_left,frame_right);
+    //
+    //
+    //
+    //     // // //update mesh from the depth_estimator_halide
+    //     // Mesh point_cloud=m_depth_estimator_halide->m_mesh;
+    //     // std::string cloud_name="point_cloud";
+    //     // point_cloud.name=cloud_name;
+    //     // point_cloud.m_show_points=true;
+    //     // // std::cout << "point_cloud " << point_cloud.V << '\n';
+    //     // if(m_scene.does_mesh_with_name_exist(cloud_name)){
+    //     //     m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+    //     // }else{
+    //     //     m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+    //     // }
     //
     //
     //     //update mesh from the debug icl_incremental
@@ -373,6 +244,19 @@ void Core::update() {
     //     }
     //
     //
+    //     // //update point cloud
+    //     // Mesh point_cloud=m_depth_estimator_gl->create_point_cloud();
+    //     // std::string cloud_name="point_cloud";
+    //     // point_cloud.name=cloud_name;
+    //     // point_cloud.m_show_points=true;
+    //     // if(m_scene.does_mesh_with_name_exist(cloud_name)){
+    //     //     m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+    //     // }else{
+    //     //     m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+    //     // }
+    //
+    //
+    //
     //
     //     //update camera frustum mesh
     //     for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
@@ -388,9 +272,80 @@ void Core::update() {
     //         m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
     //         m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
     //     }
-    //
-    //
     // }
+
+
+
+
+
+
+    // if ( m_loader_png->has_data_for_all_cams() ) {
+    if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
+        m_player_should_do_one_step=false;
+        Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
+        Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
+
+        //depth estimator gl cleaned up
+        m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
+
+
+        //don't do anything with this but rather just republish it
+        if(frame_left.frame_idx%50==0){
+            frame_left.is_keyframe=true;
+            frame_right.is_keyframe=true;
+        }
+        m_loader_png->publish_stereo_frame(frame_left, frame_right);
+
+    }
+
+    if(  m_loader_ros->has_data_for_all_cams()  ){
+
+        Frame frame_left=m_loader_ros->get_next_frame_for_cam(0);
+        Frame frame_right=m_loader_ros->get_next_frame_for_cam(1);
+
+        m_depth_estimator_gl->compute_depth_and_update_mesh_stereo(frame_left,frame_right);
+
+
+        //update mesh from the debug icl_incremental
+        Mesh point_cloud=m_depth_estimator_gl->m_mesh;
+        VLOG(1) << "got point cloud with V.rows " << point_cloud.V.rows();
+        std::string cloud_name="point_cloud";
+        point_cloud.name=cloud_name;
+        point_cloud.m_show_points=true;
+        if(m_scene.does_mesh_with_name_exist(cloud_name)){
+            m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+        }else{
+            m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+        }
+        if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
+            Mesh last_cloud=m_depth_estimator_gl->m_last_finished_mesh;
+            VLOG(1) << "gotm_last_finished_meshwith V.rows " << last_cloud.V.rows();
+            std::string cloud_name="finished_cloud";
+            last_cloud.name=cloud_name;
+            last_cloud.m_show_points=true;
+            m_scene.add_mesh(last_cloud, cloud_name);
+        }
+
+
+
+        //update camera frustum mesh
+        for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
+            std::string cam_name= "cam_"+std::to_string(cam_id);
+            Mesh new_frustum_mesh;
+            if(cam_id==0){
+                new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+            }else if( cam_id==1){
+                new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
+            }
+            // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+            new_frustum_mesh.name=cam_name;
+            std::cout << "new_frustum_mesh \n" << new_frustum_mesh.V << '\n';
+            m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
+            m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
+        }
+
+
+    }
 
 
 
@@ -407,6 +362,7 @@ void Core::update() {
             m_view->data().clear();
 
             Mesh& mesh=m_scene.get_mesh_with_idx(i);
+            VLOG(1) << "setting mesh " << mesh.name << "with V " << mesh.V.rows();
             TIME_START("set_mesh");
             if(mesh.m_is_visible){
                 if(m_do_transform_mesh_to_worlGL){
@@ -499,6 +455,7 @@ Mesh Core::read_mesh_from_file(std::string file_path) {
 
 void Core::set_mesh(const Mesh &mesh) {
     if(mesh.is_empty() || mesh.F.rows()==0){
+        VLOG(1) << "set_mesh: returning because mesh " << mesh.name << " is empty";
         return;
     }
 
@@ -516,17 +473,19 @@ void Core::set_mesh(const Mesh &mesh) {
 
 
    if (!m_viewer_initialized) {
-       std::cout << "aligning camera" << '\n';
-       m_viewer_initialized = true;
-       m_view->core.align_camera_center(mesh.V, mesh.F);
+      VLOG(1) << "aligning camera";
+      m_viewer_initialized = true;
+      m_view->core.align_camera_center(mesh.V, mesh.F);
    }
 }
 
 void Core::set_points(const Mesh &mesh) {
     if(mesh.is_empty()){
-        VLOG(1) << "set_points: returning because mesh is empty";
+        VLOG(1) << "set_points: returning because mesh " << mesh.name << " is empty";
         return;
     }
+    VLOG(1) << "set_points: setting " << mesh.name;
+
 
     // if there are none, then make some colors based on height
    if (mesh.C.rows() != mesh.V.rows()) {
@@ -538,6 +497,7 @@ void Core::set_points(const Mesh &mesh) {
    m_view->data().point_size = 2;
 
    if (!m_viewer_initialized) {
+       VLOG(1) << "aligning camera";
        m_viewer_initialized = true;
        m_view->core.align_camera_center(mesh.V);
    }
@@ -545,6 +505,7 @@ void Core::set_points(const Mesh &mesh) {
 
 void Core::set_edges(const Mesh &mesh) {
     if(mesh.is_empty()){
+        VLOG(1) << "set_edges: returning because mesh " << mesh.name << " is empty";
         return;
     }
 
@@ -560,6 +521,7 @@ void Core::set_edges(const Mesh &mesh) {
 
 
    if (!m_viewer_initialized) {
+       VLOG(1) << "aligning camera";
        m_viewer_initialized = true;
        m_view->core.align_camera_center(mesh.V);
    }
@@ -681,7 +643,7 @@ Mesh Core::compute_camera_frustum_mesh(const Frame& frame, const float scale_mul
     // https://gamedev.stackexchange.com/questions/29999/how-do-i-create-a-bounding-frustum-from-a-view-projection-matrix
     Mesh frustum_mesh;
 
-    Eigen::Matrix4f proj=intrinsics_to_opengl_proj(frame.K, frame.rgb.cols, frame.rgb.rows, 0.5*scale_multiplier, 2.5*scale_multiplier);
+    Eigen::Matrix4f proj=intrinsics_to_opengl_proj(frame.K, frame.gray.cols, frame.gray.rows, 0.5*scale_multiplier, 2.5*scale_multiplier);
     Eigen::Matrix4f view= frame.tf_cam_world.matrix().cast<float>();
     Eigen::Matrix4f view_projection= proj*view;
     Eigen::Matrix4f view_projection_inv=view_projection.inverse();

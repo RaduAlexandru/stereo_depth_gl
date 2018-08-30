@@ -58,6 +58,7 @@ private:
     std::thread m_loader_thread;
     int m_nr_cams;
     std::string m_topic;
+    int m_nr_callbacks;
     // int m_idx_img_to_read;
 
 

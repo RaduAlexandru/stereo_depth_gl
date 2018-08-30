@@ -303,6 +303,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
     TIME_START_GL("ALL");
     // if(frame_left.is_keyframe){
     if(frame_left.is_keyframe){
+        VLOG(1) << "Frame is keyframe, we will create seeds";
 
         if(   do_post_process && (frame_left.frame_idx>1 || frame_left.is_last ) ){
             sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
@@ -334,6 +335,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         m_started_new_keyframe=true;
         // m_last_finished_mesh=m_mesh;
     }else{
+        VLOG(1) << "Frame is NOT keyframe we will trace";
 
         //trace the created seeds
         trace(m_nr_seeds_created, m_ref_frame, frame_right);
@@ -365,6 +367,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
     //we need to do a sync because we need the data on the cpu side
     sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
     m_mesh=create_mesh(m_seeds, m_ref_frame);
+    VLOG(1) << "m_mesh.V " << m_mesh.V.rows();
     TIME_END_GL("ALL");
 }
 
@@ -856,6 +859,7 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
     mesh.V.resize(seeds.size(),3);
     mesh.V.setZero();
 
+    int nr_seeds_valid=0;
     for (size_t i = 0; i < seeds.size(); i++) {
         float u=seeds[i].m_uv.x();
         float v=seeds[i].m_uv.y();
@@ -879,10 +883,13 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
             Eigen::Vector3f point_world=ref_frame.tf_cam_world.inverse()*point_cam;
             // mesh.V.row(i)=point_cam.cast<double>();
             mesh.V.row(i)=point_world.cast<double>();
+
+            nr_seeds_valid++;
         }
 
-
     }
+
+    VLOG(1) << "nr seeds valid " << nr_seeds_valid; 
 
     // //make also some colors based on depth
     // mesh.C.resize(seeds.size(),3);
