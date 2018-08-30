@@ -69,6 +69,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf_conversions
   stereo_ros_msg
+  cv_bridge
 )
 
 if (OPENMP_FOUND)
@@ -128,6 +129,7 @@ catkin_package(
     tf
     tf_conversions
     stereo_ros_msg
+    cv_bridge
 )
 
 

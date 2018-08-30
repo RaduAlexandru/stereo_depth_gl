@@ -81,6 +81,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
     m_loader_png->m_profiler=profiler;
     m_loader_png->start_reading(); //can only do it from here because only now we have linked with the profiler
 
+    m_loader_ros->m_profiler=profiler;
     m_loader_ros->start_reading();
 
     // for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
@@ -192,7 +193,7 @@ void Core::update() {
         Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
         // m_depth_estimator_gl->upload_gray_stereo_pair(frame_left.gray, frame_right.gray);
         // m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
-        m_depth_estimator_gl->upload_gray_and_grad_stereo_pair(frame_left.gray_with_gradients, frame_right.gray_with_gradients);
+        // m_depth_estimator_gl->upload_gray_and_grad_stereo_pair(frame_left.gray_with_gradients, frame_right.gray_with_gradients);
         // m_depth_estimator_gl->compute_depth_and_create_mesh_ICL_incremental(frame_left,frame_right);
 
         // //halide one
@@ -203,6 +204,10 @@ void Core::update() {
         //depth estimator gl cleaned up
         m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
         // m_depth_estimator_gl->compute_depth_and_update_mesh(frame_left);
+            if(frame_left.frame_idx%30==0){
+                frame_left.is_keyframe=true;
+                frame_right.is_keyframe=true;
+            }
         m_depth_estimator_gl->compute_depth_and_update_mesh_stereo(frame_left,frame_right);
 
 
@@ -320,6 +325,78 @@ void Core::update() {
         // }
         // VLOG(1) << "nr_cams_processed " << nr_cams_processed;
     }
+
+
+    // // if ( m_loader_png->has_data_for_all_cams() ) {
+    // if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
+    //     m_player_should_do_one_step=false;
+    //     Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
+    //     Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
+    //
+    //     //depth estimator gl cleaned up
+    //     m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
+    //
+    //
+    //     //don't do anything with this but rather just republish it
+    //     if(frame_left.frame_idx%50==0){
+    //         frame_left.is_keyframe=true;
+    //         frame_right.is_keyframe=true;
+    //     }
+    //     m_loader_png->publish_stereo_frame(frame_left, frame_right);
+    //
+    // }
+    //
+    // if(  m_loader_ros->has_data_for_all_cams()  ){
+    //
+    //     Frame frame_left=m_loader_ros->get_next_frame_for_cam(0);
+    //     Frame frame_right=m_loader_ros->get_next_frame_for_cam(1);
+    //
+    //     m_depth_estimator_gl->compute_depth_and_update_mesh_stereo(frame_left,frame_right);
+    //
+    //
+    //     //update mesh from the debug icl_incremental
+    //     Mesh point_cloud=m_depth_estimator_gl->m_mesh;
+    //     std::string cloud_name="point_cloud";
+    //     point_cloud.name=cloud_name;
+    //     point_cloud.m_show_points=true;
+    //     if(m_scene.does_mesh_with_name_exist(cloud_name)){
+    //         m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+    //     }else{
+    //         m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+    //     }
+    //     if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
+    //         Mesh point_cloud=m_depth_estimator_gl->m_last_finished_mesh;
+    //         std::string cloud_name="finished_cloud";
+    //         point_cloud.name=cloud_name;
+    //         point_cloud.m_show_points=true;
+    //         m_scene.add_mesh(point_cloud, cloud_name);
+    //     }
+    //
+    //
+    //
+    //     //update camera frustum mesh
+    //     for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
+    //         std::string cam_name= "cam_"+std::to_string(cam_id);
+    //         Mesh new_frustum_mesh;
+    //         if(cam_id==0){
+    //             new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+    //         }else if( cam_id==1){
+    //             new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
+    //         }
+    //         // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+    //         new_frustum_mesh.name=cam_name;
+    //         m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
+    //         m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
+    //     }
+    //
+    //
+    // }
+
+
+
+
+
+
 
 
 

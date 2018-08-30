@@ -76,6 +76,10 @@ void DataLoaderRos::start_reading(){
 
     VLOG(1) << "start_reading";
 
+    for (size_t i = 0; i < m_nr_cams; i++) {
+        m_frames_buffer_per_cam.push_back( moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
+    }
+
     //starts a thread that spins continously and reads stuff
     m_loader_thread=std::thread(&DataLoaderRos::read_data, this);
 
@@ -98,8 +102,87 @@ void DataLoaderRos::callback(const stereo_ros_msg::StereoPair& stereo_pair){
 
     VLOG(1) << "callback";
 
-    int nr_frames_read_for_cam=0;
+    VLOG(1) << "stereo_pair.img_gray_left.height and width is " << stereo_pair.img_gray_left.height << " " << stereo_pair.img_gray_left.width;
+    VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width;
 
+    //Get images
+    Frame frame_left, frame_right;
+    cv_bridge::CvImageConstPtr cv_ptr;
+    try{
+        sensor_msgs::ImageConstPtr ptr_left( new sensor_msgs::Image( stereo_pair.img_gray_left ) );
+        cv_ptr = cv_bridge::toCvShare( ptr_left );
+        cv_ptr->image.copyTo(frame_left.gray);
+
+        sensor_msgs::ImageConstPtr ptr_right( new sensor_msgs::Image( stereo_pair.img_gray_right ) );
+        cv_ptr = cv_bridge::toCvShare( ptr_right );
+        cv_ptr->image.copyTo(frame_right.gray);
+
+        //cv::flip(img_cv,img_cv, -1); //TODO this line needs to be commented
+    }catch (cv_bridge::Exception& e){
+            ROS_ERROR( "cv_bridge exception: %s", e.what() );
+            return;
+    }
+
+    VLOG(1) << "Managed to read the images";
+
+    //read poses
+
+    frame_left.tf_cam_world.matrix() = Eigen::Map<Eigen::Matrix4f, Eigen::Unaligned>((float*)stereo_pair.tf_cam_world_left.data(), 4,4);
+    frame_right.tf_cam_world.matrix() = Eigen::Map<Eigen::Matrix4f, Eigen::Unaligned>((float*)stereo_pair.tf_cam_world_right.data(), 4,4);
+
+    //read K
+    frame_left.K = Eigen::Map<Eigen::Matrix3f, Eigen::Unaligned>((float*)stereo_pair.K_left.data(), 3,3);
+    frame_right.K = Eigen::Map<Eigen::Matrix3f, Eigen::Unaligned>((float*)stereo_pair.K_right.data(), 3,3);
+
+    frame_left.is_keyframe=stereo_pair.is_keyframe;
+    frame_right.is_keyframe=stereo_pair.is_keyframe;
+
+
+    //process it
+    VLOG(1) << "trying to get gradients";
+    cv::Scharr( frame_left.gray, frame_left.grad_x, CV_32F, 1, 0);
+    cv::Scharr( frame_left.gray, frame_left.grad_y, CV_32F, 0, 1);
+    cv::Scharr( frame_right.gray, frame_right.grad_x, CV_32F, 1, 0);
+    cv::Scharr( frame_right.gray, frame_right.grad_y, CV_32F, 0, 1);
+
+    VLOG(1) << "merging channels left";
+    std::vector<cv::Mat> channels_left;
+    channels_left.push_back(frame_left.gray);
+    channels_left.push_back(frame_left.grad_x);
+    channels_left.push_back(frame_left.grad_y);
+    VLOG(1) << "gray, and grads type " << type2string(frame_left.gray.type()) << " " << type2string(frame_left.grad_x.type()) << " " << type2string(frame_left.grad_y.type());
+    VLOG(1) << "cv merge left";
+    cv::merge(channels_left, frame_left.gray_with_gradients);
+
+    VLOG(1) << "merging channels right";
+    std::vector<cv::Mat> channels_right;
+    channels_right.push_back(frame_right.gray);
+    channels_right.push_back(frame_right.grad_x);
+    channels_right.push_back(frame_right.grad_y);
+    cv::merge(channels_right, frame_right.gray_with_gradients);
+
+    if(m_frames_buffer_per_cam[0].size_approx()<BUFFER_SIZE-1){ //there is enough space
+        m_frames_buffer_per_cam[0].enqueue(frame_left);
+        m_frames_buffer_per_cam[1].enqueue(frame_right);
+    }
+
+
+
+
+    // int nr_frames_read_for_cam=0;
+
+
+    // if(m_frames_buffer_per_cam[cam_id].size_approx()<BUFFER_SIZE-1){ //there is enough space
+    //     //read the frame and everything else and push it to the queue
+    //
+    //
+    //
+    //     m_frames_buffer_per_cam[cam_id].enqueue(frame);
+    //     nr_frames_read_for_cam++;
+    //
+    // }else{
+    //
+    // }
 
 
     // // std::cout << "size approx is " << m_queue.size_approx() << '\n';

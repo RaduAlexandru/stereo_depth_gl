@@ -362,7 +362,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             // frame.grad_x = cv::abs(frame.grad_x);
             // frame.grad_y = cv::abs(frame.grad_y);
 
-            //merge the gray image and the gradients into one 3 channel image
+            // merge the gray image and the gradients into one 3 channel image
             std::vector<cv::Mat> channels;
             channels.push_back(frame.gray);
             channels.push_back(frame.grad_x);
@@ -377,7 +377,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             // std::cout << "pushing frame with frame_idxs " << frame.frame_idx << '\n';
 
             //just to see if we can get a callback from the DataLoaderRos
-            publish_stereo_frame(frame);
+            // publish_stereo_frame(frame);
 
             m_frames_buffer_per_cam[cam_id].enqueue(frame);
             nr_frames_read_for_cam++;
@@ -911,11 +911,36 @@ cv::Mat DataLoaderPNG::undistort_image(const cv::Mat& gray_img, Eigen::Matrix3f&
 
 }
 
-void DataLoaderPNG::publish_stereo_frame(const Frame& frame){
+void DataLoaderPNG::publish_stereo_frame(const Frame& frame_left, const Frame& frame_right){
+    VLOG(1) << "publishing the stereo frame";
     ros::NodeHandle n("~");
     m_stereo_publisher = n.advertise< stereo_ros_msg::StereoPair >( "/stereo_pair" , 1 );
 
-
     stereo_ros_msg::StereoPair stereo_pair;
+
+    cv_bridge::CvImage cv_msg_left;
+    cv_msg_left.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
+    cv_msg_left.image    = frame_left.gray; // Your cv::Mat
+    stereo_pair.img_gray_left=*cv_msg_left.toImageMsg();
+    VLOG(1) << "stereo_pair.img_gray_left.height and width is " << stereo_pair.img_gray_left.height << " " << stereo_pair.img_gray_left.width;
+
+    cv_bridge::CvImage cv_msg_right;
+    cv_msg_right.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
+    cv_msg_right.image    = frame_right.gray; // Your cv::Mat
+    stereo_pair.img_gray_right=*cv_msg_right.toImageMsg();
+    VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width; 
+
+    //store the pose
+    Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_left.data(), 4,4) = frame_left.tf_cam_world.matrix();
+    Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_right.data(), 4,4) = frame_right.tf_cam_world.matrix();
+
+
+    //store the K
+    Eigen::Matrix3f::Map(stereo_pair.K_left.data(), 3,3) = frame_left.K.matrix();
+    Eigen::Matrix3f::Map(stereo_pair.K_right.data(), 3,3) = frame_right.K.matrix();
+
+    stereo_pair.is_keyframe=frame_left.is_keyframe;
+
+
     m_stereo_publisher.publish (stereo_pair);
 }

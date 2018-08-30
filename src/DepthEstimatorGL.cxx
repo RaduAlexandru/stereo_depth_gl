@@ -301,7 +301,18 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
     LOG(INFO) << "Received frame";
     TIME_START_GL("ALL");
-    if(frame_left.frame_idx%50==0){
+    // if(frame_left.is_keyframe){
+    if(frame_left.is_keyframe){
+
+        if(   do_post_process && (frame_left.frame_idx>1 || frame_left.is_last ) ){
+            sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
+            assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
+            remove_grazing_seeds(m_seeds);
+            sync_seeds_buf();
+            m_last_finished_mesh = create_mesh( m_seeds, m_ref_frame );
+        }
+
+
         m_last_ref_frame=m_ref_frame;
         m_ref_frame=frame_left;
 
@@ -321,7 +332,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
         // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         m_started_new_keyframe=true;
-        m_last_finished_mesh=m_mesh;
+        // m_last_finished_mesh=m_mesh;
     }else{
 
         //trace the created seeds
@@ -334,24 +345,14 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         //     denoise_cpu(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         // }
 
-        //only after 10 frames from the keyframe because by then we should have a good estimate of the depth
-        if(frame_left.frame_idx%50>20){
-            // denoise_cpu(m_seeds, 5,  m_ref_frame.gray.cols, m_ref_frame.gray.rows);
-        }
+        // //only after 10 frames from the keyframe because by then we should have a good estimate of the depth
+        // if(frame_left.frame_idx%50>20){
+        //     // denoise_cpu(m_seeds, 5,  m_ref_frame.gray.cols, m_ref_frame.gray.rows);
+        // }
 
         // // //next one we will create a keyframe
 
-        if( (  do_post_process && (frame_left.frame_idx+1) %50==0 || frame_left.is_last ) ){
-            sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
-            assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
-            remove_grazing_seeds(m_seeds);
-            // // we will create a new keyframe but before that, do a trace on the previous keyframe
-            // if(!m_last_ref_frame.gray.empty()){ //if it's the first keyframe then the last one will be empty
-            //     trace(m_seeds, m_ref_frame, m_last_ref_frame);
-            // }
 
-            // denoise_cpu(m_seeds, 200,  m_ref_frame.gray.cols, m_ref_frame.gray.rows);
-        }
 
 
 
@@ -792,19 +793,19 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
 
     TIME_START_GL("upload_gray_img");
     //merge all mats into one with 4 channel
-    std::vector<cv::Mat> channels;
-    channels.push_back(cur_frame.gray);
-    channels.push_back(cur_frame.grad_x);
-    channels.push_back(cur_frame.grad_y);
-    channels.push_back(cur_frame.grad_y); //dummy one stored in the alpha channels just to have a 4 channel texture
-    cv::Mat img_with_gradients;
-    cv::merge(channels, img_with_gradients);
+    // std::vector<cv::Mat> channels;
+    // channels.push_back(cur_frame.gray);
+    // channels.push_back(cur_frame.grad_x);
+    // channels.push_back(cur_frame.grad_y);
+    // channels.push_back(cur_frame.grad_y); //dummy one stored in the alpha channels just to have a 4 channel texture
+    // cv::Mat img_with_gradients;
+    // cv::merge(channels, img_with_gradients);
 
-    int size_bytes=img_with_gradients.step[0] * img_with_gradients.rows; //allocate 4 channels because gpu likes multiples of 4
+    int size_bytes=cur_frame.gray_with_gradients.step[0] * cur_frame.gray_with_gradients.rows;
     if(!m_cur_frame.get_tex_storage_initialized()){
-        m_cur_frame.allocate_tex_storage_inmutable(GL_RGBA32F,img_with_gradients.cols, img_with_gradients.rows);
+        m_cur_frame.allocate_tex_storage_inmutable(GL_RGB32F,cur_frame.gray.cols, cur_frame.gray.rows);
     }
-    m_cur_frame.upload_without_pbo(0,0,0, img_with_gradients.cols, img_with_gradients.rows, GL_RGBA, GL_FLOAT, img_with_gradients.ptr());
+    m_cur_frame.upload_without_pbo(0,0,0, cur_frame.gray.cols, cur_frame.gray.rows, GL_RGB, GL_FLOAT, cur_frame.gray_with_gradients.ptr());
     TIME_END_GL("upload_gray_img");
 
 

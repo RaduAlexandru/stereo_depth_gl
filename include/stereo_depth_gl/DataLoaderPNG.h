@@ -105,7 +105,9 @@ public:
     std::vector<cv::Mat> m_undistort_map_x_per_cam; //vector containing the undistort map in x direction for each cam
     std::vector<cv::Mat> m_undistort_map_y_per_cam; //vector containing the undistort map in x direction for each cam
 
-
+    //for testing that we can publish and receive ros messages correctly
+    ros::Publisher m_stereo_publisher;
+    void publish_stereo_frame(const Frame& frame_left, const Frame& frame_right);
 
 
 private:
@@ -161,9 +163,7 @@ private:
     bool get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp);
     void create_transformation_matrices();
 
-    //for testing that we can publish and receive ros messages correctly
-    ros::Publisher m_stereo_publisher;
-    void publish_stereo_frame(const Frame& frame);
+
 
 };
 
