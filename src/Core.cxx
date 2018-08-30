@@ -16,6 +16,7 @@
 // #include "stereo_depth_gl/DepthEstimatorGL2.h"
 // #include "stereo_depth_gl/DataLoader.h"
 #include "stereo_depth_gl/DataLoaderPNG.h"
+#include "stereo_depth_gl/DataLoaderRos.h"
 // #include "stereo_depth_gl/SurfelSplatter.h"
 
 //libigl
@@ -55,6 +56,7 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
         // m_depth_estimator_gl2(new DepthEstimatorGL2),
         // m_loader(new DataLoader),
         m_loader_png(new DataLoaderPNG),
+        m_loader_ros(new DataLoaderRos),
         // m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
         dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5),
@@ -78,6 +80,9 @@ Core::Core(std::shared_ptr<igl::opengl::glfw::Viewer> view, std::shared_ptr<Prof
     // m_loader->m_player=m_player;
     m_loader_png->m_profiler=profiler;
     m_loader_png->start_reading(); //can only do it from here because only now we have linked with the profiler
+
+    m_loader_ros->start_reading();
+
     // for (size_t i = 0; i < m_loader->get_nr_cams(); i++) {
     //     m_loader->set_mask_for_cam("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/data/mask_cam_"+std::to_string(i)+".png", i);
     //

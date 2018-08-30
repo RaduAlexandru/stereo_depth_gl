@@ -14,6 +14,9 @@
 //My stuff
 #include "stereo_depth_gl/Frame.h"
 
+//ros
+#include <ros/ros.h>
+
 
 //readerwriterqueue
 #include "readerwriterqueue/readerwriterqueue.h"
@@ -157,6 +160,10 @@ private:
     // void read_pose_file_semantic_fusion();
     bool get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp);
     void create_transformation_matrices();
+
+    //for testing that we can publish and receive ros messages correctly
+    ros::Publisher m_stereo_publisher;
+    void publish_stereo_frame(const Frame& frame);
 
 };
 

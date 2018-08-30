@@ -22,6 +22,7 @@
 
 //ros
 #include "stereo_depth_gl/RosTools.h"
+#include <stereo_ros_msg/StereoPair.h>
 
 // //configuru
 // #define CONFIGURU_WITH_EIGEN 1
@@ -374,6 +375,9 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
             // std::cout << "pusing frame with tf corld of " << frame.tf_cam_world.matrix() << '\n';
             // std::cout << "pusing frame with K of " << frame.K << '\n';
             // std::cout << "pushing frame with frame_idxs " << frame.frame_idx << '\n';
+
+            //just to see if we can get a callback from the DataLoaderRos
+            publish_stereo_frame(frame);
 
             m_frames_buffer_per_cam[cam_id].enqueue(frame);
             nr_frames_read_for_cam++;
@@ -905,4 +909,13 @@ cv::Mat DataLoaderPNG::undistort_image(const cv::Mat& gray_img, Eigen::Matrix3f&
     TIME_END("undistort");
     return undistorted_img;
 
+}
+
+void DataLoaderPNG::publish_stereo_frame(const Frame& frame){
+    ros::NodeHandle n("~");
+    m_stereo_publisher = n.advertise< stereo_ros_msg::StereoPair >( "/stereo_pair" , 1 );
+
+
+    stereo_ros_msg::StereoPair stereo_pair;
+    m_stereo_publisher.publish (stereo_pair);
 }

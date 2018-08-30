@@ -68,6 +68,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   tf
   tf_conversions
+  stereo_ros_msg
 )
 
 if (OPENMP_FOUND)
@@ -126,6 +127,7 @@ catkin_package(
     eigen_conversions
     tf
     tf_conversions
+    stereo_ros_msg
 )
 
 
@@ -152,6 +154,9 @@ target_link_libraries(stereo_depth_gl ${catkin_LIBRARIES}  ${OpenCV_LIBS}  TINY_
           igl::core igl::opengl igl::opengl_glfw
         ${HALIDE_LIBRARIES}
 )
+
+add_dependencies(stereo_depth_gl ${catkin_EXPORTED_TARGETS})
+
 #definitions for cmake variables that are necesarry during runtime
 target_compile_definitions(stereo_depth_gl PRIVATE AWESOMEFONT_DIR="${CMAKE_SOURCE_DIR}/deps/imgui_ext/fontawesome-webfont.ttf")
 target_compile_definitions(stereo_depth_gl PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
