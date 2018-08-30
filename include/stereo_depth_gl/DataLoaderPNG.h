@@ -13,6 +13,7 @@
 
 //My stuff
 #include "stereo_depth_gl/Frame.h"
+#include "stereo_depth_gl/Mesh.h"
 
 //ros
 #include <ros/ros.h>
@@ -107,7 +108,11 @@ public:
 
     //for testing that we can publish and receive ros messages correctly
     ros::Publisher m_stereo_publisher;
+    ros::Publisher m_cloud_pub;
+    ros::Publisher m_cloud_finished_pub;
     void publish_stereo_frame(const Frame& frame_left, const Frame& frame_right);
+    void publish_map(const Mesh& mesh);
+    void publish_map_finished(const Mesh& mesh);
 
 
 private:

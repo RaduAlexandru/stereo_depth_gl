@@ -308,6 +308,7 @@ void Core::update() {
 
         //update mesh from the debug icl_incremental
         Mesh point_cloud=m_depth_estimator_gl->m_mesh;
+        m_loader_png->publish_map(point_cloud);
         VLOG(1) << "got point cloud with V.rows " << point_cloud.V.rows();
         std::string cloud_name="point_cloud";
         point_cloud.name=cloud_name;
@@ -319,6 +320,7 @@ void Core::update() {
         }
         if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
             Mesh last_cloud=m_depth_estimator_gl->m_last_finished_mesh;
+            m_loader_png->publish_map_finished(last_cloud);
             VLOG(1) << "gotm_last_finished_meshwith V.rows " << last_cloud.V.rows();
             std::string cloud_name="finished_cloud";
             last_cloud.name=cloud_name;

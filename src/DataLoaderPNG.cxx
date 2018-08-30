@@ -23,6 +23,13 @@
 //ros
 #include "stereo_depth_gl/RosTools.h"
 #include <stereo_ros_msg/StereoPair.h>
+#include <visualization_msgs/Marker.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <eigen_conversions/eigen_msg.h>
+#include <pcl/PCLPointCloud2.h>
+#include <pcl/conversions.h>
+#include <pcl_ros/transforms.h>
+#include <pcl_ros/point_cloud.h>
 
 // //configuru
 // #define CONFIGURU_WITH_EIGEN 1
@@ -945,4 +952,107 @@ void DataLoaderPNG::publish_stereo_frame(const Frame& frame_left, const Frame& f
 
 
     m_stereo_publisher.publish (stereo_pair);
+}
+
+
+
+void DataLoaderPNG::publish_map(const Mesh& mesh){
+
+    // ros::NodeHandle n("~");
+    // m_cloud_pub = n.advertise<visualization_msgs::Marker> ( "semi_dense_map", 10 );
+    //
+    //
+    // if ( m_cloud_pub.getNumSubscribers() == 0 ) return;
+    // const double fPointSize = 0.04;
+    // const char * MAP_FRAME_ID = "/world";
+    // const char * POINTS_NAMESPACE = "GlMapPoints";
+    // visualization_msgs::Marker allGLPoints;
+    // if ( allGLPoints.points.empty() ){
+    //    allGLPoints.header.frame_id = MAP_FRAME_ID;
+    //    allGLPoints.ns = POINTS_NAMESPACE;
+    //    allGLPoints.id = 42;
+    //    allGLPoints.type = visualization_msgs::Marker::POINTS;
+    //    allGLPoints.scale.x = fPointSize;
+    //    allGLPoints.scale.y = fPointSize;
+    //    allGLPoints.pose.orientation.w = 1.0;
+    //    allGLPoints.action = visualization_msgs::Marker::ADD;
+    //    allGLPoints.color.a = 1.0;
+    //    allGLPoints.color.b = 1.0;
+    //    allGLPoints.color.r = 1.0;
+    // }
+    //
+    // // draw all points
+    // allGLPoints.points.clear();
+    // for ( int i = 0; i < mesh.V.rows(); ++i){
+    //    if ( !mesh.V.row(i).allFinite() ) continue;
+    //    geometry_msgs::Point p;
+    //    p.x = mesh.V(i,0);
+    //    p.y = mesh.V(i,1);
+    //    p.z = mesh.V(i,2);
+    //    allGLPoints.points.push_back ( p );
+    // }
+    // // allGLPoints.header.stamp = ;
+    //
+    // m_cloud_pub.publish(allGLPoints);
+
+
+
+    ros::NodeHandle n("~");
+    m_cloud_pub = n.advertise<pcl::PointCloud<pcl::PointXYZRGB> > ( "semi_dense_map", 10 );
+
+
+    if ( m_cloud_pub.getNumSubscribers() == 0 ) return;
+    const char * MAP_FRAME_ID = "/world";
+    const char * POINTS_NAMESPACE = "GlMapPoints";
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr msg (new pcl::PointCloud<pcl::PointXYZRGB>);
+    msg->header.frame_id = MAP_FRAME_ID;
+    for (size_t i = 0; i < mesh.V.rows(); i++) {
+        pcl::PointXYZRGB point;
+        point.x=mesh.V(i,0);
+        point.y=mesh.V(i,1);
+        point.z=mesh.V(i,2);
+        point.r=mesh.C(i,0)*255;
+        point.g=mesh.C(i,1)*255;
+        point.b=mesh.C(i,2)*255;
+        msg->points.push_back(point);
+    }
+    msg->height=1;
+    msg->width = mesh.V.rows();
+
+
+
+    pcl_conversions::toPCL(ros::Time::now(), msg->header.stamp);
+    m_cloud_pub.publish (msg);
+}
+
+
+void DataLoaderPNG::publish_map_finished(const Mesh& mesh){
+
+    ros::NodeHandle n("~");
+    m_cloud_finished_pub = n.advertise<pcl::PointCloud<pcl::PointXYZRGB> > ( "semi_dense_map_finished", 10 );
+
+
+    if ( m_cloud_pub.getNumSubscribers() == 0 ) return;
+    const char * MAP_FRAME_ID = "/world";
+    const char * POINTS_NAMESPACE = "GlMapPoints";
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr msg (new pcl::PointCloud<pcl::PointXYZRGB>);
+    msg->header.frame_id = MAP_FRAME_ID;
+    for (size_t i = 0; i < mesh.V.rows(); i++) {
+        pcl::PointXYZRGB point;
+        point.x=mesh.V(i,0);
+        point.y=mesh.V(i,1);
+        point.z=mesh.V(i,2);
+        point.r=mesh.C(i,0)*255;
+        point.g=mesh.C(i,1)*255;
+        point.b=mesh.C(i,2)*255;
+        msg->points.push_back(point);
+    }
+    msg->height=1;
+    msg->width = mesh.V.rows();
+
+
+
+    pcl_conversions::toPCL(ros::Time::now(), msg->header.stamp);
+    m_cloud_finished_pub.publish (msg);
+
 }

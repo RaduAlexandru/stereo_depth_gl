@@ -70,6 +70,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf_conversions
   stereo_ros_msg
   cv_bridge
+  pcl_ros
 )
 
 if (OPENMP_FOUND)
