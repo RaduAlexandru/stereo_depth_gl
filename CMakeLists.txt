@@ -23,40 +23,43 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DAPC_CAPTURE_DEBUG=1")
 
 #global options https://stackoverflow.com/questions/15201064/cmake-conditional-preprocessor-define-on-code
 option(CORE_WITH_VIEWER "Use a libigl viewer, or if we don't have it available we will still publish to RViz" OFF)
-option(CORE_WITH_HALIDE "Compile Halide" ON)
+option(CORE_WITH_HALIDE "Compile Halide" OFF)
 
 
 
 
-
-# libigl options: choose between header only and compiled static library
-# Header-only is preferred for small projects. For larger projects the static build
-# considerably reduces the compilation times
-option(LIBIGL_USE_STATIC_LIBRARY "Use libigl as static library" OFF)
-option(LIBIGL_WITH_ANTTWEAKBAR       "Use AntTweakBar"    OFF)
-option(LIBIGL_WITH_CGAL              "Use CGAL"           OFF)
-option(LIBIGL_WITH_COMISO            "Use CoMiso"         OFF)
-option(LIBIGL_WITH_CORK              "Use Cork"           OFF)
-option(LIBIGL_WITH_EMBREE            "Use Embree"         OFF)
-option(LIBIGL_WITH_LIM               "Use LIM"            OFF)
-option(LIBIGL_WITH_MATLAB            "Use Matlab"         OFF)
-option(LIBIGL_WITH_MOSEK             "Use MOSEK"          OFF)
-option(LIBIGL_WITH_OPENGL            "Use OpenGL"         ON)
-option(LIBIGL_WITH_OPENGL_GLFW       "Use GLFW"           ON)
-option(LIBIGL_WITH_OPENGL_GLFW_IMGUI "Use ImGui"          OFF)
-option(LIBIGL_WITH_PNG               "Use PNG"            OFF)
-option(LIBIGL_WITH_PYTHON            "Use Python"         OFF)
-option(LIBIGL_WITH_TETGEN            "Use Tetgen"         OFF)
-option(LIBIGL_WITH_TRIANGLE          "Use Triangle"       OFF)
-option(LIBIGL_WITH_VIEWER            "Use OpenGL viewer"  ON)
-option(LIBIGL_WITH_XML "Use XML" OFF)
-if(LIBIGL_WITH_CGAL) # Do not remove or move this block, the cgal build system fails without it
-  find_package(CGAL REQUIRED COMPONENTS Core)
-  set(CGAL_DONT_OVERRIDE_CMAKE_FLAGS TRUE CACHE BOOL "CGAL's CMAKE Setup is super annoying ")
-  include(${CGAL_USE_FILE})
+if(CORE_WITH_VIEWER)
+    # libigl options: choose between header only and compiled static library
+    # Header-only is preferred for small projects. For larger projects the static build
+    # considerably reduces the compilation times
+    option(LIBIGL_USE_STATIC_LIBRARY "Use libigl as static library" OFF)
+    option(LIBIGL_WITH_ANTTWEAKBAR       "Use AntTweakBar"    OFF)
+    option(LIBIGL_WITH_CGAL              "Use CGAL"           OFF)
+    option(LIBIGL_WITH_COMISO            "Use CoMiso"         OFF)
+    option(LIBIGL_WITH_CORK              "Use Cork"           OFF)
+    option(LIBIGL_WITH_EMBREE            "Use Embree"         OFF)
+    option(LIBIGL_WITH_LIM               "Use LIM"            OFF)
+    option(LIBIGL_WITH_MATLAB            "Use Matlab"         OFF)
+    option(LIBIGL_WITH_MOSEK             "Use MOSEK"          OFF)
+    option(LIBIGL_WITH_OPENGL            "Use OpenGL"         ON)
+    option(LIBIGL_WITH_OPENGL_GLFW       "Use GLFW"           ON)
+    option(LIBIGL_WITH_OPENGL_GLFW_IMGUI "Use ImGui"          OFF)
+    option(LIBIGL_WITH_PNG               "Use PNG"            OFF)
+    option(LIBIGL_WITH_PYTHON            "Use Python"         OFF)
+    option(LIBIGL_WITH_TETGEN            "Use Tetgen"         OFF)
+    option(LIBIGL_WITH_TRIANGLE          "Use Triangle"       OFF)
+    option(LIBIGL_WITH_VIEWER            "Use OpenGL viewer"  ON)
+    option(LIBIGL_WITH_XML "Use XML" OFF)
+    if(LIBIGL_WITH_CGAL) # Do not remove or move this block, the cgal build system fails without it
+      find_package(CGAL REQUIRED COMPONENTS Core)
+      set(CGAL_DONT_OVERRIDE_CMAKE_FLAGS TRUE CACHE BOOL "CGAL's CMAKE Setup is super annoying ")
+      include(${CGAL_USE_FILE})
+    endif()
+    find_package(LIBIGL REQUIRED)
+else()
+    find_package(GLFW REQUIRED)
 endif()
 
-find_package(LIBIGL REQUIRED)
 find_package(catkin REQUIRED)
 # find_package(OpenMP REQUIRED)
 #find_package(OpenGL REQUIRED)
@@ -67,7 +70,10 @@ find_package(catkin REQUIRED)
 # find_package(Ceres REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system thread filesystem)
 find_package(kqueue REQUIRED)
-find_package(Halide REQUIRED)
+if(CORE_WITH_HALIDE)
+    find_package(Halide REQUIRED)
+endif()
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
@@ -112,13 +118,15 @@ include_directories(${PROJECT_INCLUDE_DIR} ${catkin_INCLUDE_DIRS})
 # include_directories(${EIGEN3_INCLUDE_DIR})
 include_directories(${OpenCV_INCLUDE_DIRS})
 # include_directories("/media/alex/Data/Programs_linux/boost/boost_1_64_0")
-# include_directories(${GLFW_INCLUDE_DIR})
+include_directories(${GLFW_INCLUDE_DIR})
 #include_directories(${OPENGL_INCLUDE_DIR})
 # include_directories(${GLM_INCLUDE_DIRS})
 # include_directories(${nanoflann_INCLUDE_DIRS})
 # include_directories(${KQUEUE_INCLUDE_DIRS})
 # include_directories(${CERES_INCLUDE_DIR})
-include_directories(${HALIDE_INCLUDE_DIRS})
+if(CORE_WITH_HALIDE)
+    include_directories(${HALIDE_INCLUDE_DIRS})
+endif()
 #add_definitions(${GLM_DEFINITIONS})
 #include_directories("/media/alex/Data/Master/SHK/c_ws/src/laser_mesher/deps/libigl/external/nanogui/ext/glew/include/")
 
@@ -143,7 +151,9 @@ catkin_package(
 
 
 
-file(GLOB IMGUI_SRC ${CMAKE_SOURCE_DIR}/deps/imgui/*.c* ${CMAKE_SOURCE_DIR}/deps/imgui/examples/opengl3_example/imgui_impl_glfw_gl3.cpp)
+if(CORE_WITH_VIEWER)
+    file(GLOB IMGUI_SRC ${CMAKE_SOURCE_DIR}/deps/imgui/*.c* ${CMAKE_SOURCE_DIR}/deps/imgui/examples/opengl3_example/imgui_impl_glfw_gl3.cpp)
+endif()
 
 
 # file(GLOB MY_SRC ${CMAKE_SOURCE_DIR}/src/*.c* )
@@ -152,7 +162,6 @@ set(MY_SRC  ${CMAKE_SOURCE_DIR}/src/Core.cxx
             ${CMAKE_SOURCE_DIR}/src/main.cxx
             ${CMAKE_SOURCE_DIR}/src/DataLoaderPNG.cxx
             ${CMAKE_SOURCE_DIR}/src/DataLoaderRos.cxx
-            ${CMAKE_SOURCE_DIR}/src/DepthEstimatorCPU.cxx
             ${CMAKE_SOURCE_DIR}/src/DepthEstimatorGL.cxx
             ${CMAKE_SOURCE_DIR}/src/Mesh.cxx
             ${CMAKE_SOURCE_DIR}/src/Pattern.cxx )
@@ -194,11 +203,18 @@ set_target_properties(TINY_PROCESS_LIB PROPERTIES LINKER_LANGUAGE C)
 
 
 add_executable(stereo_depth_gl ${MY_SRC}  deps/GL/glad.c deps/dir_watcher/dir_watcher.cpp  ${IMGUI_SRC}   )
-target_link_libraries(stereo_depth_gl ${catkin_LIBRARIES}  ${OpenCV_LIBS}  TINY_PROCESS_LIB
-          ${KQUEUE_LIBRARIES}
-          igl::core igl::opengl igl::opengl_glfw
-        ${HALIDE_LIBRARIES}
-)
+
+set(LIBS ${catkin_LIBRARIES}  ${OpenCV_LIBS}  TINY_PROCESS_LIB ${KQUEUE_LIBRARIES})
+if(CORE_WITH_VIEWER)
+    set(LIBS ${LIBS} igl::core igl::opengl igl::opengl_glfw)
+else()
+    set(LIBS ${LIBS} ${GLFW_LIBRARIES})
+endif()
+if(CORE_WITH_HALIDE)
+    set(LIBS ${LIBS} ${HALIDE_LIBRARIES})
+endif()
+
+target_link_libraries(stereo_depth_gl ${catkin_LIBRARIES}  ${LIBS})
 
 add_dependencies(stereo_depth_gl ${catkin_EXPORTED_TARGETS})
 

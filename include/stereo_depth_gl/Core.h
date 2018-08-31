@@ -32,7 +32,9 @@
 // class DepthEstimatorCPU;
 // class DepthEstimatorRenegade;
 class DepthEstimatorGL;
+#ifdef WITH_HALIDE
 class DepthEstimatorHalide;
+#endif
  // class DepthEstimatorGL2;
 class Profiler;
 // class RosBagPlayer;
@@ -68,9 +70,9 @@ public:
     void read_scene(std::string file_path);
     void read_uv_map_thekla(std::string file_path);
     Mesh split_mesh_from_uv(const Mesh& mesh, const Mesh& uv_mesh);
-    Mesh read_mesh_from_file(std::string file_path);
     void append_mesh(const Mesh& mesh, const std::string name);
     #ifdef WITH_VIEWER
+        Mesh read_mesh_from_file(std::string file_path);
         void set_mesh(const Mesh& mesh);
         void set_points(const Mesh& mesh);
         void set_edges(const Mesh& mesh);
@@ -93,7 +95,9 @@ public:
     // std::shared_ptr<DepthEstimatorCPU> m_depth_estimator; //does a cpu implementation
     // std::shared_ptr<DepthEstimatorRenegade> m_depth_estimator_renegade; //just reads the file written by renegade
     std::shared_ptr<DepthEstimatorGL> m_depth_estimator_gl;
+    #ifdef WITH_HALIDE
     std::shared_ptr<DepthEstimatorHalide> m_depth_estimator_halide;
+    #endif
     // std::shared_ptr<DepthEstimatorGL2> m_depth_estimator_gl2;
     // std::shared_ptr<DataLoader> m_loader;
     std::shared_ptr<DataLoaderPNG> m_loader_png;

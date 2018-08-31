@@ -163,7 +163,7 @@ int main(int argc, char *argv[]) {
         // glfwWindowHint(GLFW_SAMPLES, 8);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_VISIBLE, 0);
         /* Create a ofscreen context and its OpenGL context */
         GLFWwindow* offscreen_context = glfwCreateWindow(640, 480, "", NULL, NULL);
         if (!offscreen_context) {

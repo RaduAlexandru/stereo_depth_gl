@@ -12,7 +12,9 @@
 // #include "stereo_depth_gl/DepthEstimatorCPU.h"
 // #include "stereo_depth_gl/DepthEstimatorRenegade.h"
 #include "stereo_depth_gl/DepthEstimatorGL.h"
+#ifdef WITH_HALIDE
 #include "stereo_depth_gl/DepthEstimatorHalide.h"
+#endif
 // #include "stereo_depth_gl/DepthEstimatorGL2.h"
 // #include "stereo_depth_gl/DataLoader.h"
 #include "stereo_depth_gl/DataLoaderPNG.h"
@@ -20,12 +22,14 @@
 // #include "stereo_depth_gl/SurfelSplatter.h"
 
 //libigl
+#ifdef WITH_VIEWER
 #include <igl/opengl/glfw/Viewer.h>
 #include <igl/readOBJ.h>
 #include <igl/readPLY.h>
 #include <igl/writePLY.h>
 #include <igl/writeOBJ.h>
 #include <igl/per_vertex_normals.h>
+#endif
 // #include <igl/embree/ambient_occlusion.h>
 // #include <igl/embree/EmbreeIntersector.h>
 
@@ -52,7 +56,7 @@ Core::Core() :
         // m_depth_estimator(new DepthEstimatorCPU),
         // m_depth_estimator_renegade(new DepthEstimatorRenegade),
         m_depth_estimator_gl(new DepthEstimatorGL),
-        m_depth_estimator_halide(new DepthEstimatorHalide),
+        // m_depth_estimator_halide(new DepthEstimatorHalide),
         // m_depth_estimator_gl2(new DepthEstimatorGL2),
         // m_loader(new DataLoader),
         m_loader_png(new DataLoaderPNG),
@@ -66,12 +70,19 @@ Core::Core() :
 
     init_params();
 
+    #ifdef WITH_HALIDE
+    m_depth_estimator_halide=std::shared_ptr<DepthEstimatorHalide>(new DepthEstimatorHalide);
+    #endif
+
 }
 
 void Core::init_links(){
 
     m_depth_estimator_gl->m_profiler=m_profiler;
+
+    #ifdef WITH_HALIDE
     m_depth_estimator_halide->m_profiler=m_profiler;
+    #endif
 
     m_loader_png->m_profiler=m_profiler;
 
@@ -381,25 +392,27 @@ void Core::init_params() {
     //TODO read all the other parameters from the launch file
 }
 
-Mesh Core::read_mesh_from_file(std::string file_path) {
-
-   Mesh mesh;
-
-   std::string fileExt = file_path.substr(file_path.find_last_of(".") + 1);
-   if (fileExt == "off") {
-       igl::readOFF(file_path, mesh.V, mesh.F);
-   } else if (fileExt == "ply") {
-       igl::readPLY(file_path, mesh.V, mesh.F, mesh.NV, mesh.UV, mesh.C);
-       mesh.C/=255.0;
-   } else if (fileExt == "obj") {
-       igl::readOBJ(file_path, mesh.V, mesh.F);
-   }
-
-   return mesh;
-}
-
 
 #ifdef WITH_VIEWER
+
+    Mesh Core::read_mesh_from_file(std::string file_path) {
+
+       Mesh mesh;
+
+       std::string fileExt = file_path.substr(file_path.find_last_of(".") + 1);
+       if (fileExt == "off") {
+           igl::readOFF(file_path, mesh.V, mesh.F);
+       } else if (fileExt == "ply") {
+           igl::readPLY(file_path, mesh.V, mesh.F, mesh.NV, mesh.UV, mesh.C);
+           mesh.C/=255.0;
+       } else if (fileExt == "obj") {
+           igl::readOBJ(file_path, mesh.V, mesh.F);
+       }
+
+       return mesh;
+    }
+
+
 
     void Core::set_mesh(const Mesh &mesh) {
         if(mesh.is_empty() || mesh.F.rows()==0){
