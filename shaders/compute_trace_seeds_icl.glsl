@@ -145,6 +145,10 @@ void main(void) {
 
     int id = int(gl_GlobalInvocationID.x);
 
+    if(p[id].depth_filter.m_is_outlier==1){
+        return;
+    }
+
     p[id].m_time_alive++;
 
     // // check if point is visible in the current image
