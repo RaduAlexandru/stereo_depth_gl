@@ -348,7 +348,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         }
 
         //trace the created seeds
-        trace(m_nr_seeds_created, m_ref_frame, frame_right);
+        trace(m_nr_seeds_created, m_ref_frame, frame_left);
 
         //create a mesh
 
@@ -883,7 +883,7 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
         // std::cout << "seeds has x y and depth " << u << " " << v << " " << depth << '\n';
 
         if(std::isfinite(seeds[i].depth_filter.m_mu) && seeds[i].depth_filter.m_mu>=0.1
-            && seeds[i].depth_filter.m_is_outlier==0 && seeds[i].m_time_alive>2 ){
+            && seeds[i].depth_filter.m_is_outlier==0 && seeds[i].m_nr_times_visible>2 ){
 
             //backproject the immature point
             Eigen::Vector3f point_screen;
