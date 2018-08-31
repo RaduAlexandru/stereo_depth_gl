@@ -788,8 +788,6 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
     const Eigen::Matrix3f KRKi_cr_eigen = cur_frame.K * tf_cur_host_eigen.linear() * ref_frame.K.inverse();
     const Eigen::Vector3f Kt_cr_eigen = cur_frame.K * tf_cur_host_eigen.translation();
     const double focal_length = fabs(cur_frame.K(0,0));
-    double px_noise = 1.0;
-    double px_error_angle = atan(px_noise/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
     Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr_eigen.topLeftCorner<2,2>() );
 
 
@@ -830,7 +828,7 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
     glUniformMatrix3fv(glGetUniformLocation(m_compute_trace_seeds_prog_id,"K"), 1, GL_FALSE, cur_frame.K.data());
     glUniformMatrix3fv(glGetUniformLocation(m_compute_trace_seeds_prog_id,"KRKi_cr"), 1, GL_FALSE, KRKi_cr_eigen.data());
     glUniform3fv(glGetUniformLocation(m_compute_trace_seeds_prog_id,"Kt_cr"), 1, Kt_cr_eigen.data());
-    glUniform1f(glGetUniformLocation(m_compute_trace_seeds_prog_id,"px_error_angle"), px_error_angle);
+    glUniform1f(glGetUniformLocation(m_compute_trace_seeds_prog_id,"focal_length"), focal_length);
     glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_prog_id,"pattern_rot_offsets"), pattern_rot.get_nr_points(), pattern_rot.get_offset_matrix().data()); //upload all the offses as an array of vec2 offsets
     glUniform1i(glGetUniformLocation(m_compute_trace_seeds_prog_id,"pattern_rot_nr_points"), pattern_rot.get_nr_points());
     TIME_END_GL("upload_matrices");

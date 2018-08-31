@@ -134,7 +134,7 @@ uniform mat4 tf_host_cur;
 uniform mat3 K;
 uniform mat3 KRKi_cr;
 uniform vec3 Kt_cr;
-uniform float px_error_angle;
+uniform float focal_length;
 uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
 uniform int pattern_rot_nr_points;
 
@@ -211,6 +211,13 @@ void main(void) {
         p[id].depth_filter.m_is_outlier=1; //discard the point
         return;
     }
+
+    //calculate a per seed px_error_angle
+    const float e_a = dot(epi_line, p[id].m_gradH * epi_line ) ;
+    const float e_b = dot (vec2(epi_line.y,-epi_line.x) , p[id].m_gradH * vec2(epi_line.y,-epi_line.x) );
+    float errorInPixel = 0.2f + 0.2f * (e_a+e_b) / e_a;
+    float px_error_angle = atan(errorInPixel/(2.0*focal_length))*2.0; // law of chord (sehnensatz)
+
 
 
     vec2 bestKp=vec2(-1.0,-1.0);
