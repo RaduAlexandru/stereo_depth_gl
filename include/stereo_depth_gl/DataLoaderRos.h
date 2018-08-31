@@ -17,7 +17,8 @@
 
 //ros
 #include <ros/ros.h>
-#include <stereo_ros_msg/StereoPair.h>
+// #include <stereo_ros_msg/StereoPair.h>
+#include <stereo_ros_msg/ImgWithPose.h>
 
 //readerwriterqueue
 #include "readerwriterqueue/readerwriterqueue.h"
@@ -46,7 +47,7 @@ public:
     void reset(); //starts reading back from the start of the data log
     void clear_buffers(); //empties the ringbuffers, usefull for when scrolling through time
 
-    void publish_stereo_frame(const Frame& frame_left, const Frame& frame_right);
+    void publish_single_frame(const Frame& frame);
     void publish_map(const Mesh& mesh);
     void publish_map_finished(const Mesh& mesh);
 
@@ -63,11 +64,10 @@ private:
 
     std::vector< moodycamel::ReaderWriterQueue<Frame> > m_frames_buffer_per_cam;
 
-    std::thread m_loader_thread;
     int m_nr_cams;
-    std::string m_topic;
-    int m_nr_callbacks;
-    // int m_idx_img_to_read;
+    std::vector<std::thread> m_loader_threads;
+    std::vector<std::string> m_topic_per_cam;
+    std::vector<int> m_nr_callbacks_per_cam;
 
 
     //params
@@ -78,13 +78,15 @@ private:
 
     void init_params();
     void create_transformation_matrices();
-    void read_data();
-    void callback(const stereo_ros_msg::StereoPair& stereo_pair);
+    void read_data_for_cam(const int cam_id); //starts the callback and subscibion to a ImgWithPose
+    void callback_single_cam(const stereo_ros_msg::ImgWithPose& img_msg);
 
     //for testing that we can publish and receive ros messages correctly
-    ros::Publisher m_stereo_publisher;
+    // ros::Publisher m_stereo_publisher;
+    std::vector<ros::Publisher> m_single_img_publisher_per_cam;
     ros::Publisher m_cloud_pub;
     ros::Publisher m_cloud_finished_pub;
+    std::vector<ros::Subscriber> m_sub_per_cam; //each camera subscribes to its own ImgWithPose topic
 
 
 };

@@ -43,8 +43,7 @@ using namespace configuru;
 
 
 
-DataLoaderRos::DataLoaderRos():
-    m_nr_callbacks(0)
+DataLoaderRos::DataLoaderRos()
     {
 
     init_params();
@@ -59,7 +58,10 @@ DataLoaderRos::DataLoaderRos():
 }
 
 DataLoaderRos::~DataLoaderRos(){
-    m_loader_thread.join();
+    // m_loader_thread.join();
+    for (size_t i = 0; i < m_nr_cams; i++) {
+        m_loader_threads[i].join();
+    }
 }
 
 void DataLoaderRos::init_params(){
@@ -71,7 +73,10 @@ void DataLoaderRos::init_params(){
     Config cfg = configuru::parse_file(std::string(CMAKE_SOURCE_DIR)+"/config/"+config_file, CFG);
     Config loader_config=cfg["loader_ros"];
     m_nr_cams = loader_config["nr_cams"];
-    m_topic = (std::string)loader_config["topic"];
+    m_topic_per_cam.resize(m_nr_cams);
+    for (size_t cam_id = 0; cam_id < m_nr_cams; cam_id++) {
+        m_topic_per_cam[cam_id] = (std::string)loader_config["topic_cam_"+std::to_string(cam_id)];
+    }
 
 
     Config vis_config=cfg["visualization"];
@@ -85,106 +90,101 @@ void DataLoaderRos::init_params(){
 
 void DataLoaderRos::start_reading(){
 
-    VLOG(1) << "start_reading";
+    VLOG(1) << "publshing thingies ";
+    ros::NodeHandle n("~");
+    m_single_img_publisher_per_cam.resize(m_nr_cams);
+    for (size_t i = 0; i < m_nr_cams; i++) {
+        m_single_img_publisher_per_cam[i] = n.advertise< stereo_ros_msg::ImgWithPose >( m_topic_per_cam[i] , 5 );
+    }
+    m_sub_per_cam.resize(m_nr_cams);
 
+
+    VLOG(1) << "start_reading";
+    m_nr_callbacks_per_cam.resize(m_nr_cams,0);
     for (size_t i = 0; i < m_nr_cams; i++) {
         m_frames_buffer_per_cam.push_back( moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
     }
 
-    //starts a thread that spins continously and reads stuff
-    m_loader_thread=std::thread(&DataLoaderRos::read_data, this);
+    // //starts a thread that spins continously and reads stuff
+    m_loader_threads.resize(m_nr_cams);
+    for (size_t i = 0; i < m_nr_cams; i++) {
+        m_loader_threads[i]=std::thread(&DataLoaderRos::read_data_for_cam, this, i);
+    }
 
 
 }
 
-void DataLoaderRos::read_data(){
-    loguru::set_thread_name("ros_thread");
 
-    VLOG(1) << "subscribing";
+void DataLoaderRos::read_data_for_cam(const int cam_id){
+    loguru::set_thread_name( ("ros_thr_"+std::to_string(cam_id)).c_str() );
+
+    VLOG(1) << "subscribing to " << m_topic_per_cam[cam_id];
 
     ros::NodeHandle private_nh("~");
-    ros::Subscriber sub = private_nh.subscribe(m_topic, 100, &DataLoaderRos::callback, this);
+    m_sub_per_cam[cam_id]=private_nh.subscribe(m_topic_per_cam[cam_id], 100, &DataLoaderRos::callback_single_cam, this);
 
     ros::spin();
 }
 
-void DataLoaderRos::callback(const stereo_ros_msg::StereoPair& stereo_pair){
+
+void DataLoaderRos::callback_single_cam(const stereo_ros_msg::ImgWithPose& img_msg){
 
 
-    VLOG(1) << "callback";
+    VLOG(1) << "callback from single cam " << img_msg.cam_id;
 
-    // VLOG(1) << "stereo_pair.img_gray_left.height and width is " << stereo_pair.img_gray_left.height << " " << stereo_pair.img_gray_left.width;
-    // VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width;
 
     //Get images
-    Frame frame_left, frame_right;
+    Frame frame;
     cv_bridge::CvImageConstPtr cv_ptr;
     try{
-        sensor_msgs::ImageConstPtr ptr_left( new sensor_msgs::Image( stereo_pair.img_gray_left ) );
-        cv_ptr = cv_bridge::toCvShare( ptr_left );
-        cv_ptr->image.copyTo(frame_left.gray);
-
-        sensor_msgs::ImageConstPtr ptr_right( new sensor_msgs::Image( stereo_pair.img_gray_right ) );
-        cv_ptr = cv_bridge::toCvShare( ptr_right );
-        cv_ptr->image.copyTo(frame_right.gray);
+        sensor_msgs::ImageConstPtr ptr( new sensor_msgs::Image( img_msg.img_gray ) );
+        cv_ptr = cv_bridge::toCvShare( ptr );
+        cv_ptr->image.copyTo(frame.gray);
 
         //cv::flip(img_cv,img_cv, -1); //TODO this line needs to be commented
     }catch (cv_bridge::Exception& e){
-            ROS_ERROR( "cv_bridge exception: %s", e.what() );
-            return;
+        ROS_ERROR( "cv_bridge exception: %s", e.what() );
+        return;
     }
 
-    // VLOG(1) << "Managed to read the images";
+
 
     //read poses
-    frame_left.tf_cam_world.matrix() = Eigen::Map<Eigen::Matrix4f, Eigen::Unaligned>((float*)stereo_pair.tf_cam_world_left.data(), 4,4);
-    frame_right.tf_cam_world.matrix() = Eigen::Map<Eigen::Matrix4f, Eigen::Unaligned>((float*)stereo_pair.tf_cam_world_right.data(), 4,4);
-    // VLOG(1) << "loaded pose \n" << frame_left.tf_cam_world.matrix() ;
+    frame.tf_cam_world.matrix() = Eigen::Map<Eigen::Matrix4f, Eigen::Unaligned>((float*)img_msg.tf_cam_world.data(), 4,4);
+    VLOG(4) << "loaded pose \n" << frame.tf_cam_world.matrix() ;
 
     //read K
-    frame_left.K = Eigen::Map<Eigen::Matrix3f, Eigen::Unaligned>((float*)stereo_pair.K_left.data(), 3,3);
-    frame_right.K = Eigen::Map<Eigen::Matrix3f, Eigen::Unaligned>((float*)stereo_pair.K_right.data(), 3,3);
-    // VLOG(1) << "loaded K \n" << frame_left.K;
+    frame.K = Eigen::Map<Eigen::Matrix3f, Eigen::Unaligned>((float*)img_msg.K.data(), 3,3);
+    VLOG(4) << "loaded K \n" << frame.K;
 
-    frame_left.is_keyframe=stereo_pair.is_keyframe;
-    frame_right.is_keyframe=stereo_pair.is_keyframe;
+    frame.is_keyframe=img_msg.is_keyframe;
 
-    frame_left.frame_idx=m_nr_callbacks;
-    frame_right.frame_idx=m_nr_callbacks;
+    frame.frame_idx=m_nr_callbacks_per_cam[img_msg.cam_id];
 
-    frame_left.cam_id=0;
-    frame_right.cam_id=1;
+    frame.cam_id=img_msg.cam_id;
 
-    frame_left.min_depth=stereo_pair.min_depth;
-    frame_left.mean_depth=stereo_pair.mean_depth;
-    frame_right.min_depth=stereo_pair.min_depth;
-    frame_right.mean_depth=stereo_pair.mean_depth;
+    frame.min_depth=img_msg.min_depth;
+    frame.mean_depth=img_msg.mean_depth;
+
 
 
     //process it
-    cv::Scharr( frame_left.gray, frame_left.grad_x, CV_32F, 1, 0);
-    cv::Scharr( frame_left.gray, frame_left.grad_y, CV_32F, 0, 1);
-    cv::Scharr( frame_right.gray, frame_right.grad_x, CV_32F, 1, 0);
-    cv::Scharr( frame_right.gray, frame_right.grad_y, CV_32F, 0, 1);
+    cv::Scharr( frame.gray, frame.grad_x, CV_32F, 1, 0);
+    cv::Scharr( frame.gray, frame.grad_y, CV_32F, 0, 1);
 
-    std::vector<cv::Mat> channels_left;
-    channels_left.push_back(frame_left.gray);
-    channels_left.push_back(frame_left.grad_x);
-    channels_left.push_back(frame_left.grad_y);
-    cv::merge(channels_left, frame_left.gray_with_gradients);
 
-    std::vector<cv::Mat> channels_right;
-    channels_right.push_back(frame_right.gray);
-    channels_right.push_back(frame_right.grad_x);
-    channels_right.push_back(frame_right.grad_y);
-    cv::merge(channels_right, frame_right.gray_with_gradients);
+    std::vector<cv::Mat> channels;
+    channels.push_back(frame.gray);
+    channels.push_back(frame.grad_x);
+    channels.push_back(frame.grad_y);
+    cv::merge(channels, frame.gray_with_gradients);
 
-    if(m_frames_buffer_per_cam[0].size_approx()<BUFFER_SIZE-1){ //there is enough space
-        m_frames_buffer_per_cam[0].enqueue(frame_left);
-        m_frames_buffer_per_cam[1].enqueue(frame_right);
+
+    if(m_frames_buffer_per_cam[img_msg.cam_id].size_approx()<BUFFER_SIZE-1){ //there is enough space
+        m_frames_buffer_per_cam[img_msg.cam_id].enqueue(frame);
     }
 
-    m_nr_callbacks++;
+    m_nr_callbacks_per_cam[img_msg.cam_id]++;
 
 
 
@@ -279,45 +279,41 @@ void DataLoaderRos::create_transformation_matrices(){
 
 }
 
-void DataLoaderRos::publish_stereo_frame(const Frame& frame_left, const Frame& frame_right){
-    VLOG(1) << "publishing the stereo frame";
+
+void DataLoaderRos::publish_single_frame(const Frame& frame){
+    VLOG(1) << "publishing the single frame "<< frame.cam_id;
     ros::NodeHandle n("~");
-    m_stereo_publisher = n.advertise< stereo_ros_msg::StereoPair >( m_topic , 1 );
 
-    stereo_ros_msg::StereoPair stereo_pair;
 
-    cv_bridge::CvImage cv_msg_left;
-    cv_msg_left.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
-    cv_msg_left.image    = frame_left.gray; // Your cv::Mat
-    stereo_pair.img_gray_left=*cv_msg_left.toImageMsg();
-    // VLOG(1) << "stereo_pair.img_gray_left.height and width is " << stereo_pair.img_gray_left.height << " " << stereo_pair.img_gray_left.width;
+    stereo_ros_msg::ImgWithPose msg;
 
-    cv_bridge::CvImage cv_msg_right;
-    cv_msg_right.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
-    cv_msg_right.image    = frame_right.gray; // Your cv::Mat
-    stereo_pair.img_gray_right=*cv_msg_right.toImageMsg();
-    // VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width;
+    cv_bridge::CvImage cv_msg;
+    cv_msg.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
+    cv_msg.image    = frame.gray; // Your cv::Mat
+    msg.img_gray=*cv_msg.toImageMsg();
+    VLOG(4) << "msg.img_gray.height and width is " << msg.img_gray.height << " " << msg.img_gray.width;
+
 
     //store the pose
-    // VLOG(1) << "storing pose \n" << frame_left.tf_cam_world.matrix();
-    Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_left.data(), 4,4) = frame_left.tf_cam_world.matrix();
-    Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_right.data(), 4,4) = frame_right.tf_cam_world.matrix();
+    VLOG(4) << "storing pose \n" << frame.tf_cam_world.matrix();
+    Eigen::Matrix4f::Map(msg.tf_cam_world.data(), 4,4) = frame.tf_cam_world.matrix();
 
 
     //store the K
-    // VLOG(1) << "storing K \n" << frame_left.K;
-    Eigen::Matrix3f::Map(stereo_pair.K_left.data(), 3,3) = frame_left.K;
-    Eigen::Matrix3f::Map(stereo_pair.K_right.data(), 3,3) = frame_right.K;
+    VLOG(4) << "storing K \n" << frame.K;
+    Eigen::Matrix3f::Map(msg.K.data(), 3,3) = frame.K;
 
-    stereo_pair.is_keyframe=frame_left.is_keyframe;
+    msg.cam_id=frame.cam_id;
+
+    msg.is_keyframe=frame.is_keyframe;
 
     //TODO should we store both of them?
-    stereo_pair.min_depth=frame_left.min_depth;
-    stereo_pair.mean_depth=frame_left.mean_depth;
+    msg.min_depth=frame.min_depth;
+    msg.mean_depth=frame.mean_depth;
 
 
 
-    m_stereo_publisher.publish (stereo_pair);
+    m_single_img_publisher_per_cam[frame.cam_id].publish (msg);
 }
 
 

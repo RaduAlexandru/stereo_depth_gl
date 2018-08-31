@@ -272,7 +272,9 @@ void Core::update() {
             frame_left.is_keyframe=true;
             frame_right.is_keyframe=true;
         }
-        m_loader_ros->publish_stereo_frame(frame_left, frame_right);
+        // m_loader_ros->publish_stereo_frame(frame_left, frame_right);
+        m_loader_ros->publish_single_frame(frame_left);
+        m_loader_ros->publish_single_frame(frame_right);
 
     }
     #endif
