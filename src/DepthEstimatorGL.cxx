@@ -1292,7 +1292,7 @@ void DepthEstimatorGL::remove_grazing_seeds ( std::vector<Seed>& seeds ){
         if(left_lower.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
         if(right_lower.depth_filter.m_is_outlier==1) nr_neighbours_outliers++;
 
-        if(nr_neighbours_outliers>=6){
+        if(nr_neighbours_outliers>=7){
             point.depth_filter.m_is_outlier=1;
             removed_lonely++;
         }

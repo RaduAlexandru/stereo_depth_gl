@@ -25,6 +25,7 @@
 //dir watcher
 #include "dir_watcher.hpp"
 
+
 #define NUM_CLASSES 66
 
 //forward declarations
@@ -134,7 +135,6 @@ public:
       bool m_player_paused;
       bool m_player_should_do_one_step;
       bool m_accumulate_meshes;
-
 
 
 private:

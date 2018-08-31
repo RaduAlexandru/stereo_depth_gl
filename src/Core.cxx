@@ -113,6 +113,7 @@ void Core::start(){
      #endif
 
 
+
 }
 
 
@@ -264,23 +265,23 @@ void Core::update() {
         Mesh point_cloud=m_depth_estimator_gl->m_mesh;
         m_loader_png->publish_map(point_cloud);
         #ifdef WITH_VIEWER
-        std::string cloud_name="point_cloud";
-        point_cloud.name=cloud_name;
-        point_cloud.m_show_points=true;
-        if(m_scene.does_mesh_with_name_exist(cloud_name)){
-            m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
-        }else{
-            m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
-        }
+            std::string cloud_name="point_cloud";
+            point_cloud.name=cloud_name;
+            point_cloud.m_show_points=true;
+            if(m_scene.does_mesh_with_name_exist(cloud_name)){
+                m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+            }else{
+                m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+            }
         #endif
         if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
             Mesh last_cloud=m_depth_estimator_gl->m_last_finished_mesh;
             m_loader_png->publish_map_finished(last_cloud);
             #ifdef WITH_VIEWER
-            std::string cloud_name="finished_cloud";
-            last_cloud.name=cloud_name;
-            last_cloud.m_show_points=true;
-            m_scene.add_mesh(last_cloud, cloud_name);
+                std::string cloud_name="finished_cloud";
+                last_cloud.name=cloud_name;
+                last_cloud.m_show_points=true;
+                m_scene.add_mesh(last_cloud, cloud_name);
             #endif
         }
 
@@ -312,7 +313,7 @@ void Core::update() {
 
 
 
-
+    glActiveTexture(GL_TEXTURE0);
     #ifdef WITH_VIEWER
     for (size_t i = 0; i < m_scene.get_nr_meshes(); i++) {
         if(m_scene.get_mesh_with_idx(i).m_visualization_should_change){
@@ -405,6 +406,7 @@ Mesh Core::read_mesh_from_file(std::string file_path) {
             VLOG(1) << "set_mesh: returning because mesh " << mesh.name << " is empty";
             return;
         }
+        VLOG(1) << "Setting mesh :  mesh " << mesh.name;
 
 
        m_view->data().set_mesh(mesh.V, mesh.F);
@@ -431,6 +433,7 @@ Mesh Core::read_mesh_from_file(std::string file_path) {
             VLOG(1) << "set_points: returning because mesh " << mesh.name << " is empty";
             return;
         }
+        VLOG(1) << "Setting points :  mesh " << mesh.name;
 
 
         // if there are none, then make some colors based on height
@@ -454,6 +457,7 @@ Mesh Core::read_mesh_from_file(std::string file_path) {
             VLOG(1) << "set_edges: returning because mesh " << mesh.name << " is empty";
             return;
         }
+        VLOG(1) << "Setting edges :  mesh " << mesh.name;
 
         //make some colors
         Eigen::MatrixXd C(mesh.E.rows(), 3);

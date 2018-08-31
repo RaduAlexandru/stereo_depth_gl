@@ -155,7 +155,7 @@ set(MY_SRC  ${CMAKE_SOURCE_DIR}/src/Core.cxx
             ${CMAKE_SOURCE_DIR}/src/DepthEstimatorCPU.cxx
             ${CMAKE_SOURCE_DIR}/src/DepthEstimatorGL.cxx
             ${CMAKE_SOURCE_DIR}/src/Mesh.cxx
-            ${CMAKE_SOURCE_DIR}/src/Pattern.cxx  )
+            ${CMAKE_SOURCE_DIR}/src/Pattern.cxx )
 if(CORE_WITH_VIEWER)
     set(MY_SRC ${MY_SRC} ${CMAKE_SOURCE_DIR}/src/Gui.cxx
                          ${CMAKE_SOURCE_DIR}/src/Scene.cxx)
