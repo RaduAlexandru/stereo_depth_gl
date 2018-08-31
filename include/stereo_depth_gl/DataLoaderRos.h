@@ -65,7 +65,7 @@ private:
     std::vector< moodycamel::ReaderWriterQueue<Frame> > m_frames_buffer_per_cam;
 
     int m_nr_cams;
-    std::vector<std::thread> m_loader_threads;
+    std::thread m_loader_thread;
     std::vector<std::string> m_topic_per_cam;
     std::vector<int> m_nr_callbacks_per_cam;
 
@@ -78,7 +78,8 @@ private:
 
     void init_params();
     void create_transformation_matrices();
-    void read_data_for_cam(const int cam_id); //starts the callback and subscibion to a ImgWithPose
+    // void read_data_for_cam(const int cam_id); //starts the callback and subscibion to a ImgWithPose
+    void read_data();
     void callback_single_cam(const stereo_ros_msg::ImgWithPose& img_msg);
 
     //for testing that we can publish and receive ros messages correctly

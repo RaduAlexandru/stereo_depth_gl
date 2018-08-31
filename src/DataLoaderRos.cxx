@@ -58,10 +58,7 @@ DataLoaderRos::DataLoaderRos()
 }
 
 DataLoaderRos::~DataLoaderRos(){
-    // m_loader_thread.join();
-    for (size_t i = 0; i < m_nr_cams; i++) {
-        m_loader_threads[i].join();
-    }
+    m_loader_thread.join();
 }
 
 void DataLoaderRos::init_params(){
@@ -105,25 +102,25 @@ void DataLoaderRos::start_reading(){
         m_frames_buffer_per_cam.push_back( moodycamel::ReaderWriterQueue<Frame>(BUFFER_SIZE));
     }
 
-    // //starts a thread that spins continously and reads stuff
-    m_loader_threads.resize(m_nr_cams);
-    for (size_t i = 0; i < m_nr_cams; i++) {
-        m_loader_threads[i]=std::thread(&DataLoaderRos::read_data_for_cam, this, i);
-    }
 
+
+    //starts a thread that spins continously and reads stuff
+    m_loader_thread=std::thread(&DataLoaderRos::read_data, this);
 
 }
 
 
-void DataLoaderRos::read_data_for_cam(const int cam_id){
-    loguru::set_thread_name( ("ros_thr_"+std::to_string(cam_id)).c_str() );
+void DataLoaderRos::read_data(){
 
-    VLOG(1) << "subscribing to " << m_topic_per_cam[cam_id];
-
-    ros::NodeHandle private_nh("~");
-    m_sub_per_cam[cam_id]=private_nh.subscribe(m_topic_per_cam[cam_id], 100, &DataLoaderRos::callback_single_cam, this);
-
-    ros::spin();
+    //multithread spinner
+    for (size_t cam_id = 0; cam_id < m_nr_cams; cam_id++) {
+        VLOG(1) << "subscribing to " << m_topic_per_cam[cam_id];
+        ros::NodeHandle private_nh("~");
+        m_sub_per_cam[cam_id]=private_nh.subscribe(m_topic_per_cam[cam_id], 100, &DataLoaderRos::callback_single_cam, this);
+    }
+    //multithreaded spinning, each callback (from different cameras) will run on different threads in paralel
+    ros::MultiThreadedSpinner spinner(std::min(m_nr_cams, 4)); // Use 4 threads
+    spinner.spin();
 }
 
 
