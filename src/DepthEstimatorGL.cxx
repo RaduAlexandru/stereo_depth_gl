@@ -1234,7 +1234,7 @@ void DepthEstimatorGL::remove_grazing_seeds ( std::vector<Seed>& seeds ){
         }
 
 
-        if(max_mu-min_mu>0.01){
+        if(max_mu-min_mu>0.02){
             point.depth_filter.m_is_outlier=1;
 
             // right.depth_filter.m_is_outlier=1;
