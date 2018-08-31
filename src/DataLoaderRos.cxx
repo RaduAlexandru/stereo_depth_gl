@@ -162,6 +162,7 @@ void DataLoaderRos::callback_single_cam(const stereo_ros_msg::ImgWithPose& img_m
 
     frame.min_depth=img_msg.min_depth;
     frame.mean_depth=img_msg.mean_depth;
+    frame.ngf_eta=img_msg.ngf_eta;
 
 
 
@@ -304,9 +305,9 @@ void DataLoaderRos::publish_single_frame(const Frame& frame){
 
     msg.is_keyframe=frame.is_keyframe;
 
-    //TODO should we store both of them?
     msg.min_depth=frame.min_depth;
     msg.mean_depth=frame.mean_depth;
+    msg.ngf_eta=frame.ngf_eta;
 
 
 

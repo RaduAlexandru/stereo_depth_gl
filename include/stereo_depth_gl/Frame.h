@@ -28,4 +28,5 @@ public:
 
     float min_depth=-1;
     float mean_depth=-1;
+    float ngf_eta=-1;
 };

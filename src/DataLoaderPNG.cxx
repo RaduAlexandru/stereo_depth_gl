@@ -386,6 +386,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
 
             frame.min_depth=m_min_starting_depth;
             frame.mean_depth=m_mean_starting_depth;
+            frame.ngf_eta=5.0/255.0;
 
             // std::cout << "pusing frame with tf corld of " << frame.tf_cam_world.matrix() << '\n';
             // std::cout << "pusing frame with K of " << frame.K << '\n';

@@ -126,6 +126,7 @@ uniform float min_starting_depth;
 uniform float mean_starting_depth;
 uniform int seeds_start_idx;
 uniform int idx_keyframe;
+uniform float ngf_eta;
 
 
 Seed create_seed(ivec2 img_coords, vec3 hessian, int seed_idx){
@@ -238,7 +239,7 @@ Seed create_seed(ivec2 img_coords, vec3 hessian, int seed_idx){
 
         //for ngf
         s.m_normalized_grad[p_idx] = grads;
-        s.m_normalized_grad[p_idx] /= sqrt( dot(grads,grads) + params.eta);
+        s.m_normalized_grad[p_idx] /= sqrt( dot(grads,grads) + ngf_eta);
         if( length(s.m_normalized_grad[p_idx])<1e-3){
             s.m_zero_grad[p_idx]=1;
         }else{

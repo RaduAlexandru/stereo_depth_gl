@@ -137,6 +137,7 @@ uniform vec3 Kt_cr;
 uniform float focal_length;
 uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
 uniform int pattern_rot_nr_points;
+uniform float ngf_eta;
 
 
 
@@ -277,7 +278,7 @@ void main(void) {
             // //Uni modal NGF
             // // vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
             // // vec2 grads=hit_color_and_grads.yz;
-            // grads /= sqrt(dot(grads,grads)+params.eta);
+            // grads /= sqrt(dot(grads,grads)+ngf_eta);
             // const float nn = dot(grads,p[id].m_normalized_grad[idx]);
             // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf
             // //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
