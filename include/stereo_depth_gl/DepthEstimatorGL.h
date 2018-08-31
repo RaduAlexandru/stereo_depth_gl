@@ -191,8 +191,6 @@ public:
     std::string m_pattern_file;
     int m_estimated_seeds_per_keyframe; //conservative estimate of nr of seeds created per frame
     int m_nr_buffered_keyframes; //nr of keyframes for which we store the seeds
-    float m_min_starting_depth;
-    float m_mean_starting_depth;
     Params m_params; //parameters for depth estimation that may also be needed inside the gl shader
 
 

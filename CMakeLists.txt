@@ -24,6 +24,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DAPC_CAPTURE_DEBUG=1")
 #global options https://stackoverflow.com/questions/15201064/cmake-conditional-preprocessor-define-on-code
 option(CORE_WITH_VIEWER "Use a libigl viewer, or if we don't have it available we will still publish to RViz" OFF)
 option(CORE_WITH_HALIDE "Compile Halide" OFF)
+option(CORE_WITH_LOADER_PNG "Read images from pngs" ON)
 
 
 
@@ -160,7 +161,6 @@ endif()
 
 set(MY_SRC  ${CMAKE_SOURCE_DIR}/src/Core.cxx
             ${CMAKE_SOURCE_DIR}/src/main.cxx
-            ${CMAKE_SOURCE_DIR}/src/DataLoaderPNG.cxx
             ${CMAKE_SOURCE_DIR}/src/DataLoaderRos.cxx
             ${CMAKE_SOURCE_DIR}/src/DepthEstimatorGL.cxx
             ${CMAKE_SOURCE_DIR}/src/Mesh.cxx
@@ -171,6 +171,9 @@ if(CORE_WITH_VIEWER)
 endif()
 if(CORE_WITH_HALIDE)
     set(MY_SRC ${MY_SRC} ${CMAKE_SOURCE_DIR}/src/DepthEstimatorHalide.cxx )
+endif()
+if(CORE_WITH_LOADER_PNG)
+    set(MY_SRC ${MY_SRC} ${CMAKE_SOURCE_DIR}/src/DataLoaderPNG.cxx )
 endif()
 
 
@@ -188,6 +191,12 @@ if(CORE_WITH_HALIDE)
     add_definitions(-DWITH_HALIDE)
 else()
     message("NOT USING HALIDE")
+endif()
+if(CORE_WITH_LOADER_PNG)
+    message("USING LOADER_PNG")
+    add_definitions(-DWITH_LOADER_PNG)
+else()
+    message("NOT USING LOADER_PNG")
 endif()
 
 
@@ -213,6 +222,7 @@ endif()
 if(CORE_WITH_HALIDE)
     set(LIBS ${LIBS} ${HALIDE_LIBRARIES})
 endif()
+
 
 target_link_libraries(stereo_depth_gl ${catkin_LIBRARIES}  ${LIBS})
 

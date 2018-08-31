@@ -25,4 +25,7 @@ public:
 
     bool is_last=false; //is true when this image is the last in the dataset
     bool is_keyframe=false; //if it is keyframe we would need to create seeds
+
+    float min_depth=-1;
+    float mean_depth=-1;
 };

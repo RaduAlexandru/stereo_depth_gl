@@ -34,7 +34,6 @@ using namespace configuru;
 DepthEstimatorGL::DepthEstimatorGL():
         m_gl_profiling_enabled(true),
         m_debug_enabled(false),
-        m_mean_starting_depth(4.0),
         m_compute_hessian_pointwise_prog_id(-1),
         m_start_frame(0),
         m_started_new_keyframe(false),
@@ -85,9 +84,6 @@ void DepthEstimatorGL::init_params(){
     m_pattern_file= (std::string)depth_config["pattern_file"];
     m_estimated_seeds_per_keyframe=depth_config["estimated_seeds_per_keyframe"];
     m_nr_buffered_keyframes=depth_config["nr_buffered_keyframes"];
-    m_min_starting_depth=depth_config["min_starting_depth"];
-    m_mean_starting_depth=depth_config["mean_starting_depth"];
-
 
 
 }
@@ -419,7 +415,7 @@ void DepthEstimatorGL::create_seeds_cpu(const Frame& frame){
                 Eigen::Vector3f f_eigen = (frame.K.inverse() * Eigen::Vector3f(point.m_uv.x(),point.m_uv.y(),1)).normalized();
                 point.depth_filter.m_f=Eigen::Vector4f(f_eigen(0),f_eigen(1),f_eigen(2), 1.0);
 
-                float mean_starting_depth=m_mean_starting_depth;
+                float mean_starting_depth=frame.mean_depth;
                 float min_starting_depth=0.1;
                 point.depth_filter.m_mu = (1.0/mean_starting_depth);
                 point.depth_filter.m_z_range = (1.0/min_starting_depth);
@@ -616,8 +612,8 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     glUniformMatrix3fv(glGetUniformLocation(m_compute_init_seeds_prog_id,"K"), 1, GL_FALSE, frame.K.data());
     Eigen::Matrix3f K_inv=frame.K.inverse();
     glUniformMatrix3fv(glGetUniformLocation(m_compute_init_seeds_prog_id,"K_inv"), 1, GL_FALSE, K_inv.data());
-    glUniform1f(glGetUniformLocation(m_compute_init_seeds_prog_id,"min_starting_depth"), m_min_starting_depth);
-    glUniform1f(glGetUniformLocation(m_compute_init_seeds_prog_id,"mean_starting_depth"), m_mean_starting_depth);
+    glUniform1f(glGetUniformLocation(m_compute_init_seeds_prog_id,"min_starting_depth"), frame.min_depth);
+    glUniform1f(glGetUniformLocation(m_compute_init_seeds_prog_id,"mean_starting_depth"), frame.mean_depth);
     glUniform1i(glGetUniformLocation(m_compute_init_seeds_prog_id,"idx_keyframe"), frame.frame_idx);
     //TODO maybe change the 0 in the previous m_keyframes_per_cam to something else because we now assume that if we make a keyframe for left cam we also make for right
 
@@ -726,8 +722,8 @@ void DepthEstimatorGL::create_seeds_gpu (const Frame& frame){
     glUniformMatrix3fv(glGetUniformLocation(m_compute_create_seeds_prog_id,"K"), 1, GL_FALSE, frame.K.data());
     Eigen::Matrix3f K_inv=frame.K.inverse();
     glUniformMatrix3fv(glGetUniformLocation(m_compute_create_seeds_prog_id,"K_inv"), 1, GL_FALSE, K_inv.data());
-    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"min_starting_depth"), m_min_starting_depth);
-    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"mean_starting_depth"), m_mean_starting_depth);
+    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"min_starting_depth"), frame.min_depth);
+    glUniform1f(glGetUniformLocation(m_compute_create_seeds_prog_id,"mean_starting_depth"), frame.mean_depth);
     glUniform1i(glGetUniformLocation(m_compute_create_seeds_prog_id,"seeds_start_idx"), 0); //TODO
     glUniform1i(glGetUniformLocation(m_compute_create_seeds_prog_id,"idx_keyframe"), frame.frame_idx);
     //TODO maybe change the 0 in the previous m_keyframes_per_cam to something else because we now assume that if we make a keyframe for left cam we also make for right

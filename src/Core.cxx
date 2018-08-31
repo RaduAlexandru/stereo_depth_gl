@@ -13,11 +13,13 @@
 // #include "stereo_depth_gl/DepthEstimatorRenegade.h"
 #include "stereo_depth_gl/DepthEstimatorGL.h"
 #ifdef WITH_HALIDE
-#include "stereo_depth_gl/DepthEstimatorHalide.h"
+    #include "stereo_depth_gl/DepthEstimatorHalide.h"
 #endif
 // #include "stereo_depth_gl/DepthEstimatorGL2.h"
 // #include "stereo_depth_gl/DataLoader.h"
-#include "stereo_depth_gl/DataLoaderPNG.h"
+#ifdef WITH_LOADER_PNG
+    #include "stereo_depth_gl/DataLoaderPNG.h"
+#endif
 #include "stereo_depth_gl/DataLoaderRos.h"
 // #include "stereo_depth_gl/SurfelSplatter.h"
 
@@ -59,7 +61,6 @@ Core::Core() :
         // m_depth_estimator_halide(new DepthEstimatorHalide),
         // m_depth_estimator_gl2(new DepthEstimatorGL2),
         // m_loader(new DataLoader),
-        m_loader_png(new DataLoaderPNG),
         m_loader_ros(new DataLoaderRos),
         // m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
@@ -74,6 +75,10 @@ Core::Core() :
     m_depth_estimator_halide=std::shared_ptr<DepthEstimatorHalide>(new DepthEstimatorHalide);
     #endif
 
+    #ifdef WITH_LOADER_PNG
+    m_loader_png=std::shared_ptr<DataLoaderPNG>(new DataLoaderPNG);
+    #endif
+
 }
 
 void Core::init_links(){
@@ -81,10 +86,12 @@ void Core::init_links(){
     m_depth_estimator_gl->m_profiler=m_profiler;
 
     #ifdef WITH_HALIDE
-    m_depth_estimator_halide->m_profiler=m_profiler;
+        m_depth_estimator_halide->m_profiler=m_profiler;
     #endif
 
-    m_loader_png->m_profiler=m_profiler;
+    #ifdef WITH_LOADER_PNG
+        m_loader_png->m_profiler=m_profiler;
+    #endif
 
     m_loader_ros->m_profiler=m_profiler;
 
@@ -98,18 +105,22 @@ void Core::start(){
 
     init_links(); //link all the object to what they need
 
-    m_loader_png->start_reading(); //can only do it from here because only now we have linked with the profiler
+    #ifdef WITH_LOADER_PNG
+        m_loader_png->start_reading(); //can only do it from here because only now we have linked with the profiler
+    #endif
 
     m_loader_ros->start_reading();
 
      // //add a mesh for the camera frustum (WORKS FOR THE BAG LOADER AND MULTIPLE CAMERAS)
      #ifdef WITH_VIEWER
+        #ifdef WITH_LOADER_PNG
          for (size_t i = 0; i < m_loader_png->get_nr_cams(); i++) {
              Mesh mesh_cam_frustum;
              mesh_cam_frustum.m_show_edges=true;
              std::string cam_name="cam_" + std::to_string(i);
              m_scene.add_mesh(mesh_cam_frustum, cam_name);
          }
+         #endif
 
          //add also a preloaded mesh if needed
          if(m_preload_mesh){
@@ -246,6 +257,7 @@ void Core::update() {
 
 
     // if ( m_loader_png->has_data_for_all_cams() ) {
+    #ifdef WITH_LOADER_PNG
     if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
         m_player_should_do_one_step=false;
         Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
@@ -260,9 +272,10 @@ void Core::update() {
             frame_left.is_keyframe=true;
             frame_right.is_keyframe=true;
         }
-        m_loader_png->publish_stereo_frame(frame_left, frame_right);
+        m_loader_ros->publish_stereo_frame(frame_left, frame_right);
 
     }
+    #endif
 
     if(  m_loader_ros->has_data_for_all_cams()  ){
 
@@ -274,7 +287,7 @@ void Core::update() {
 
         //update mesh from the debug icl_incremental
         Mesh point_cloud=m_depth_estimator_gl->m_mesh;
-        m_loader_png->publish_map(point_cloud);
+        m_loader_ros->publish_map(point_cloud);
         #ifdef WITH_VIEWER
             std::string cloud_name="point_cloud";
             point_cloud.name=cloud_name;
@@ -287,7 +300,7 @@ void Core::update() {
         #endif
         if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
             Mesh last_cloud=m_depth_estimator_gl->m_last_finished_mesh;
-            m_loader_png->publish_map_finished(last_cloud);
+            m_loader_ros->publish_map_finished(last_cloud);
             #ifdef WITH_VIEWER
                 std::string cloud_name="finished_cloud";
                 last_cloud.name=cloud_name;
@@ -299,6 +312,7 @@ void Core::update() {
 
 
         #ifdef WITH_VIEWER
+        #ifdef WITH_LOADER_PNG
         //update camera frustum mesh
         for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
             std::string cam_name= "cam_"+std::to_string(cam_id);
@@ -313,6 +327,7 @@ void Core::update() {
             m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
             m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
         }
+        #endif
         #endif
 
 
@@ -336,7 +351,7 @@ void Core::update() {
             TIME_START("set_mesh");
             if(mesh.m_is_visible){
                 if(m_do_transform_mesh_to_worlGL){
-                   mesh.apply_transform(m_loader_png->m_tf_worldGL_worldROS.cast<double>());
+                   mesh.apply_transform(m_loader_ros->m_tf_worldGL_worldROS.cast<double>());
                 }
                 if (mesh.m_show_mesh) {
                     set_mesh(mesh);  // the scene is internally broken down into various independent meshes

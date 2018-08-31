@@ -39,7 +39,9 @@ class DepthEstimatorHalide;
 class Profiler;
 // class RosBagPlayer;
 // class DataLoader;
+#ifdef WITH_LOADER_PNG
 class DataLoaderPNG;
+#endif
 class DataLoaderRos;
 // class SurfelSplatter;
 
@@ -96,11 +98,13 @@ public:
     // std::shared_ptr<DepthEstimatorRenegade> m_depth_estimator_renegade; //just reads the file written by renegade
     std::shared_ptr<DepthEstimatorGL> m_depth_estimator_gl;
     #ifdef WITH_HALIDE
-    std::shared_ptr<DepthEstimatorHalide> m_depth_estimator_halide;
+        std::shared_ptr<DepthEstimatorHalide> m_depth_estimator_halide;
     #endif
     // std::shared_ptr<DepthEstimatorGL2> m_depth_estimator_gl2;
     // std::shared_ptr<DataLoader> m_loader;
-    std::shared_ptr<DataLoaderPNG> m_loader_png;
+    #ifdef WITH_LOADER_PNG
+        std::shared_ptr<DataLoaderPNG> m_loader_png;
+    #endif
     std::shared_ptr<DataLoaderRos> m_loader_ros;
     // std::shared_ptr<RosBagPlayer> m_player;
     // std::shared_ptr<SurfelSplatter> m_splatter;

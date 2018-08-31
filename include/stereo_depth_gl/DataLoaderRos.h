@@ -13,8 +13,10 @@
 
 //My stuff
 #include "stereo_depth_gl/Frame.h"
+#include "stereo_depth_gl/Mesh.h"
 
 //ros
+#include <ros/ros.h>
 #include <stereo_ros_msg/StereoPair.h>
 
 //readerwriterqueue
@@ -44,11 +46,17 @@ public:
     void reset(); //starts reading back from the start of the data log
     void clear_buffers(); //empties the ringbuffers, usefull for when scrolling through time
 
+    void publish_stereo_frame(const Frame& frame_left, const Frame& frame_right);
+    void publish_map(const Mesh& mesh);
+    void publish_map_finished(const Mesh& mesh);
+
     //objects
     std::shared_ptr<Profiler> m_profiler;
 
     //transforms
     Eigen::Affine3f m_tf_worldGL_worldROS;
+
+
 
 
 private:
@@ -72,6 +80,12 @@ private:
     void create_transformation_matrices();
     void read_data();
     void callback(const stereo_ros_msg::StereoPair& stereo_pair);
+
+    //for testing that we can publish and receive ros messages correctly
+    ros::Publisher m_stereo_publisher;
+    ros::Publisher m_cloud_pub;
+    ros::Publisher m_cloud_finished_pub;
+
 
 };
 

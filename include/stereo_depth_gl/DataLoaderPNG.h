@@ -96,6 +96,10 @@ public:
     //objects
     std::shared_ptr<Profiler> m_profiler;
 
+    //params
+    float m_min_starting_depth; //when publishing we need this 
+    float m_mean_starting_depth;
+
     //transforms
     Eigen::Affine3f m_tf_worldGL_worldROS;
     std::unordered_map<uint64_t, Eigen::Affine3f> m_worldROS_baselink_map;
@@ -106,13 +110,7 @@ public:
     std::vector<cv::Mat> m_undistort_map_x_per_cam; //vector containing the undistort map in x direction for each cam
     std::vector<cv::Mat> m_undistort_map_y_per_cam; //vector containing the undistort map in x direction for each cam
 
-    //for testing that we can publish and receive ros messages correctly
-    ros::Publisher m_stereo_publisher;
-    ros::Publisher m_cloud_pub;
-    ros::Publisher m_cloud_finished_pub;
-    void publish_stereo_frame(const Frame& frame_left, const Frame& frame_right);
-    void publish_map(const Mesh& mesh);
-    void publish_map_finished(const Mesh& mesh);
+
 
 
 private:

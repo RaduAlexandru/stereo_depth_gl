@@ -22,6 +22,15 @@
 
 //ros
 #include "stereo_depth_gl/RosTools.h"
+#include <stereo_ros_msg/StereoPair.h>
+#include <visualization_msgs/Marker.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <eigen_conversions/eigen_msg.h>
+#include <pcl/PCLPointCloud2.h>
+#include <pcl/conversions.h>
+#include <pcl_ros/transforms.h>
+#include <pcl_ros/point_cloud.h>
+
 // #include <message_filters/subscriber.h>
 
 // //configuru
@@ -146,6 +155,11 @@ void DataLoaderRos::callback(const stereo_ros_msg::StereoPair& stereo_pair){
     frame_left.cam_id=0;
     frame_right.cam_id=1;
 
+    frame_left.min_depth=stereo_pair.min_depth;
+    frame_left.mean_depth=stereo_pair.mean_depth;
+    frame_right.min_depth=stereo_pair.min_depth;
+    frame_right.mean_depth=stereo_pair.mean_depth;
+
 
     //process it
     cv::Scharr( frame_left.gray, frame_left.grad_x, CV_32F, 1, 0);
@@ -173,33 +187,7 @@ void DataLoaderRos::callback(const stereo_ros_msg::StereoPair& stereo_pair){
     m_nr_callbacks++;
 
 
-    // int nr_frames_read_for_cam=0;
 
-
-    // if(m_frames_buffer_per_cam[cam_id].size_approx()<BUFFER_SIZE-1){ //there is enough space
-    //     //read the frame and everything else and push it to the queue
-    //
-    //
-    //
-    //     m_frames_buffer_per_cam[cam_id].enqueue(frame);
-    //     nr_frames_read_for_cam++;
-    //
-    // }else{
-    //
-    // }
-
-
-    // // std::cout << "size approx is " << m_queue.size_approx() << '\n';
-    // // std::cout << "m_idx_img_to_read is " << m_idx_img_to_read << '\n';
-    // if(m_frames_buffer_per_cam[cam_id].size_approx()<BUFFER_SIZE-1){ //there is enough space
-    //     //read the frame and everything else and push it to the queue
-    //
-    //
-    //
-    //     m_frames_buffer_per_cam[cam_id].enqueue(frame);
-    //     nr_frames_read_for_cam++;
-    //
-    // }
 
 }
 
@@ -288,5 +276,110 @@ void DataLoaderRos::create_transformation_matrices(){
 
 
 
+
+}
+
+void DataLoaderRos::publish_stereo_frame(const Frame& frame_left, const Frame& frame_right){
+    VLOG(1) << "publishing the stereo frame";
+    ros::NodeHandle n("~");
+    m_stereo_publisher = n.advertise< stereo_ros_msg::StereoPair >( m_topic , 1 );
+
+    stereo_ros_msg::StereoPair stereo_pair;
+
+    cv_bridge::CvImage cv_msg_left;
+    cv_msg_left.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
+    cv_msg_left.image    = frame_left.gray; // Your cv::Mat
+    stereo_pair.img_gray_left=*cv_msg_left.toImageMsg();
+    // VLOG(1) << "stereo_pair.img_gray_left.height and width is " << stereo_pair.img_gray_left.height << " " << stereo_pair.img_gray_left.width;
+
+    cv_bridge::CvImage cv_msg_right;
+    cv_msg_right.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
+    cv_msg_right.image    = frame_right.gray; // Your cv::Mat
+    stereo_pair.img_gray_right=*cv_msg_right.toImageMsg();
+    // VLOG(1) << "stereo_pair.img_gray_right.height and width is " << stereo_pair.img_gray_right.height << " " << stereo_pair.img_gray_right.width;
+
+    //store the pose
+    // VLOG(1) << "storing pose \n" << frame_left.tf_cam_world.matrix();
+    Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_left.data(), 4,4) = frame_left.tf_cam_world.matrix();
+    Eigen::Matrix4f::Map(stereo_pair.tf_cam_world_right.data(), 4,4) = frame_right.tf_cam_world.matrix();
+
+
+    //store the K
+    // VLOG(1) << "storing K \n" << frame_left.K;
+    Eigen::Matrix3f::Map(stereo_pair.K_left.data(), 3,3) = frame_left.K;
+    Eigen::Matrix3f::Map(stereo_pair.K_right.data(), 3,3) = frame_right.K;
+
+    stereo_pair.is_keyframe=frame_left.is_keyframe;
+
+    //TODO should we store both of them?
+    stereo_pair.min_depth=frame_left.min_depth;
+    stereo_pair.mean_depth=frame_left.mean_depth;
+
+
+
+    m_stereo_publisher.publish (stereo_pair);
+}
+
+
+
+void DataLoaderRos::publish_map(const Mesh& mesh){
+
+    ros::NodeHandle n("~");
+    m_cloud_pub = n.advertise<pcl::PointCloud<pcl::PointXYZRGB> > ( "semi_dense_map", 10 );
+
+
+    if ( m_cloud_pub.getNumSubscribers() == 0 ) return;
+    const char * MAP_FRAME_ID = "/world";
+    const char * POINTS_NAMESPACE = "GlMapPoints";
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr msg (new pcl::PointCloud<pcl::PointXYZRGB>);
+    msg->header.frame_id = MAP_FRAME_ID;
+    for (size_t i = 0; i < mesh.V.rows(); i++) {
+        pcl::PointXYZRGB point;
+        point.x=mesh.V(i,0);
+        point.y=mesh.V(i,1);
+        point.z=mesh.V(i,2);
+        point.r=mesh.C(i,0)*255;
+        point.g=mesh.C(i,1)*255;
+        point.b=mesh.C(i,2)*255;
+        msg->points.push_back(point);
+    }
+    msg->height=1;
+    msg->width = mesh.V.rows();
+
+
+
+    pcl_conversions::toPCL(ros::Time::now(), msg->header.stamp);
+    m_cloud_pub.publish (msg);
+}
+
+
+void DataLoaderRos::publish_map_finished(const Mesh& mesh){
+
+    ros::NodeHandle n("~");
+    m_cloud_finished_pub = n.advertise<pcl::PointCloud<pcl::PointXYZRGB> > ( "semi_dense_map_finished", 10 );
+
+
+    if ( m_cloud_pub.getNumSubscribers() == 0 ) return;
+    const char * MAP_FRAME_ID = "/world";
+    const char * POINTS_NAMESPACE = "GlMapPoints";
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr msg (new pcl::PointCloud<pcl::PointXYZRGB>);
+    msg->header.frame_id = MAP_FRAME_ID;
+    for (size_t i = 0; i < mesh.V.rows(); i++) {
+        pcl::PointXYZRGB point;
+        point.x=mesh.V(i,0);
+        point.y=mesh.V(i,1);
+        point.z=mesh.V(i,2);
+        point.r=mesh.C(i,0)*255;
+        point.g=mesh.C(i,1)*255;
+        point.b=mesh.C(i,2)*255;
+        msg->points.push_back(point);
+    }
+    msg->height=1;
+    msg->width = mesh.V.rows();
+
+
+
+    pcl_conversions::toPCL(ros::Time::now(), msg->header.stamp);
+    m_cloud_finished_pub.publish (msg);
 
 }
