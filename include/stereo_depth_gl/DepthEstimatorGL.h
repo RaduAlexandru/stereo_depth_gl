@@ -13,6 +13,7 @@
 #include "stereo_depth_gl/Pattern.h"
 #include "stereo_depth_gl/Frame.h"
 #include "Texture2D.h"
+#include "Buf.h"
 
 
 
@@ -198,7 +199,7 @@ public:
     int m_start_frame;
     std::vector<Seed> m_seeds;
     int m_nr_seeds_created;
-    GLuint m_seeds_gl_buf; //stores all the immature points
+    gl::Buf m_seeds_gl_buf; //stores all the immature points
     bool m_seeds_gpu_dirty; //the data changed on te gpu buffer, we need to do a download
     bool m_seeds_cpu_dirty; //the data changed on te cpu vector, we need to do a upload
     gl::Texture2D m_cur_frame;

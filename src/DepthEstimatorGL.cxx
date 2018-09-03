@@ -142,15 +142,15 @@ void DepthEstimatorGL::init_opengl(){
 	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), &(zero), GL_STATIC_COPY);  //sets it to 0
 
     //for debuggling using icl nuim
-    glGenBuffers(1, &m_seeds_gl_buf);
     glGenBuffers(1, &m_ubo_params );
     m_cur_frame.set_wrap_mode(GL_CLAMP_TO_BORDER);
     m_cur_frame.set_filter_mode(GL_LINEAR);
     m_ref_frame_tex.set_wrap_mode(GL_CLAMP_TO_BORDER);
     m_ref_frame_tex.set_filter_mode(GL_LINEAR);
     //preemptivelly prealocate a big bufffer for the seeds
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, m_estimated_seeds_per_keyframe * sizeof(Seed), NULL, GL_DYNAMIC_COPY);
+    m_seeds_gl_buf.upload_data(GL_SHADER_STORAGE_BUFFER, m_estimated_seeds_per_keyframe * sizeof(Seed), NULL, GL_DYNAMIC_COPY);
+    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
+    // glBufferData(GL_SHADER_STORAGE_BUFFER, m_estimated_seeds_per_keyframe * sizeof(Seed), NULL, GL_DYNAMIC_COPY);
 
 
     compile_shaders();
@@ -584,8 +584,9 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
 
     //upload the seeds we have because we need the shader to see the uv coordinates
     TIME_START_GL("upload_immature_points");
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, m_seeds.size() * sizeof(Seed), m_seeds.data());   //have to do it subdata because we want to keep the big size of the buffer so that create_seeds_gpu can write to it
+    m_seeds_gl_buf.upload_sub_data(0, m_seeds.size() * sizeof(Seed), m_seeds.data());
+    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
+    // glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, m_seeds.size() * sizeof(Seed), m_seeds.data());   //have to do it subdata because we want to keep the big size of the buffer so that create_seeds_gpu can write to it
     TIME_END_GL("upload_immature_points");
 
 
@@ -610,7 +611,8 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
     TIME_END_GL("upload_params");
 
     //uniforms needed for creating the seeds
-    GL_C( glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_gl_buf) ); //it is already prealocated to a big amount
+    m_seeds_gl_buf.bind_for_modify(0);
+    // GL_C( glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_gl_buf) ); //it is already prealocated to a big amount
     glUniform2fv(glGetUniformLocation(m_compute_init_seeds_prog_id,"pattern_rot_offsets"), m_pattern.get_nr_points(), m_pattern.get_offset_matrix().data()); //upload all the offses as an array of vec2 offsets
     glUniform1i(glGetUniformLocation(m_compute_init_seeds_prog_id,"pattern_rot_nr_points"), m_pattern.get_nr_points());
     glUniformMatrix3fv(glGetUniformLocation(m_compute_init_seeds_prog_id,"K"), 1, GL_FALSE, frame.K.data());
@@ -702,7 +704,8 @@ void DepthEstimatorGL::create_seeds_gpu (const Frame& frame){
     TIME_START_GL("create_seeds");
     GL_C( glUseProgram(m_compute_create_seeds_prog_id) );
     //bind seeds buffer and images
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_gl_buf);
+    // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_gl_buf);
+    m_seeds_gl_buf.bind_for_modify(0);
     bind_for_sampling(m_ref_frame_tex, 1, glGetUniformLocation(m_compute_create_seeds_prog_id,"gray_with_gradients_img_sampler") );
 
 
@@ -855,7 +858,7 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
 
     //Start tracing
     TIME_START_GL("depth_update_kernel");
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_seeds_gl_buf);
+    m_seeds_gl_buf.bind_for_modify(0);
     bind_for_sampling(m_cur_frame, 1, glGetUniformLocation(m_compute_trace_seeds_prog_id,"gray_img_sampler") );
     glDispatchCompute(round_up_to_nearest_multiple(nr_seeds_created,256)/256, 1, 1); //TODO adapt the local size to better suit the gpu
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
@@ -1318,41 +1321,45 @@ void DepthEstimatorGL::sync_seeds_buf(){
 
     //the data on the cpu has changed we should upload it
     if(m_seeds_cpu_dirty){
-        seeds_upload(m_seeds, m_seeds_gl_buf);
+        m_seeds_gl_buf.upload_sub_data(0, m_seeds.size()*sizeof(Seed), m_seeds.data());
         m_seeds_cpu_dirty=false;
     }
 
     if(m_seeds_gpu_dirty){
-        m_seeds=seeds_download(m_seeds_gl_buf, m_nr_seeds_created);
+        m_seeds.resize(m_nr_seeds_created);
+        m_seeds_gl_buf.download(m_seeds.data(), m_nr_seeds_created*sizeof(Seed));
         m_seeds_gpu_dirty=false;
     }
 
 }
-std::vector<Seed> DepthEstimatorGL::seeds_download(const GLuint& seeds_gl_buf, const int& nr_seeds_created){
-    //download from the buffer to the cpu and store in a vec
-    std::vector<Seed> seeds(nr_seeds_created);
-
-    TIME_START_GL("download_seeds");
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, seeds_gl_buf);
-    Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-    for (size_t i = 0; i < nr_seeds_created; i++) {
-        seeds[i]=ptr[i];
-    }
-    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-    TIME_END_GL("download_seeds");
-
-    return seeds;
-
-}
-void DepthEstimatorGL::seeds_upload(const std::vector<Seed>& seeds, const GLuint& seeds_gl_buf){
-    //upload the seeds onto m_seeds_gl_buf
-
-    TIME_START_GL("upload_seeds");
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, seeds_gl_buf);
-    //have to do it subdata because we want to keep the big size of the buffer so that create_seeds_gpu can write to it
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, seeds.size() * sizeof(Seed), seeds.data());
-    // glBufferData(GL_SHADER_STORAGE_BUFFER, seeds.size() * sizeof(Seed), seeds.data(), GL_DYNAMIC_COPY);
-    TIME_END_GL("upload_seeds");
-
-
-}
+// std::vector<Seed> DepthEstimatorGL::seeds_download(const GLuint& seeds_gl_buf, const int& nr_seeds_created){
+//     //download from the buffer to the cpu and store in a vec
+//     std::vector<Seed> seeds(nr_seeds_created);
+//
+//     TIME_START_GL("download_seeds");
+//     // glBindBuffer(GL_SHADER_STORAGE_BUFFER, seeds_gl_buf);
+//     // Seed* ptr = (Seed*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+//     // for (size_t i = 0; i < nr_seeds_created; i++) {
+//     //     seeds[i]=ptr[i];
+//     // }
+//     // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+//
+//
+//
+//     TIME_END_GL("download_seeds");
+//
+//     return seeds;
+//
+// }
+// void DepthEstimatorGL::seeds_upload(const std::vector<Seed>& seeds, const GLuint& seeds_gl_buf){
+//     //upload the seeds onto m_seeds_gl_buf
+//
+//     TIME_START_GL("upload_seeds");
+//     glBindBuffer(GL_SHADER_STORAGE_BUFFER, seeds_gl_buf);
+//     //have to do it subdata because we want to keep the big size of the buffer so that create_seeds_gpu can write to it
+//     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, seeds.size() * sizeof(Seed), seeds.data());
+//     // glBufferData(GL_SHADER_STORAGE_BUFFER, seeds.size() * sizeof(Seed), seeds.data(), GL_DYNAMIC_COPY);
+//     TIME_END_GL("upload_seeds");
+//
+//
+// }
