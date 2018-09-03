@@ -197,16 +197,17 @@ public:
 
     //for debugging we run only icl nuim
     int m_start_frame;
-    std::vector<Seed> m_seeds;
-    int m_nr_seeds_created;
-    gl::Buf m_seeds_gl_buf; //stores all the immature points
+    std::vector<std::vector<Seed>> m_seeds_per_keyframe;
+    std::vector<int> m_nr_seeds_created_per_keyframe;
+    std::vector<gl::Buf> m_seeds_gl_buf_per_keyframe; //stores all the immature points
     // bool m_seeds_gpu_dirty; //the data changed on te gpu buffer, we need to do a download
     // bool m_seeds_cpu_dirty; //the data changed on te cpu vector, we need to do a upload
     gl::Texture2D m_cur_frame;
     gl::Texture2D m_ref_frame_tex;
     Mesh m_mesh;
-    Frame m_ref_frame; //frame containing the seed points
-    Frame m_last_ref_frame; //last frame which contained the seed points
+    std::vector<Frame> m_ref_frames; //frames containing the seed points
+    int m_idx_next_keyframe_to_insert;
+    // Frame m_last_ref_frame; //last frame which contained the seed points
 
 
     // void compute_depth_and_update_mesh(const Frame& frame_left);
@@ -222,18 +223,20 @@ private:
     //cleaned up version
     void create_seeds_cpu(const Frame& frame);
     void create_seeds_gpu (const Frame& frame);
-    void create_seeds_hybrid (const Frame& frame); //used gpu for hessian calculation and cpu for thresholding on trace
-    void trace(const int nr_seeds_created, const Frame& ref_frame, const Frame& cur_frame);
+    void create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& frame); //used gpu for hessian calculation and cpu for thresholding on trace
+    void trace(gl::Buf& seeds_gl_buf, const int nr_seeds_created, const Frame& ref_frame, const Frame& cur_frame);
     Mesh create_mesh(const std::vector<Seed>& seeds, Frame& ref_frame);
-    void assign_neighbours_for_points( std::vector<Seed>& seeds, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
-    void denoise_cpu( std::vector<Seed>& seeds, const int iters,  const int frame_width, const int frame_height);
-    void remove_grazing_seeds ( std::vector<Seed>& seeds );
+    Mesh create_mesh(const std::vector<std::vector<Seed>>& seeds, std::vector<Frame>& ref_frames);
+    void assign_neighbours_for_points(gl::Buf& seeds_gl_buf, std::vector<Seed>& seeds, const int frame_width, const int frame_height); //assign neighbours based on where the immature points are in the reference frame.
+    void denoise_cpu(gl::Buf& seeds_gl_buf, std::vector<Seed>& seeds, const int iters,  const int frame_width, const int frame_height);
+    void remove_grazing_seeds (gl::Buf& seeds_gl_buf, std::vector<Seed>& seeds );
 
     void print_seed(const Seed& s);
     // float texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type);
 
 
-    void sync_seeds_buf(); //if the gpu has more recent data, do a download, if the cpu has more recent data, do an upload
+    void sync_all_seeds_bufs();
+    void sync_seeds_buf(gl::Buf& seeds_gl_buf, std::vector<Seed>& seeds, const int nr_seeds_created); //if the gpu has more recent data, do a download, if the cpu has more recent data, do an upload
     std::vector<Seed> seeds_download(const GLuint& seeds_gl_buf, const int& nr_seeds_created); //downloa from the buffer to the cpu and store in a vec
     void seeds_upload(const std::vector<Seed>& seeds, const GLuint& seeds_gl_buf); //upload the seeds onto m_seeds_gl_buf
 

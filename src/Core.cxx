@@ -268,7 +268,7 @@ void Core::update() {
 
 
         //don't do anything with this but rather just republish it
-        if(frame_left.frame_idx%50==0){
+        if(frame_left.frame_idx%10==0){
             frame_left.is_keyframe=true;
             frame_right.is_keyframe=true;
         }
