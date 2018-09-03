@@ -200,8 +200,8 @@ public:
     std::vector<Seed> m_seeds;
     int m_nr_seeds_created;
     gl::Buf m_seeds_gl_buf; //stores all the immature points
-    bool m_seeds_gpu_dirty; //the data changed on te gpu buffer, we need to do a download
-    bool m_seeds_cpu_dirty; //the data changed on te cpu vector, we need to do a upload
+    // bool m_seeds_gpu_dirty; //the data changed on te gpu buffer, we need to do a download
+    // bool m_seeds_cpu_dirty; //the data changed on te cpu vector, we need to do a upload
     gl::Texture2D m_cur_frame;
     gl::Texture2D m_ref_frame_tex;
     Mesh m_mesh;

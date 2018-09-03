@@ -137,11 +137,17 @@ namespace gl{
             return m_buf_storage_initialized;
         }
 
-        void set_cpu_dirty(){
-            m_is_cpu_dirty=true;
+        void set_cpu_dirty(const bool dirty){
+            m_is_cpu_dirty=dirty;
         }
-        void set_gpu_dirty(){
-            m_is_gpu_dirty=true;
+        void set_gpu_dirty(const bool dirty){
+            m_is_gpu_dirty=dirty;
+        }
+        bool is_gpu_dirty(){
+            return m_is_gpu_dirty;
+        }
+        bool is_cpu_dirty(){
+            return m_is_cpu_dirty;
         }
 
         //download from gpu to cpu

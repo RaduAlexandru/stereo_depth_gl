@@ -37,8 +37,6 @@ DepthEstimatorGL::DepthEstimatorGL():
         m_compute_hessian_pointwise_prog_id(-1),
         m_start_frame(0),
         m_started_new_keyframe(false),
-        m_seeds_gpu_dirty(false),
-        m_seeds_cpu_dirty(false),
         m_nr_frames_traced(0)
         {
 
@@ -495,7 +493,7 @@ void DepthEstimatorGL::create_seeds_cpu(const Frame& frame){
 
     m_nr_seeds_created=m_seeds.size();
 
-    m_seeds_cpu_dirty=true;
+    m_seeds_gl_buf.set_cpu_dirty(true);
     sync_seeds_buf();
 
 
@@ -636,7 +634,7 @@ void DepthEstimatorGL::create_seeds_hybrid (const Frame& frame){
 
 
 
-    m_seeds_gpu_dirty=true; //we intialized the seeds on the gpu side so we would need to download
+    m_seeds_gl_buf.set_gpu_dirty(true);  //we intialized the seeds on the gpu side so we would need to download
 
 
 
@@ -749,7 +747,7 @@ void DepthEstimatorGL::create_seeds_gpu (const Frame& frame){
     glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
     std::cout << "nr_seeds_created " << m_nr_seeds_created << '\n';
 
-    m_seeds_gpu_dirty=true; //we intialized the seeds on the gpu side so we would need to download
+    m_seeds_gl_buf.set_gpu_dirty(true); //we intialized the seeds on the gpu side so we would need to download
 
 
     // //debug read the seeds back to cpu
@@ -864,7 +862,8 @@ void DepthEstimatorGL::trace(const int nr_seeds_created, const Frame& ref_frame,
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     TIME_END_GL("depth_update_kernel");
 
-    m_seeds_gpu_dirty=true; //the data changed on the gpu side, we should download it
+    m_seeds_gl_buf.set_gpu_dirty(true); //the data changed on the gpu side, we should download it
+
 
     m_nr_frames_traced++;
 
@@ -990,7 +989,7 @@ void DepthEstimatorGL::assign_neighbours_for_points(std::vector<Seed>& seeds, co
 
     }
 
-    m_seeds_cpu_dirty=true;
+    m_seeds_gl_buf.set_cpu_dirty(true);
 }
 
 void DepthEstimatorGL::denoise_cpu( std::vector<Seed>& seeds, const int iters, const int frame_width, const int frame_height){
@@ -1105,7 +1104,7 @@ void DepthEstimatorGL::denoise_cpu( std::vector<Seed>& seeds, const int iters, c
         point.depth_filter.m_mu=point.depth_filter.m_mu_denoised;
     }
 
-    m_seeds_cpu_dirty=true;
+    m_seeds_gl_buf.set_cpu_dirty(true);
 }
 
 
@@ -1308,27 +1307,27 @@ void DepthEstimatorGL::remove_grazing_seeds ( std::vector<Seed>& seeds ){
     std::cout << "--------------------------------nr_points_removed " << nr_points_removed << '\n';
     std::cout << "--------------------------------nr_lonely " << removed_lonely << '\n';
 
-    m_seeds_cpu_dirty=true;
+    m_seeds_gl_buf.set_cpu_dirty(true);
 
 }
 
 
 void DepthEstimatorGL::sync_seeds_buf(){
 
-    if(m_seeds_cpu_dirty && m_seeds_gpu_dirty){
+    if(m_seeds_gl_buf.is_cpu_dirty() && m_seeds_gl_buf.is_gpu_dirty()){
         LOG(FATAL) << "Both buffer are dirty. We don't know whether we should do an upload or a download";
     }
 
     //the data on the cpu has changed we should upload it
-    if(m_seeds_cpu_dirty){
+    if(m_seeds_gl_buf.is_cpu_dirty()){
         m_seeds_gl_buf.upload_sub_data(0, m_seeds.size()*sizeof(Seed), m_seeds.data());
-        m_seeds_cpu_dirty=false;
+        m_seeds_gl_buf.set_cpu_dirty(false);
     }
 
-    if(m_seeds_gpu_dirty){
+    if(m_seeds_gl_buf.is_gpu_dirty()){
         m_seeds.resize(m_nr_seeds_created);
         m_seeds_gl_buf.download(m_seeds.data(), m_nr_seeds_created*sizeof(Seed));
-        m_seeds_gpu_dirty=false;
+        m_seeds_gl_buf.set_gpu_dirty(false);
     }
 
 }
