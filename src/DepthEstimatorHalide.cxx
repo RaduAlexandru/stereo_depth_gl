@@ -117,9 +117,9 @@ Func DepthEstimatorHalide::generate_disparity_func(const cv::Mat& gray_left, con
     // disparity.compute_root();
 
     // auto schedule
-    const int kParallelism = 8;
-    const int kLastLevelCacheSize = 3145730;
-    const int kBalance = 40; //how much more expensive is the memory vs arithmetic costs. Higher values means less compute_root
+    const int kParallelism = 32;
+    const int kLastLevelCacheSize = 314573;
+    const int kBalance = 1; //how much more expensive is the memory vs arithmetic costs. Higher values means less compute_root
     MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
     Halide::Pipeline pipeline(disparity);
     disparity.estimate(x, 0, gray_left.cols)
@@ -235,9 +235,9 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
 
     m_disparity.realize(buf_out);
     TIME_START("disparity");
-    for (size_t i = 0; i < 10; i++) {
+    // for (size_t i = 0; i < 10; i++) {
         m_disparity.realize(buf_out);
-    }
+    // }
     TIME_END("disparity");
 
     m_mesh=disparity_to_mesh(img_output);

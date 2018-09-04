@@ -22,9 +22,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DAPC_CAPTURE_DEBUG=1")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -O2") #optimizations
 
 #global options https://stackoverflow.com/questions/15201064/cmake-conditional-preprocessor-define-on-code
-option(CORE_WITH_VIEWER "Use a libigl viewer, or if we don't have it available we will still publish to RViz" OFF)
-option(CORE_WITH_HALIDE "Compile Halide" OFF)
-option(CORE_WITH_LOADER_PNG "Read images from pngs" OFF)
+option(CORE_WITH_VIEWER "Use a libigl viewer, or if we don't have it available we will still publish to RViz" ON)
+option(CORE_WITH_HALIDE "Compile Halide" ON)
+option(CORE_WITH_LOADER_PNG "Read images from pngs" ON)
 
 
 
