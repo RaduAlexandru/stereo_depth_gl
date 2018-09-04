@@ -308,6 +308,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
     LOG(INFO) << "Received frame";
     TIME_START_GL("ALL");
+    TIME_START_GL("ALL_with_mesh");
     // if(frame_left.is_keyframe){
     if(frame_left.is_keyframe){
         VLOG(1) << "Frame is keyframe, we will create seeds";
@@ -324,7 +325,8 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
             Frame& ref_frame=m_ref_frames[m_idx_next_keyframe_to_insert];
             assign_neighbours_for_points(seeds_buf, seeds_cpu, ref_frame.gray.cols, ref_frame.gray.rows);
             remove_grazing_seeds(seeds_buf, seeds_cpu);
-            sync_seeds_buf(seeds_buf, seeds_cpu, nr_seeds_created);
+            seeds_buf.set_cpu_dirty(false); //I dont' care if they are dirty on the cpu because we will overwrite them with new seeds soon
+            // sync_seeds_buf(seeds_buf, seeds_cpu, nr_seeds_created);
 
             m_last_finished_mesh = create_mesh( seeds_cpu, ref_frame );
         }
@@ -362,8 +364,18 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         // // trace(m_nr_seeds_created, m_ref_frame, frame_left);
 
         //trace
+        const Frame& cur_frame=frame_left;
+        //upload the current frame only once so and trace for all buffere keyframes
+        TIME_START_GL("upload_gray_img");
+        int size_bytes=cur_frame.gray_with_gradients.step[0] * cur_frame.gray_with_gradients.rows;
+        if(!m_cur_frame.get_tex_storage_initialized()){
+            m_cur_frame.allocate_tex_storage_inmutable(GL_RGB32F,cur_frame.gray.cols, cur_frame.gray.rows);
+        }
+        m_cur_frame.upload_without_pbo(0,0,0, cur_frame.gray.cols, cur_frame.gray.rows, GL_RGB, GL_FLOAT, cur_frame.gray_with_gradients.ptr());
+        TIME_END_GL("upload_gray_img");
+
         for (size_t i = 0; i < m_nr_buffered_keyframes; i++) {
-            trace(m_seeds_gl_buf_per_keyframe[i], m_nr_seeds_created_per_keyframe[i], m_ref_frames[i], frame_right);
+            trace(m_seeds_gl_buf_per_keyframe[i], m_nr_seeds_created_per_keyframe[i], m_ref_frames[i], cur_frame);
         }
 
 
@@ -380,13 +392,16 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         m_started_new_keyframe=false;
     }
 
+    TIME_END_GL("ALL");
     //we need to do a sync because we need the data on the cpu side
     sync_all_seeds_bufs(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
     m_mesh=create_mesh(m_seeds_per_keyframe, m_ref_frames);
     VLOG(1) << "m_mesh.V " << m_mesh.V.rows();
-    TIME_END_GL("ALL");
 
-    LOG(INFO) << "ALL took an average of " << std::fixed << std::setprecision(1) <<  m_profiler->timings["ALL"].exp_avg();
+    TIME_END_GL("ALL_with_mesh");
+
+    LOG(INFO) << "ALL took an average of " << std::fixed << std::setprecision(1) <<  m_profiler->timings["ALL"].avg();
+    LOG(INFO) << "ALL_with_mesh took an average of " << std::fixed << std::setprecision(1) <<  m_profiler->timings["ALL_with_mesh"].avg();
 
 }
 
@@ -518,7 +533,6 @@ void DepthEstimatorGL::create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& 
     //upload img
     TIME_START_GL("upload_gray_and_grad");
     int size_bytes=frame.gray_with_gradients.step[0] * frame.gray_with_gradients.rows;
-    std::cout << "size bytes is " << size_bytes << '\n';
     GL_C(m_ref_frame_tex.upload_data(GL_RGB32F, frame.gray_with_gradients.cols, frame.gray_with_gradients.rows, GL_RGB, GL_FLOAT, frame.gray_with_gradients.ptr(), size_bytes));
     TIME_END_GL("upload_gray_and_grad");
 
@@ -528,7 +542,6 @@ void DepthEstimatorGL::create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& 
     if(!m_hessian_pointwise_tex.get_tex_storage_initialized()){
         GL_C(m_hessian_pointwise_tex.allocate_tex_storage_inmutable(GL_RGBA32F,frame.gray.cols, frame.gray.rows));
     }
-    std::cout << "starting with use program" << '\n';
     GL_C( glUseProgram(m_compute_hessian_pointwise_prog_id) );
     GL_C(bind_for_sampling(m_ref_frame_tex, 1, glGetUniformLocation(m_compute_hessian_pointwise_prog_id,"gray_with_gradients_img_sampler") ) );
     GL_C( glBindImageTexture(0, m_hessian_pointwise_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F) );
@@ -541,7 +554,6 @@ void DepthEstimatorGL::create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& 
 
 
     //get hessian by box blurring
-    std::cout << "m_compute_hessian_blurred_prog_id " << m_compute_hessian_blurred_prog_id << '\n';
     TIME_START_GL("hessian_blurred_matrix");
     //if the m_hessian_pointwise_tex is not initialize allocate memory for it
     if(!m_hessian_blurred_tex.get_tex_storage_initialized()){
@@ -635,7 +647,7 @@ void DepthEstimatorGL::create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& 
     bind_for_sampling(m_ref_frame_tex, 1, glGetUniformLocation(m_compute_init_seeds_prog_id,"gray_with_gradients_img_sampler") );
     bind_for_sampling(m_hessian_blurred_tex, 2, glGetUniformLocation(m_compute_init_seeds_prog_id,"hessian_blurred_sampler") );
 
-    std::cout << "launching with size " << seeds.size() << '\n';
+    // std::cout << "launching with size " << seeds.size() << '\n';
     GL_C( glDispatchCompute(round_up_to_nearest_multiple(seeds.size(),256)/256, 1, 1) );
     // glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -650,7 +662,7 @@ void DepthEstimatorGL::create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& 
 
 
     TIME_END_GL("create_seeds");
-    std::cout << "-------------------------seeds size is " << seeds.size() << '\n';
+    VLOG(1) << "-------------------------seeds size is " << seeds.size();
     // return seeds;
 
 
@@ -787,7 +799,7 @@ void DepthEstimatorGL::create_seeds_gpu (const Frame& frame){
 void DepthEstimatorGL::trace(gl::Buf& seeds_gl_buf, const int nr_seeds_created, const Frame& ref_frame, const Frame& cur_frame){
 
     if(nr_seeds_created==0){
-        std::cout << "No seeds, so there will be no tracing" << '\n';
+        VLOG(2) << "No seeds, so there will be no tracing";
         return;
     }
 
@@ -808,35 +820,17 @@ void DepthEstimatorGL::trace(gl::Buf& seeds_gl_buf, const int nr_seeds_created, 
     Pattern pattern_rot=m_pattern.get_rotated_pattern( KRKi_cr_eigen.topLeftCorner<2,2>() );
 
 
-    TIME_START_GL("upload_params");
+    // TIME_START_GL("upload_params");
     //upload params (https://hub.packtpub.com/opengl-40-using-uniform-blocks-and-uniform-buffer-objects/)
     glBindBuffer( GL_UNIFORM_BUFFER, m_ubo_params );
     glBufferData( GL_UNIFORM_BUFFER, sizeof(m_params), &m_params, GL_DYNAMIC_DRAW );
     glBindBufferBase( GL_UNIFORM_BUFFER,  glGetUniformBlockIndex(m_compute_trace_seeds_prog_id,"params_block"), m_ubo_params );
-    TIME_END_GL("upload_params");
-
-
-    TIME_START_GL("upload_gray_img");
-    //merge all mats into one with 4 channel
-    // std::vector<cv::Mat> channels;
-    // channels.push_back(cur_frame.gray);
-    // channels.push_back(cur_frame.grad_x);
-    // channels.push_back(cur_frame.grad_y);
-    // channels.push_back(cur_frame.grad_y); //dummy one stored in the alpha channels just to have a 4 channel texture
-    // cv::Mat img_with_gradients;
-    // cv::merge(channels, img_with_gradients);
-
-    int size_bytes=cur_frame.gray_with_gradients.step[0] * cur_frame.gray_with_gradients.rows;
-    if(!m_cur_frame.get_tex_storage_initialized()){
-        m_cur_frame.allocate_tex_storage_inmutable(GL_RGB32F,cur_frame.gray.cols, cur_frame.gray.rows);
-    }
-    m_cur_frame.upload_without_pbo(0,0,0, cur_frame.gray.cols, cur_frame.gray.rows, GL_RGB, GL_FLOAT, cur_frame.gray_with_gradients.ptr());
-    TIME_END_GL("upload_gray_img");
+    // TIME_END_GL("upload_params");
 
 
 
     //upload the matrices
-    TIME_START_GL("upload_matrices");
+    // TIME_START_GL("upload_matrices");
     Eigen::Vector2f frame_size;
     frame_size<< cur_frame.gray.cols, cur_frame.gray.rows;
     glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_prog_id,"frame_size"), 1, frame_size.data());
@@ -849,7 +843,7 @@ void DepthEstimatorGL::trace(gl::Buf& seeds_gl_buf, const int nr_seeds_created, 
     glUniform1f(glGetUniformLocation(m_compute_trace_seeds_prog_id,"ngf_eta"), cur_frame.ngf_eta);
     glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_prog_id,"pattern_rot_offsets"), pattern_rot.get_nr_points(), pattern_rot.get_offset_matrix().data()); //upload all the offses as an array of vec2 offsets
     glUniform1i(glGetUniformLocation(m_compute_trace_seeds_prog_id,"pattern_rot_nr_points"), pattern_rot.get_nr_points());
-    TIME_END_GL("upload_matrices");
+    // TIME_END_GL("upload_matrices");
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
 
@@ -1026,7 +1020,6 @@ void DepthEstimatorGL::denoise_cpu(gl::Buf& seeds_gl_buf, std::vector<Seed>& see
     float lambda=0.5;
     int iterations=iters;
 
-    std::cout << "starting to denoise." << std::endl;
     const float large_sigma2 = depth_range * depth_range / 72.f;
 
     // computeWeightsAndMu( )
@@ -1332,8 +1325,8 @@ void DepthEstimatorGL::remove_grazing_seeds (gl::Buf& seeds_gl_buf, std::vector<
     }
 
 
-    std::cout << "--------------------------------nr_points_removed " << nr_points_removed << '\n';
-    std::cout << "--------------------------------nr_lonely " << removed_lonely << '\n';
+    VLOG(1) << "--------------------------------nr_points_removed " << nr_points_removed;
+    VLOG(1) << "--------------------------------nr_lonely " << removed_lonely;
 
     seeds_gl_buf.set_cpu_dirty(true);
 

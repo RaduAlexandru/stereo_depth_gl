@@ -175,8 +175,9 @@ void Core::update() {
         Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
         Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
 
-        //depth estimator gl cleaned up
-        m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
+        #ifdef WITH_VIEWER
+            // m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
+        #endif
 
 
         //don't do anything with this but rather just republish it
