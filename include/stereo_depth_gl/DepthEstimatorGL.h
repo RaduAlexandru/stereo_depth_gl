@@ -207,6 +207,7 @@ public:
     Mesh m_mesh;
     std::vector<Frame> m_ref_frames; //frames containing the seed points
     int m_idx_next_keyframe_to_insert;
+    // int m_idx_last_keyframe_inserted;
     // Frame m_last_ref_frame; //last frame which contained the seed points
 
 

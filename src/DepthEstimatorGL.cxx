@@ -39,6 +39,7 @@ DepthEstimatorGL::DepthEstimatorGL():
         m_started_new_keyframe(false),
         m_nr_frames_traced(0),
         m_idx_next_keyframe_to_insert(0)
+        // m_idx_last_keyframe_inserted(-1)
         {
 
     init_params();
@@ -311,34 +312,35 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
     if(frame_left.is_keyframe){
         VLOG(1) << "Frame is keyframe, we will create seeds";
 
-        // if(   do_post_process && (frame_left.frame_idx>1 || frame_left.is_last ) ){
-        //     sync_seeds_buf(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
-        //     assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
-        //     remove_grazing_seeds(m_seeds);
-        //     sync_seeds_buf();
-        //     m_last_finished_mesh = create_mesh( m_seeds, m_ref_frame );
-        // }
+
+        //we will create a new keyframe now so on the last one (the one that will be evicted by the new keyframe) we create a final mesh
+        if(   do_post_process && (frame_left.frame_idx>1 || frame_left.is_last ) ){
+
+            std::vector<Seed>& seeds_cpu=m_seeds_per_keyframe[m_idx_next_keyframe_to_insert];
+            int nr_seeds_created=m_nr_seeds_created_per_keyframe[m_idx_next_keyframe_to_insert];
+            gl::Buf& seeds_buf=m_seeds_gl_buf_per_keyframe[m_idx_next_keyframe_to_insert];
+
+            sync_seeds_buf(seeds_buf, seeds_cpu, nr_seeds_created);
+            Frame& ref_frame=m_ref_frames[m_idx_next_keyframe_to_insert];
+            assign_neighbours_for_points(seeds_buf, seeds_cpu, ref_frame.gray.cols, ref_frame.gray.rows);
+            remove_grazing_seeds(seeds_buf, seeds_cpu);
+            sync_seeds_buf(seeds_buf, seeds_cpu, nr_seeds_created);
+
+            m_last_finished_mesh = create_mesh( seeds_cpu, ref_frame );
+        }
 
         Frame& ref_frame=m_ref_frames[m_idx_next_keyframe_to_insert];
         ref_frame=frame_left;
 
-
-        // m_last_ref_frame=m_ref_frame;
-        // m_ref_frame=frame_left;
-
         //CPU implementation, rather slow
         // create_seeds_cpu(frame_left);
-
         //FULL GPU implementation, faster but not enough, bottleneck is the atomic counter
         // create_seeds_gpu(frame_left);
         // if(frame_left.frame_idx==0){ //because for some reason the first frame fails to create seeds on gpu...
         //     create_seeds_gpu(frame_left);
         // }
-
         //HYBRID implementation, fastest!
         create_seeds_hybrid(m_seeds_gl_buf_per_keyframe[m_idx_next_keyframe_to_insert], ref_frame);
-
-
 
         // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         m_started_new_keyframe=true;
@@ -364,13 +366,9 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
             trace(m_seeds_gl_buf_per_keyframe[i], m_nr_seeds_created_per_keyframe[i], m_ref_frames[i], frame_right);
         }
 
+
         //create a mesh
 
-        // //next one we will create a keyframe
-        // if( (frame_left.frame_idx+1) %50==0){
-        //     assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
-        //     denoise_cpu(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
-        // }
 
         // //only after 10 frames from the keyframe because by then we should have a good estimate of the depth
         // if(frame_left.frame_idx%50>20){
@@ -379,15 +377,8 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
         // // //next one we will create a keyframe
 
-
-
-
-
         m_started_new_keyframe=false;
     }
-    // std::vector<Seed> seeds=seeds_download(m_seeds_gl_buf, m_nr_seeds_created);
-    // m_seeds=seeds_download(m_seeds_gl_buf, m_nr_seeds_created);
-
 
     //we need to do a sync because we need the data on the cpu side
     sync_all_seeds_bufs(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
@@ -587,7 +578,7 @@ void DepthEstimatorGL::create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& 
             // gradient_hessian+= grad*grad.transpose();
 
             float trace = hessian[0]+hessian[2];
-            if(trace>3){
+            if(trace>6){
                 Seed point;
                 point.m_uv << j,i;
                 seeds.push_back(point);
@@ -884,6 +875,7 @@ void DepthEstimatorGL::trace(gl::Buf& seeds_gl_buf, const int nr_seeds_created, 
     seeds_gl_buf.set_gpu_dirty(true); //the data changed on the gpu side, we should download it
 
 
+
     m_nr_frames_traced++;
 
 }
@@ -942,7 +934,7 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
     //make colors from the intensity value stored in the seeds
     mesh.C.resize(seeds.size(),3);
     for (size_t i = 0; i < mesh.C.rows(); i++) {
-        float gray_val = seeds[i].m_intensity[5]; //center points of the pattern;
+        float gray_val = seeds[i].m_intensity[4]; //center points of the pattern;
         mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
     }
 

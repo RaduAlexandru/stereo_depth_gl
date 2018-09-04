@@ -143,12 +143,13 @@ namespace gl{
         void set_gpu_dirty(const bool dirty){
             m_is_gpu_dirty=dirty;
         }
-        bool is_gpu_dirty(){
-            return m_is_gpu_dirty;
-        }
         bool is_cpu_dirty(){
             return m_is_cpu_dirty;
         }
+        bool is_gpu_dirty(){
+            return m_is_gpu_dirty;
+        }
+
 
         //download from gpu to cpu
         void download(void* destination_data_ptr, const int bytes_to_copy){
