@@ -243,6 +243,11 @@ void main(void) {
 
 
         for(int idx=0;idx<pattern_rot_nr_points; ++idx){
+
+            if(p[id].m_zero_grad[idx]==1){
+                continue;
+            }
+
             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
             vec2 offset=pattern_rot_offsets[idx];
             // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;

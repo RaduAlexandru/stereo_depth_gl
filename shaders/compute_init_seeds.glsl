@@ -248,7 +248,7 @@ Seed create_seed(ivec2 img_coords, vec3 hessian, int seed_idx){
         }
 
     }
-    s.m_energyTH = pattern_rot_nr_points * params.residualTH;
+    s.m_energyTH = s.m_active_pattern_points * params.residualTH;
     // point.m_energyTH *= m_params.overallEnergyTHWeight*m_params.overallEnergyTHWeight;
 
     s.m_last_error = -1;

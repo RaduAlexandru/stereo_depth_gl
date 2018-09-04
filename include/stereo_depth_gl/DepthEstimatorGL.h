@@ -33,7 +33,7 @@ struct Params {
     float outlierTHSumComponent = 50*50; 		// higher -> less strong gradient-based reweighting .
     // float huberTH = 0.5; //ngf // Huber Threshold
     // float huberTH = 9; // Huber Threshold
-    float huberTH = 0.05; //BCA with normalized values between [0,1] // Huber Threshold
+    float huberTH = 0.2; //BCA with normalized values between [0,1] // Huber Threshold
     float convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
     float eta = 5;
 
