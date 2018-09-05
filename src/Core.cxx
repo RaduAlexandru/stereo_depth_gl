@@ -150,101 +150,104 @@ void Core::update() {
     // }
 
 
-    // // if ( m_loader_png->has_data_for_all_cams() ) {
-    // if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
-    //     m_player_should_do_one_step=false;
-    //     Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
-    //     Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
-    //
-    //     //halide one
-    //     m_depth_estimator_halide->compute_depth(frame_left,frame_right);
-    //     //to visualize what halide is doing
-    //     m_depth_estimator_gl->upload_gray_stereo_pair(m_depth_estimator_halide->debug_img_left, m_depth_estimator_halide->debug_img_right);
-    //
-    // }
-
-
-
-
-
-
     // if ( m_loader_png->has_data_for_all_cams() ) {
-    #ifdef WITH_LOADER_PNG
     if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
         m_player_should_do_one_step=false;
         Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
         Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
 
-        #ifdef WITH_VIEWER
-            // m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
-        #endif
-
-
-        //don't do anything with this but rather just republish it
-        if(frame_left.frame_idx%10==0){
-            frame_left.is_keyframe=true;
-            frame_right.is_keyframe=true;
-        }
-        // m_loader_ros->publish_stereo_frame(frame_left, frame_right);
-        m_loader_ros->publish_single_frame(frame_left);
-        m_loader_ros->publish_single_frame(frame_right);
+        //halide one
+        m_depth_estimator_halide->compute_depth(frame_left,frame_right);
+        // m_depth_estimator_halide->test_opencl_example(frame_left,frame_right);
+        // m_depth_estimator_halide->test_again(frame_left,frame_right);
+        // m_depth_estimator_halide->test_again_real_imgs(frame_left,frame_right);
+        //to visualize what halide is doing
+        m_depth_estimator_gl->upload_gray_stereo_pair(m_depth_estimator_halide->debug_img_left, m_depth_estimator_halide->debug_img_right);
 
     }
-    #endif
-
-    if(  m_loader_ros->has_data_for_all_cams()  ){
-
-        Frame frame_left=m_loader_ros->get_next_frame_for_cam(0);
-        Frame frame_right=m_loader_ros->get_next_frame_for_cam(1);
-
-        m_depth_estimator_gl->compute_depth_and_update_mesh_stereo(frame_left,frame_right);
-
-
-        //update mesh from the debug icl_incremental
-        Mesh point_cloud=m_depth_estimator_gl->m_mesh;
-        m_loader_ros->publish_map(point_cloud);
-        #ifdef WITH_VIEWER
-            std::string cloud_name="point_cloud";
-            point_cloud.name=cloud_name;
-            point_cloud.m_show_points=true;
-            if(m_scene.does_mesh_with_name_exist(cloud_name)){
-                m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
-            }else{
-                m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
-            }
-        #endif
-        if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
-            Mesh last_cloud=m_depth_estimator_gl->m_last_finished_mesh;
-            m_loader_ros->publish_map_finished(last_cloud);
-            #ifdef WITH_VIEWER
-                std::string cloud_name="finished_cloud";
-                last_cloud.name=cloud_name;
-                last_cloud.m_show_points=true;
-                m_scene.add_mesh(last_cloud, cloud_name);
-            #endif
-        }
 
 
 
-        #ifdef WITH_VIEWER
-        #ifdef WITH_LOADER_PNG
-        //update camera frustum mesh
-        for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
-            std::string cam_name= "cam_"+std::to_string(cam_id);
-            Mesh new_frustum_mesh;
-            if(cam_id==0){
-                new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-            }else if( cam_id==1){
-                new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
-            }
-            // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
-            new_frustum_mesh.name=cam_name;
-            m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
-            m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
-        }
-        #endif
-        #endif
-    }
+
+
+
+    // // if ( m_loader_png->has_data_for_all_cams() ) {
+    // #ifdef WITH_LOADER_PNG
+    // if( m_loader_png->has_data_for_all_cams()  &&  (!m_player_paused || m_player_should_do_one_step ) ){
+    //     m_player_should_do_one_step=false;
+    //     Frame frame_left=m_loader_png->get_next_frame_for_cam(0);
+    //     Frame frame_right=m_loader_png->get_next_frame_for_cam(1);
+    //
+    //     #ifdef WITH_VIEWER
+    //         // m_depth_estimator_gl->upload_rgb_stereo_pair(frame_left.rgb, frame_right.rgb);
+    //     #endif
+    //
+    //
+    //     //don't do anything with this but rather just republish it
+    //     if(frame_left.frame_idx%10==0){
+    //         frame_left.is_keyframe=true;
+    //         frame_right.is_keyframe=true;
+    //     }
+    //     // m_loader_ros->publish_stereo_frame(frame_left, frame_right);
+    //     m_loader_ros->publish_single_frame(frame_left);
+    //     m_loader_ros->publish_single_frame(frame_right);
+    //
+    // }
+    // #endif
+    //
+    // if(  m_loader_ros->has_data_for_all_cams()  ){
+    //
+    //     Frame frame_left=m_loader_ros->get_next_frame_for_cam(0);
+    //     Frame frame_right=m_loader_ros->get_next_frame_for_cam(1);
+    //
+    //     m_depth_estimator_gl->compute_depth_and_update_mesh_stereo(frame_left,frame_right);
+    //
+    //
+    //     //update mesh from the debug icl_incremental
+    //     Mesh point_cloud=m_depth_estimator_gl->m_mesh;
+    //     m_loader_ros->publish_map(point_cloud);
+    //     #ifdef WITH_VIEWER
+    //         std::string cloud_name="point_cloud";
+    //         point_cloud.name=cloud_name;
+    //         point_cloud.m_show_points=true;
+    //         if(m_scene.does_mesh_with_name_exist(cloud_name)){
+    //             m_scene.get_mesh_with_name(cloud_name)=point_cloud; //it exists, just assign to it
+    //         }else{
+    //             m_scene.add_mesh(point_cloud, cloud_name); //doesn't exist, add it to the scene
+    //         }
+    //     #endif
+    //     if(m_accumulate_meshes && m_depth_estimator_gl->m_started_new_keyframe){
+    //         Mesh last_cloud=m_depth_estimator_gl->m_last_finished_mesh;
+    //         m_loader_ros->publish_map_finished(last_cloud);
+    //         #ifdef WITH_VIEWER
+    //             std::string cloud_name="finished_cloud";
+    //             last_cloud.name=cloud_name;
+    //             last_cloud.m_show_points=true;
+    //             m_scene.add_mesh(last_cloud, cloud_name);
+    //         #endif
+    //     }
+    //
+    //
+    //
+    //     #ifdef WITH_VIEWER
+    //     #ifdef WITH_LOADER_PNG
+    //     //update camera frustum mesh
+    //     for (size_t cam_id = 0; cam_id < m_loader_png->get_nr_cams(); cam_id++) {
+    //         std::string cam_name= "cam_"+std::to_string(cam_id);
+    //         Mesh new_frustum_mesh;
+    //         if(cam_id==0){
+    //             new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+    //         }else if( cam_id==1){
+    //             new_frustum_mesh=compute_camera_frustum_mesh(frame_right, m_frustum_scale_multiplier);
+    //         }
+    //         // new_frustum_mesh=compute_camera_frustum_mesh(frame_left, m_frustum_scale_multiplier);
+    //         new_frustum_mesh.name=cam_name;
+    //         m_scene.get_mesh_with_name(cam_name)=new_frustum_mesh;
+    //         m_scene.get_mesh_with_name(cam_name).m_visualization_should_change=true;
+    //     }
+    //     #endif
+    //     #endif
+    // }
 
 
 

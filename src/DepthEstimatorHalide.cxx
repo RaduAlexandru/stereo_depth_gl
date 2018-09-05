@@ -63,22 +63,24 @@ Func DepthEstimatorHalide::generate_disparity_func(const cv::Mat& gray_left, con
     //wrap the image in a halide buffer
     Buffer<float> buf_left((float*)gray_left.data, gray_left.cols, gray_left.rows);
     Buffer<float> buf_right((float*)gray_right.data, gray_right.cols, gray_right.rows);
+    buf_left.set_host_dirty(); //indicate that the data is on gpu
+    buf_right.set_host_dirty();
 
     //ALGORITHM
 
     //clamp the x and y so as to not go out of bounds
-    Var x("x"),y("y"), c("c");
+    Var x("x"),y("y"), d("d");
     Func buf_right_cl = BoundaryConditions::repeat_edge(buf_right);
 
 
     //cost volume
     Func cost_vol("cost_vol");
-    cost_vol(x,y,c)=999999.0;
-    cost_vol(x,y,c) = Halide::abs(buf_left(x,y) - buf_right_cl(x-c,y));
+    cost_vol(x,y,d)=999999.0;
+    cost_vol(x,y,d) = Halide::abs(buf_left(x,y) - buf_right_cl(x-d,y));
 
 
     Func cost_vol_filtered("cost_vol_filtered");
-    if(m_use_cost_volume_filtering){
+    // if(m_use_cost_volume_filtering){
         // int radius=9;
         // float eps=0.001;
         //things that can be precomputed
@@ -87,7 +89,7 @@ Func DepthEstimatorHalide::generate_disparity_func(const cv::Mat& gray_left, con
         // Func mean_II = boxfilter(mul_elem(I,I), radius);
         // Func var_I;     var_I(x,y) = mean_II(x,y) - mul_elem(mean_I,mean_I)(x,y);
         // //things that depend on the image itself and not the guidance
-        Func mean_p = boxfilter_3D(cost_vol, radius);
+        // Func mean_p = boxfilter_3D(cost_vol, radius);
         // Func mean_Ip = boxfilter_3D(mul_elem_replicate_lhs(I,cost_vol),radius);
         // Func cov_Ip;    cov_Ip(x,y,d)=mean_Ip(x,y,d) - mul_elem_replicate_lhs(mean_I,mean_p)(x,y,d);
         // Func a;         a(x,y,d)=cov_Ip(x,y,d) / (var_I(x,y) +eps);
@@ -97,10 +99,19 @@ Func DepthEstimatorHalide::generate_disparity_func(const cv::Mat& gray_left, con
         // Func out;      out(x,y,d)=mul_elem_replicate_rhs(mean_a,I)(x,y,d) + mean_b(x,y,d);
 
         // cost_vol_filtered(x,y,d)=out(x,y,d);
-        cost_vol_filtered(x,y,c)=mean_p(x,y,c);
-    }else{
-        cost_vol_filtered(x,y,c)=cost_vol(x,y,c);
-    }
+
+        RDom r(-radius,radius);
+        Expr rx=clamp(x+r.x,0,999999);
+        Expr ry=clamp(y+r.x,0,999999);
+
+        Func blur_x;
+        Func output;
+        blur_x(x,y,d)=sum(cost_vol(rx, y, d))/radius;
+        cost_vol_filtered(x,y,d)=sum(blur_x(x, ry, d))/radius;
+
+    // }else{
+    //     cost_vol_filtered(x,y,d)=cost_vol(x,y,d);
+    // }
 
 
 
@@ -110,97 +121,73 @@ Func DepthEstimatorHalide::generate_disparity_func(const cv::Mat& gray_left, con
     disparity(x,y)=cast<float>(argmin(cost_vol_filtered(x,y,d_range))[0] ); //argmax returns a tuple containing the index in the reduction domain that gave the smallest value and the value itseld
 
 
+    // //Debug why doesnt opencl work
+    // Func disparity("disparity");
+    // disparity(x,y)=buf_left(x,y);
 
-    // // schedule
-    // // mean_p.compute_root();
-    // cost_vol.compute_root();
-    // disparity.compute_root();
 
+    // // auto schedule
+    // const int kParallelism = 32;
+    // const int kLastLevelCacheSize = 314573;
+    // const int kBalance = 1; //how much more expensive is the memory vs arithmetic costs. Higher values means less compute_root
+    // MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
+    //
+    // Halide::Pipeline pipeline(disparity);
+    // disparity.estimate(x, 0, gray_left.cols)
+    //          .estimate(y, 0, gray_left.rows);
+    // // halide_set_num_threads(1);
+    // std::string schedule=pipeline.auto_schedule(Halide::get_jit_target_from_environment(), machine_params);
+    // std::cout << "scheulde is "<< schedule << '\n';
+    // pipeline.compile_jit();
+
+
+    // //opencl
+    Var block_x, block_y, thread_x, thread_y;
+    disparity.gpu_tile(x, y, block_x, block_y, thread_x, thread_y, 32 ,16);
+    cost_vol_filtered.gpu_tile(x, y, block_x, block_y, thread_x, thread_y, 32, 16);
+    cost_vol_filtered.compute_root();
+    blur_x.gpu_tile(x, y, block_x, block_y, thread_x, thread_y, 32, 16);
+    blur_x.compute_root();
+    cost_vol.compute_root();
+    blur_x.compute_at(cost_vol_filtered, block_x).gpu_threads(x, y);
+    Target target = get_host_target();
+    target.set_feature(Target::OpenCL);
+    disparity.compile_jit(target);
+
+
+    return disparity;
+
+}
+
+void DepthEstimatorHalide::auto_schedule(Halide::Func& f, const int width, const int height){
     // auto schedule
     const int kParallelism = 32;
     const int kLastLevelCacheSize = 314573;
     const int kBalance = 1; //how much more expensive is the memory vs arithmetic costs. Higher values means less compute_root
     MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
-    Halide::Pipeline pipeline(disparity);
-    disparity.estimate(x, 0, gray_left.cols)
-            .estimate(y, 0, gray_left.rows);
+
+
+    Var x("x"),y("y");
+    Halide::Pipeline pipeline(f);
+    f.estimate(x, 0, width)
+     .estimate(y, 0, height);
     // halide_set_num_threads(1);
     std::string schedule=pipeline.auto_schedule(Halide::get_jit_target_from_environment(), machine_params);
     pipeline.compile_jit();
-    std::cout << "schedule is \n" << schedule  << '\n';
 
+}
 
-//     Var x_i("x_i");
-// Var x_i_vi("x_i_vi");
-// Var x_i_vo("x_i_vo");
-// Var x_o("x_o");
-// Var x_vi("x_vi");
-// Var x_vo("x_vo");
-// Var y_i("y_i");
-// Var y_o("y_o");
-//
-// Func argmin = pipeline.get_func(8);
-// Func disparity = pipeline.get_func(9);
-// Func sum = pipeline.get_func(3);
-// Func sum_1 = pipeline.get_func(5);
-//
-// {
-//     Var x = argmin.args()[0];
-//     RVar r25$x(argmin.update(0).get_schedule().rvars()[0].var);
-//     argmin
-//         .compute_at(disparity, x_o)
-//         .split(x, x_vo, x_vi, 8)
-//         .vectorize(x_vi);
-//     argmin.update(0)
-//         .reorder(x, r25$x, y)
-//         .split(x, x_vo, x_vi, 8)
-//         .vectorize(x_vi);
-// }
-// {
-//     Var x = disparity.args()[0];
-//     Var y = disparity.args()[1];
-//     disparity
-//         .compute_root()
-//         .split(x, x_o, x_i, 64)
-//         .split(y, y_o, y_i, 4)
-//         .reorder(x_i, y_i, x_o, y_o)
-//         .split(x_i, x_i_vo, x_i_vi, 8)
-//         .vectorize(x_i_vi)
-//         .parallel(y_o);
-// }
-// {
-//     Var x = sum.args()[0];
-//     RVar r4$x(sum.update(0).get_schedule().rvars()[0].var);
-//     sum
-//         .compute_at(disparity, x_o)
-//         .split(x, x_vo, x_vi, 8)
-//         .vectorize(x_vi);
-//     sum.update(0)
-//         .reorder(r4$x, x, c, y)
-//         .split(x, x_vo, x_vi, 8)
-//         .vectorize(x_vi);
-// }
-// {
-//     Var x = sum_1.args()[0];
-//     RVar r4$x(sum_1.update(0).get_schedule().rvars()[0].var);
-//     sum_1
-//         .compute_at(disparity, x_o)
-//         .split(x, x_vo, x_vi, 8)
-//         .vectorize(x_vi);
-//     sum_1.update(0)
-//         .reorder(x, r4$x, y, c)
-//         .split(x, x_vo, x_vi, 8)
-//         .vectorize(x_vi);
-// }
-// pipeline.compile_jit();
+void DepthEstimatorHalide::schedule_for_opencl(Halide::Func& f, const int width, const int height){
+    Var block_x, block_y, thread_x, thread_y;
+    Var x("x"),y("y");
+    f.gpu_tile(x, y, block_x, block_y,  thread_x, thread_y, 16 ,16);
 
+    // f.reorder(c1, x, y)
+    //  .bound(c1, 0, 1);
 
-
-
-
-    disparity.compile_to_lowered_stmt("disparity.html", {}, HTML);
-
-    return disparity;
+    Target target = get_host_target();
+    target.set_feature(Target::OpenCL);
+    f.compile_jit(target);
 
 }
 
@@ -209,43 +196,50 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
 
     std::cout << "compute depth" << '\n';
 
-    int img_subsample_factor=1;
+    // int img_subsample_factor=1;
 
     //get images
-    cv::Mat gray_left=frame_left.gray/255;
+    cv::Mat gray_left=frame_left.gray;
     // cv::Mat gray_right=undistort_rectify_image(frame_right.gray, frame_left, frame_right);
     // gray_right=gray_right/255;
-    cv::Mat gray_right=frame_right.gray/255;
-    cv::resize(gray_left, gray_left, cv::Size(), 1.0/img_subsample_factor, 1.0/img_subsample_factor);
-    cv::resize(gray_right, gray_right, cv::Size(), 1.0/img_subsample_factor, 1.0/img_subsample_factor);
-    std::cout << "received frame of size " << gray_left.rows << " " << gray_left.cols << '\n';
+    cv::Mat gray_right=frame_right.gray;
+    // cv::resize(gray_left, gray_left, cv::Size(), 1.0/img_subsample_factor, 1.0/img_subsample_factor);
+    // cv::resize(gray_right, gray_right, cv::Size(), 1.0/img_subsample_factor, 1.0/img_subsample_factor);
+    // std::cout << "received frame of size " << gray_left.rows << " " << gray_left.cols << '\n';
 
 
     int max_disparity=50;
-    int radius=5;
+    int radius=9;
 
     if(m_is_first_frame){
         m_is_first_frame=false;
         m_disparity=generate_disparity_func(gray_left, gray_right, max_disparity, radius);
+        // auto_schedule(m_disparity, gray_left.cols, gray_left.rows);
+        // schedule_for_opencl(m_disparity, gray_left.cols, gray_left.rows);
     }
 
-    //output
-    cv::Mat img_output=cv::Mat(gray_left.rows, gray_left.cols, gray_left.type());
-    Halide::Buffer<float> buf_out((float*)img_output.data, img_output.cols, img_output.rows);
+    // //output
+    // cv::Mat img_output=cv::Mat(gray_left.rows, gray_left.cols, gray_left.type());
+    // Halide::Buffer<float> buf_out((float*)img_output.data, img_output.cols, img_output.rows);
+    Halide::Buffer<float> buf_out(gray_left.cols, gray_left.rows);
+
 
     m_disparity.realize(buf_out);
     TIME_START("disparity");
     // for (size_t i = 0; i < 10; i++) {
         m_disparity.realize(buf_out);
+        buf_out.copy_to_host();
     // }
     TIME_END("disparity");
+    cv::Mat img_output=cv::Mat(gray_left.rows, gray_left.cols, gray_left.type());
+    img_output.data=(uchar*)buf_out.data();
 
     m_mesh=disparity_to_mesh(img_output);
 
     //view_result
     // debug_img_left=img_output/img_output.cols;
     // debug_img_left=img_output/15;
-    cv:normalize(img_output, debug_img_left, 0, 1.0, cv::NORM_MINMAX);
+    cv::normalize(img_output, debug_img_left, 0, 1.0, cv::NORM_MINMAX);
 
 
 
@@ -290,6 +284,343 @@ void DepthEstimatorHalide::compute_depth(const Frame& frame_left, const Frame& f
     // debug_img_left=img_output;
 
 }
+
+void DepthEstimatorHalide::test_opencl_example(const Frame& frame_left, const Frame& frame_right){
+
+    std::cout << "test_opencl_example" << '\n';
+
+    //get images
+    cv::Mat gray_left=frame_left.gray;
+
+    // Define some Vars to use.
+    Var x, y, c, i, ii, xo, yo, xi, yi;
+
+    //wrap the image in a halide buffer
+    Buffer<float> input((float*)gray_left.data, gray_left.cols, gray_left.rows, 1);
+
+    // Func lut("lut");
+    // lut(i) = (i);
+
+    // Augment the input with a boundary condition.
+    Func padded("padded");
+    padded(x, y, c) = input(clamp(x, 0, input.width()-1),
+                            clamp(y, 0, input.height()-1), c);
+
+    // // Cast it to 16-bit to do the math.
+    // Func padded16;
+    // padded16(x, y, c) = cast<uint16_t>(padded(x, y, c));
+
+    // Next we sharpen it with a five-tap filter.
+    Func sharpen("sharpen");
+    sharpen(x, y, c) = (padded(x, y, c) * 2-
+                        (padded(x - 1, y, c) +
+                         padded(x, y - 1, c) +
+                         padded(x + 1, y, c) +
+                         padded(x, y + 1, c)) / 4);
+
+    // Then apply the LUT.
+    Func curved("curved");
+    curved(x, y, c) = sharpen(x, y, c);
+
+    VLOG(1) << "defined the function";
+
+
+
+    // //CPU-----------
+    // VLOG(1) << "CPU schedule";
+    // {
+    // // // Compute the look-up-table ahead of time.
+    // // lut.compute_root();
+    //
+    // // Compute color channels innermost. Promise that there will
+    // // be three of them and unroll across them.
+    // curved.reorder(c, x, y)
+    //       .bound(c, 0, 1)
+    //       .unroll(c);
+    //
+    // // Look-up-tables don't vectorize well, so just parallelize
+    // // curved in slices of 16 scanlines.
+    // Var yo, yi;
+    // curved.split(y, yo, yi, 16)
+    //       .parallel(yo);
+    //
+    // // Compute sharpen as needed per scanline of curved.
+    // sharpen.compute_at(curved, yi);
+    //
+    // // Vectorize the sharpen. It's 16-bit so we'll vectorize it 8-wide.
+    // sharpen.vectorize(x, 8);
+    //
+    // // Compute the padded input as needed per scanline of curved,
+    // // reusing previous values computed within the same strip of
+    // // 16 scanlines.
+    // padded.store_at(curved, yo)
+    //       .compute_at(curved, yi);
+    //
+    // // Also vectorize the padding. It's 8-bit, so we'll vectorize
+    // // 16-wide.
+    // padded.vectorize(x, 16);
+    //
+    // // JIT-compile the pipeline for the CPU.
+    // curved.compile_jit();
+    // }
+    // VLOG(1) << "finsihed CPU schedule";
+
+
+    {
+    // As before, we'll compute the LUT once at the start of the
+    // pipeline.
+
+
+
+    // Compute color channels innermost. Promise that there will
+    // be three of them and unroll across them.
+    curved.reorder(c, x, y)
+          .bound(c, 0, 1)
+          .unroll(c);
+
+    // Compute curved in 2D 8x8 tiles using the GPU.
+    curved.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
+
+    // This is equivalent to:
+    // curved.tile(x, y, xo, yo, xi, yi, 8, 8)
+    //       .gpu_blocks(xo, yo)
+    //       .gpu_threads(xi, yi);
+
+    // We'll leave sharpen as inlined into curved.
+
+    // Compute the padded input as needed per GPU block, storing
+    // the intermediate result in shared memory. In the schedule
+    // above xo corresponds to GPU blocks.
+    padded.compute_at(curved, xo);
+
+    // Use the GPU threads for the x and y coordinates of the
+    // padded input.
+    padded.gpu_threads(x, y);
+
+    // JIT-compile the pipeline for the GPU. CUDA, OpenCL, or
+    // Metal are not enabled by default. We have to construct a
+    // Target object, enable one of them, and then pass that
+    // target object to compile_jit. Otherwise your CPU will very
+    // slowly pretend it's a GPU, and use one thread per output
+    // pixel.
+
+    // Start with a target suitable for the machine you're running
+    // this on.
+    Target target = get_host_target();
+
+    // Then enable OpenCL or Metal, depending on which platform
+    // we're on. OS X doesn't update its OpenCL drivers, so they
+    // tend to be broken. CUDA would also be a fine choice on
+    // machines with NVidia GPUs.
+    // if (target.os == Target::OSX) {
+    //     target.set_feature(Target::Metal);
+    // } else {
+        target.set_feature(Target::OpenCL);
+    // }
+
+    // Uncomment the next line and comment out the lines above to
+    // try CUDA instead.
+    // target.set_feature(Target::CUDA);
+
+    // If you want to see all of the OpenCL, Metal, or CUDA API
+    // calls done by the pipeline, you can also enable the Debug
+    // flag. This is helpful for figuring out which stages are
+    // slow, or when CPU -> GPU copies happen. It hurts
+    // performance though, so we'll leave it commented out.
+    // target.set_feature(Target::Debug);
+
+    curved.compile_jit(target);
+    }
+
+
+
+
+
+
+    //output
+    cv::Mat img_output=cv::Mat(gray_left.rows, gray_left.cols, gray_left.type());
+    Halide::Buffer<float> buf_out((float*)img_output.data, img_output.cols, img_output.rows, 1);
+
+    curved.realize(buf_out);
+    buf_out.copy_to_host();
+    TIME_START("disparity");
+        curved.realize(buf_out);
+        buf_out.copy_to_host();
+    TIME_END("disparity");
+
+    cv:normalize(img_output, debug_img_left, 0, 1.0, cv::NORM_MINMAX);
+
+
+}
+
+
+
+void DepthEstimatorHalide::test_again(const Frame& frame_left, const Frame& frame_right){
+    //taken from https://github.com/halide/Halide/issues/272
+
+    Halide::Var x, y, xo, yo, xi, yi;
+   Halide::Expr g = Halide::cast<float>(x + y);
+
+   Halide::Func fCpu, fGpu;
+   fCpu(x, y) = g;
+   fGpu(x, y) = g;
+
+   // Uncommenting this will "fix" the GPU result
+   fGpu.gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
+
+   // Create target
+   Halide::Target targetCpu = Halide::get_host_target();
+   Halide::Target targetGpu= Halide::get_host_target();
+   targetGpu.set_feature(Target::OpenCL);
+
+   // JIT-compile functions
+   fCpu.compile_jit(targetCpu);
+   fGpu.compile_jit(targetGpu);
+
+   // Create output images
+   const int size = 256;
+   Halide::Buffer<float>
+       outC(size, size), outCpu(size, size), outGpu(size, size);
+
+   // Compute all versions of the function
+   f(outC);
+   fCpu.realize(outCpu);
+   fGpu.realize(outGpu);
+   outGpu.copy_to_host();
+
+   // Check and output results
+   bool cpuCorrect = equal(outC, outCpu);
+   bool gpuCorrect = equal(outC, outGpu);
+
+   std::cout << "Halide CPU (" << targetCpu.to_string() << ") OK: " <<
+                (cpuCorrect ? "yes" : "no") << std::endl;
+
+   std::cout << "Halide GPU (" << targetGpu.to_string() << ") OK: " <<
+                (gpuCorrect ? "yes" : "no") << std::endl;
+
+
+   //output the cpu to debug left and gpu to debug right
+
+   cv::Mat img_output_cpu=cv::Mat(size, size, CV_32FC1);
+   img_output_cpu.data=(uchar*)outCpu.data();
+   cv::normalize(img_output_cpu, debug_img_left, 0, 1.0, cv::NORM_MINMAX);
+
+   cv::Mat img_output_gpu=cv::Mat(size, size, CV_32FC1);
+   img_output_gpu.data=(uchar*)outGpu.data();
+   cv::normalize(img_output_gpu, debug_img_right, 0, 1.0, cv::NORM_MINMAX);
+
+}
+
+// Returns true if the images match, false otherwise
+bool DepthEstimatorHalide::equal(const Halide::Buffer<float>& image0,
+           const Halide::Buffer<float>& image1){
+    // Check dimensions
+    if (image0.width()  != image1.width() || image0.height() != image1.height())
+        return false;
+
+    // Check contents
+    for (int y = 0; y < image0.height(); ++y)
+        for (int x = 0; x < image0.width(); ++x)
+            if (image0.data()[y * image0.stride(1) + x] !=
+                image1.data()[y * image1.stride(1) + x])
+                return false;
+
+    // No differences, the images match
+    return true;
+}
+
+// C++ version of a simple gradient function
+void DepthEstimatorHalide::f(Halide::Buffer<float>& output){
+    float* data  = output.data();
+    const int width = output.width();
+    const int height = output.height();
+    const int stride = output.stride(1);
+
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+            data[y * stride + x] = x + y;
+}
+
+void DepthEstimatorHalide::test_again_real_imgs(const Frame& frame_left, const Frame& frame_right){
+
+    // Create target
+    Halide::Target targetCpu = Halide::get_host_target();
+    Halide::Target targetGpu= Halide::get_host_target();
+    targetGpu.set_feature(Target::OpenCL);
+    targetGpu.set_feature(Target::Debug);
+
+    Halide::Var x, y, xo, yo, xi, yi;
+   Halide::Expr g = Halide::cast<float>(x + y);
+
+   //wrap the image in a halide buffer
+   cv::Mat gray_left=frame_left.gray;
+   Buffer<float> buf_left((float*)gray_left.data, gray_left.cols, gray_left.rows);
+   Buffer<float> buf_left_gpu((float*)gray_left.data, gray_left.cols, gray_left.rows);
+   buf_left_gpu.set_host_dirty(); // Indicate that data is on CPU.
+
+   // buf_left_gpu.copy_to_device(targetGpu);
+
+   Halide::Func fCpu, fGpu;
+   fCpu(x, y) = buf_left(x,y);
+   fGpu(x, y) = buf_left_gpu(x,y);
+
+   // Uncommenting this will "fix" the GPU result
+   fGpu.gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
+
+
+
+   // JIT-compile functions
+   fCpu.compile_jit(targetCpu);
+   fGpu.compile_jit(targetGpu);
+
+   // Create output images
+   const int size = 256;
+   Halide::Buffer<float>
+       outC(size, size), outCpu(size, size), outGpu(size, size);
+
+   // Compute all versions of the function
+   f(outC);
+   fCpu.realize(outCpu);
+   fGpu.realize(outGpu);
+   fCpu.realize(outCpu);
+   fGpu.realize(outGpu);
+   outGpu.copy_to_host();
+
+   // Check and output results
+   bool cpuCorrect = equal(outC, outCpu);
+   bool gpuCorrect = equal(outC, outGpu);
+   bool same = equal(outCpu, outGpu);
+
+   std::cout << "Halide CPU (" << targetCpu.to_string() << ") OK: " <<
+                (cpuCorrect ? "yes" : "no") << std::endl;
+
+   std::cout << "Halide GPU (" << targetGpu.to_string() << ") OK: " <<
+                (gpuCorrect ? "yes" : "no") << std::endl;
+
+    std::cout << "Same (" << targetGpu.to_string() << ") OK: " <<
+                 (same ? "yes" : "no") << std::endl;
+
+
+   //output the cpu to debug left and gpu to debug right
+
+   cv::Mat img_output_cpu=cv::Mat(size, size, CV_32FC1);
+   img_output_cpu.data=(uchar*)outCpu.data();
+   cv::normalize(img_output_cpu, debug_img_left, 0, 1.0, cv::NORM_MINMAX);
+
+   cv::Mat img_output_gpu=cv::Mat(size, size, CV_32FC1);
+   img_output_gpu.data=(uchar*)outGpu.data();
+   cv::normalize(img_output_gpu, debug_img_right, 0, 1.0, cv::NORM_MINMAX);
+
+}
+
+
+
+
+
+
+
+
+
 
 cv::Mat DepthEstimatorHalide::cost_volume_cpu(const cv::Mat& gray_left, const cv::Mat& gray_right){
     int max_disparity=50;
@@ -545,15 +876,15 @@ Halide::Func DepthEstimatorHalide::boxfilter_slice(const Halide::Func& I, const 
 }
 
 Halide::Func DepthEstimatorHalide::boxfilter_3D(const Halide::Func& I, const int radius){
-    Var x("x"),y("y"),c("c");
+    Var x("x"),y("y"), d("d");
     RDom r(-radius,radius);
     Expr rx=clamp(x+r.x,0,999999);
     Expr ry=clamp(y+r.x,0,999999);
 
     Func blur_x;
     Func output;
-    blur_x(x,y,c)=sum(I(rx, y, c))/radius;
-    output(x,y,c)=sum(blur_x(x, ry, c))/radius;
+    blur_x(x,y,d)=sum(I(rx, y, d))/radius;
+    output(x,y,d)=sum(blur_x(x, ry, d))/radius;
 
     return output;
 }

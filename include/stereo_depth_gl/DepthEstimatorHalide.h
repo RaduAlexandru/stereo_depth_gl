@@ -27,6 +27,14 @@ public:
 
 
     void compute_depth(const Frame& frame_left, const Frame& frame_right);
+    void test_opencl_example(const Frame& frame_left, const Frame& frame_right);
+    void test_again(const Frame& frame_left, const Frame& frame_right); //Works!
+    bool equal(const Halide::Buffer<float>& image0,
+               const Halide::Buffer<float>& image1);
+    void f(Halide::Buffer<float>& output);
+
+    void test_again_real_imgs(const Frame& frame_left, const Frame& frame_right);
+
     // Halide::Func convolution(Halide::Func f, Halide::Func hx, Halide::Expr kernel_width, Halide::Expr kernel_height);
     // void run_speed_test(Frame& frame);
     // void run_speed_test_bright(Frame& frame);
@@ -61,6 +69,8 @@ private:
     void init_params();
     void init_halide();
     Halide::Func generate_disparity_func(const cv::Mat& gray_left, const cv::Mat& gray_right, const int max_disparity, const int radius);
+    void auto_schedule(Halide::Func& f, const int width, const int height);
+    void schedule_for_opencl(Halide::Func& f, const int width, const int height);
 
     cv::Mat undistort_rectify_image(const cv::Mat img, const Frame& frame_left, const Frame& frame_right);
     cv::Mat guided_filter(const cv::Mat& I, const cv::Mat& p, const float radius, const float eps);
