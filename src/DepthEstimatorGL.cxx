@@ -365,7 +365,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         // // trace(m_nr_seeds_created, m_ref_frame, frame_left);
 
         //trace
-        const Frame& cur_frame=frame_left;
+        const Frame& cur_frame=frame_right;
         //upload the current frame only once so and trace for all buffere keyframes
         TIME_START_GL("upload_gray_img");
         int size_bytes=cur_frame.gray_with_gradients.step[0] * cur_frame.gray_with_gradients.rows;
