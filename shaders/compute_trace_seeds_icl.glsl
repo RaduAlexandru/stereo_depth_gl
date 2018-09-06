@@ -310,7 +310,7 @@ void main(void) {
 
 
             //DEBUG why is the energy lower in some other regions for ngf
-            if(idx==13){
+            if(idx==4){
                 // imageStore(debug, ivec2(kp) , vec4(0,energy/10,0,255) );
                 // imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) ); //green for tracing
                 imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) );
@@ -337,10 +337,10 @@ void main(void) {
 
     }
 
-    // //DEBUG see the best kp
-    // //color it in blue depending on the differnce t  p[id].m_energyTH (if it's totally black it mean its too high and should be an outlier)
+    //DEBUG see the best kp
+    //color it in blue depending on the differnce t  p[id].m_energyTH (if it's totally black it mean its too high and should be an outlier)
     // float val=bestEnergy;
-    // imageStore(debug, ivec2(bestKp) , vec4(0,0,val/10,255) ); //blue for best point
+    imageStore(debug, ivec2(bestKp) , vec4(0,0,255,255) ); //blue for best point
 
 
     // float nr_pixel_acceses_along_epi=norm_epi/step_size*pattern_rot_nr_points;
@@ -378,7 +378,7 @@ void main(void) {
     }
 
 
-    if ( bestEnergy > p[id].m_energyTH * 1.7f ) {
+    if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
         is_outlier=1;
         // p[id].depth_filter.m_is_outlier=1;
         //DEBUG is outlier
