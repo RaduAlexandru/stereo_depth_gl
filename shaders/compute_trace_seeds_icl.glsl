@@ -152,9 +152,9 @@ void main(void) {
 
     int id = int(gl_GlobalInvocationID.x);
 
-    // if(p[id].depth_filter.m_is_outlier==1){
-    //     return;
-    // }
+    if(p[id].depth_filter.m_is_outlier==1){
+        return;
+    }
 
     p[id].m_time_alive++;
 
@@ -163,17 +163,42 @@ void main(void) {
     // const vec4 p_backproj_xyzw=vec4(p_backproj_xyz.x,p_backproj_xyz.y,p_backproj_xyz.z,1.0);
     // const vec4 xyz_f_xyzw = tf_cur_host*  p_backproj_xyzw ;
     // const vec3 xyz_f=xyz_f_xyzw.xyz/xyz_f_xyzw.w;
-    // if(xyz_f.z < 0.0)  {
-    //     return; // TODO in gl this is a return
-    // }
-
-
-    //doesnt matter if we are out of border because the textures are clamped
+    // // if(xyz_f.z < 0.0)  {
+    // //     return; // TODO in gl this is a return
+    // // }
+    //
+    //
+    // // doesnt matter if we are out of border because the textures are clamped
     // const vec3 kp_c = K * xyz_f;
     // const vec2 kp_c_h=kp_c.xy/kp_c.z;
+    // // if(kp_c.z<0.0){
+    // //     return;
+    // // }
     // if ( kp_c_h.x < min_border || kp_c_h.x >= frame_size.x-min_border || kp_c_h.y < min_border || kp_c_h.y >= frame_size.y-min_border ) {
     //     return; // TODO in gl this is a return
     // }
+
+
+
+    //attemt 2 to check if the points is visible
+    //update inverse depth coordinates for min and max
+    p[id].m_idepth_minmax.x = p[id].depth_filter.m_mu + sqrt(p[id].depth_filter.m_sigma2);
+    p[id].m_idepth_minmax.y = max(p[id].depth_filter.m_mu - sqrt(p[id].depth_filter.m_sigma2), 0.00000001f);
+    float idepth_mean = mean(p[id].m_idepth_minmax);
+    vec3 pr = KRKi_cr * vec3(p[id].m_uv, 1);
+    vec3 ptpMean = pr + Kt_cr*idepth_mean;
+    vec2 uvMean = ptpMean.xy/ptpMean.z;
+    if(ptpMean.z < 0.0){
+        return; //behind the camera
+    }
+
+    if ( uvMean.x < min_border || uvMean.x >= frame_size.x-min_border || uvMean.y < min_border || uvMean.y >= frame_size.y-min_border ) {
+        return; // TODO in gl this is a return
+    }
+
+
+
+
 
     p[id].m_nr_times_visible++;
 
@@ -183,9 +208,7 @@ void main(void) {
     //point is visible
     // point.last_visible_frame=frames[i].frame_id;
 
-    //update inverse depth coordinates for min and max
-    p[id].m_idepth_minmax.x = p[id].depth_filter.m_mu + sqrt(p[id].depth_filter.m_sigma2);
-    p[id].m_idepth_minmax.y = max(p[id].depth_filter.m_mu - sqrt(p[id].depth_filter.m_sigma2), 0.00000001f);
+
     // memoryBarrier();
     // barrier();
     // memoryBarrier();
@@ -193,12 +216,8 @@ void main(void) {
     //search epiline-----------------------------------------------------------------------
    // search_epiline_ncc (point, frame, KRKi_cr, Kt_cr );
     // search_epiline_bca (point, frames[i], KRKi_cr, Kt_cr, affine_cr);
-    float idepth_mean = mean(p[id].m_idepth_minmax);
-    vec3 pr = KRKi_cr * vec3(p[id].m_uv, 1);
-    vec3 ptpMean = pr + Kt_cr*idepth_mean;
     vec3 ptpMin = pr + Kt_cr*p[id].m_idepth_minmax.x;
     vec3 ptpMax = pr + Kt_cr*p[id].m_idepth_minmax.y;
-    vec2 uvMean = ptpMean.xy/ptpMean.z;
     vec2 uvMin = ptpMin.xy/ptpMin.z;
     vec2 uvMax = ptpMax.xy/ptpMax.z;
 
@@ -215,7 +234,7 @@ void main(void) {
     }
 
     //if the alive time is bigger than 15 and it was visible less than 5 frames , we ignore this points
-    if(p[id].m_time_alive>10 && p[id].m_nr_times_visible<5){
+    if(p[id].m_time_alive>15 && p[id].m_nr_times_visible<15){
         p[id].depth_filter.m_is_outlier=1; //discard the point
         return;
     }
@@ -295,7 +314,7 @@ void main(void) {
             const float nn = dot(grads,p[id].m_normalized_grad[idx]); //is 1 when it perfectly matches and 0 when its bad and -1 even worse- also if it's bigger than 1 it's bad
 
             float ideal=dot(p[id].m_normalized_grad[idx],p[id].m_normalized_grad[idx]);
-            float residual=abs(ideal-nn)  ; //ideal is not neceserally 1 because the dot product of m_normalized_grad with itself is scaled
+            float residual=(ideal-nn)  ; //ideal is not neceserally 1 because the dot product of m_normalized_grad with itself is scaled
             // float residual=1-clamp(nn,0,1); // workse like the unimodal one
             // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf (between 0 and 1)
             //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
@@ -305,7 +324,7 @@ void main(void) {
             // energy += hw *residual*residual*(2-hw);
 
             // float energy_for_this_pt=clamp(residual*residual,0, 1); //works but it's not better than the original
-            float energy_for_this_pt=map(residual,0,ngf_eta,0,1);
+            float energy_for_this_pt=map(residual*residual,0,ngf_eta,0,1);
             energy+=energy_for_this_pt;
 
 
@@ -378,9 +397,10 @@ void main(void) {
     }
 
 
-    if ( bestEnergy > p[id].m_energyTH * 1.2f ) {
+    // if ( bestEnergy > p[id].m_energyTH * 1.1f ) {
+    if(bestEnergy>0.9){
         is_outlier=1;
-        // p[id].depth_filter.m_is_outlier=1;
+        p[id].depth_filter.m_is_outlier=1;
         //DEBUG is outlier
         imageStore(debug, ivec2(bestKp) , vec4(255,0,0,255) );
     }
