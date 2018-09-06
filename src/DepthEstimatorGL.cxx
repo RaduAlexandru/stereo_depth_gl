@@ -200,6 +200,7 @@ void DepthEstimatorGL::compile_shaders(){
 
     m_compute_init_seeds_prog_id=gl::program_init_from_files( std::string(CMAKE_SOURCE_DIR)+"/shaders/compute_init_seeds.glsl" );
 
+    m_compute_debug_prog_id=gl::program_init_from_files( std::string(CMAKE_SOURCE_DIR)+"/shaders/compute_debug.glsl" );
 }
 
 // float DepthEstimatorGL::texture_interpolate ( const cv::Mat& img, const float x, const float y , const InterpolType type){
@@ -867,6 +868,16 @@ void DepthEstimatorGL::trace(gl::Buf& seeds_gl_buf, const int nr_seeds_created, 
     TIME_END_GL("depth_update_kernel");
 
     seeds_gl_buf.set_gpu_dirty(true); //the data changed on the gpu side, we should download it
+
+    // //DEBUG the ngf field, why is the tracing so bad with ngf
+    // GL_C( glUseProgram(m_compute_debug_prog_id) );
+    // glUniform2fv(glGetUniformLocation(m_compute_debug_prog_id,"frame_size"), 1, frame_size.data());
+    // glUniform1f(glGetUniformLocation(m_compute_debug_prog_id,"ngf_eta"), cur_frame.ngf_eta);
+    // bind_for_sampling(m_cur_frame, 1, glGetUniformLocation(m_compute_debug_prog_id,"gray_img_sampler") );
+    // glBindImageTexture(2, m_debug_tex.get_tex_id(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+    // glDispatchCompute(round_up_to_nearest_multiple(cur_frame.gray.cols,16)/16,
+    //                     round_up_to_nearest_multiple(cur_frame.gray.rows,16)/16, 1);
+
 
 
 

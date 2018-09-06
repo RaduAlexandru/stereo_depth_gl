@@ -35,7 +35,8 @@ struct Params {
     // float huberTH = 9; // Huber Threshold
     float huberTH = 0.2; //BCA with normalized values between [0,1] // Huber Threshold
     float convergence_sigma2_thresh=200;      //!< threshold on depth uncertainty for convergence.
-    float eta = 5;
+    // float eta = 5;
+    float pad;
 
     float gradH_th=20000000000; //threshold on the gradient of the pixels. If gradient is above this value we will create immaure point
     int search_epi_method=0; //0=bca, 1=ngf
@@ -176,6 +177,7 @@ public:
     GLuint m_compute_create_seeds_prog_id;
     GLuint m_compute_trace_seeds_prog_id;
     GLuint m_compute_init_seeds_prog_id; //initializey a vector of seeds for which we already know the size
+    GLuint m_compute_debug_prog_id; //used to do some debugging, mostly visualizing the ngf field
 
 
     //databasse

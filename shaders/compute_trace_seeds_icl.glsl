@@ -79,7 +79,8 @@ layout (std140) uniform params_block{
     float outlierTHSumComponent; 		// higher -> less strong gradient-based reweighting .
     float huberTH; // Huber Threshold
     float convergence_sigma2_thresh;      //!< threshold on depth uncertainty for convergence.
-    float eta;
+    // float eta;
+    float pad;
 
     float gradH_th;
     int search_epi_method; //0=bca, 1=ngf
@@ -124,6 +125,11 @@ float mean(vec2 vec){
     return (vec.x+vec.y)*0.5;
 }
 
+float map(float value, float inMin, float inMax, float outMin, float outMax) {
+    value=clamp(value, inMin, inMax);
+    return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
+}
+
 
 uniform sampler2D gray_with_gradients_img_sampler; //contains gray val and gradx and grady
 layout(binding=2, rgba32f) uniform writeonly image2D debug;
@@ -146,27 +152,28 @@ void main(void) {
 
     int id = int(gl_GlobalInvocationID.x);
 
-    if(p[id].depth_filter.m_is_outlier==1){
-        return;
-    }
+    // if(p[id].depth_filter.m_is_outlier==1){
+    //     return;
+    // }
 
     p[id].m_time_alive++;
 
-    // // check if point is visible in the current image
-    const vec3 p_backproj_xyz= p[id].depth_filter.m_f.xyz * 1.0f/ p[id].depth_filter.m_mu;
-    const vec4 p_backproj_xyzw=vec4(p_backproj_xyz.x,p_backproj_xyz.y,p_backproj_xyz.z,1.0);
-    const vec4 xyz_f_xyzw = tf_cur_host*  p_backproj_xyzw ;
-    const vec3 xyz_f=xyz_f_xyzw.xyz/xyz_f_xyzw.w;
-    if(xyz_f.z < 0.0)  {
-        return; // TODO in gl this is a return
-    }
+    // // // check if point is visible in the current image
+    // const vec3 p_backproj_xyz= p[id].depth_filter.m_f.xyz * 1.0f/ p[id].depth_filter.m_mu;
+    // const vec4 p_backproj_xyzw=vec4(p_backproj_xyz.x,p_backproj_xyz.y,p_backproj_xyz.z,1.0);
+    // const vec4 xyz_f_xyzw = tf_cur_host*  p_backproj_xyzw ;
+    // const vec3 xyz_f=xyz_f_xyzw.xyz/xyz_f_xyzw.w;
+    // if(xyz_f.z < 0.0)  {
+    //     return; // TODO in gl this is a return
+    // }
 
 
-    const vec3 kp_c = K * xyz_f;
-    const vec2 kp_c_h=kp_c.xy/kp_c.z;
-    if ( kp_c_h.x < min_border || kp_c_h.x >= frame_size.x-min_border || kp_c_h.y < min_border || kp_c_h.y >= frame_size.y-min_border ) {
-        return; // TODO in gl this is a return
-    }
+    //doesnt matter if we are out of border because the textures are clamped
+    // const vec3 kp_c = K * xyz_f;
+    // const vec2 kp_c_h=kp_c.xy/kp_c.z;
+    // if ( kp_c_h.x < min_border || kp_c_h.x >= frame_size.x-min_border || kp_c_h.y < min_border || kp_c_h.y >= frame_size.y-min_border ) {
+    //     return; // TODO in gl this is a return
+    // }
 
     p[id].m_nr_times_visible++;
 
@@ -236,9 +243,10 @@ void main(void) {
         float energy = 0;
         vec2 kp = uvMean + l*epi_dir;
 
-        if( ( kp.x >= (frame_size.x-min_border) )  || ( kp.y >= (frame_size.y-min_border) ) || ( kp.x < min_border ) || ( kp.y < min_border) ){
-            continue ;
-        }
+        //doesnt matter because the texture is clamped
+        // if( ( kp.x >= (frame_size.x-min_border) )  || ( kp.y >= (frame_size.y-min_border) ) || ( kp.x < min_border ) || ( kp.y < min_border) ){
+        //     continue ;
+        // }
 
 
 
@@ -265,31 +273,48 @@ void main(void) {
             float hit_color=hit_color_and_grads.x;
             vec2 grads=hit_color_and_grads.yz;
             //grads stores the gradient direction in x and in y
-            float along_epi=1-abs(dot(epi_dir, normalize(grads))); //increases when the points are ambigous on the epiline
-            float along_epi_agresiv=0.8; //the smaller the value the more aggresive we are in discarding points
-            float min_grad=50; //to avoid discarding points with really small gradients
-            if(along_epi>along_epi_agresiv && length(grads)>min_grad){
-                nr_times_ambigous++;
-                // p[id].depth_filter.m_is_outlier=1; //discard the point
-                // return;
-            }
+            // float along_epi=1-abs(dot(epi_dir, normalize(grads))); //increases when the points are ambigous on the epiline
+            // float along_epi_agresiv=0.8; //the smaller the value the more aggresive we are in discarding points
+            // float min_grad=50; //to avoid discarding points with really small gradients
+            // if(along_epi>along_epi_agresiv && length(grads)>min_grad){
+            //     nr_times_ambigous++;
+            //     // p[id].depth_filter.m_is_outlier=1; //discard the point
+            //     // return;
+            // }
 
-            //(Brightness Constancy Assumption) high qualty filter from openglsuperbible
-            // float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
-            const float residual = hit_color - (p[id].m_intensity[idx]);
-            float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
-            energy += hw *residual*residual*(2-hw);
+            // //(Brightness Constancy Assumption) high qualty filter from openglsuperbible
+            // // float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
+            // const float residual = hit_color - (p[id].m_intensity[idx]);
+            // float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
+            // energy += hw *residual*residual*(2-hw);
 
-            // //Uni modal NGF
-            // // vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
-            // // vec2 grads=hit_color_and_grads.yz;
-            // grads /= sqrt(dot(grads,grads)+ngf_eta);
-            // const float nn = dot(grads,p[id].m_normalized_grad[idx]);
-            // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf
-            // //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
+            //Uni modal NGF
+            // vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
+            // vec2 grads=hit_color_and_grads.yz;
+            grads /= sqrt(dot(grads,grads)+ngf_eta);
+            const float nn = dot(grads,p[id].m_normalized_grad[idx]); //is 1 when it perfectly matches and 0 when its bad and -1 even worse- also if it's bigger than 1 it's bad
+
+            float ideal=dot(p[id].m_normalized_grad[idx],p[id].m_normalized_grad[idx]);
+            float residual=abs(ideal-nn)  ; //ideal is not neceserally 1 because the dot product of m_normalized_grad with itself is scaled
+            // float residual=1-clamp(nn,0,1); // workse like the unimodal one
+            // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf (between 0 and 1)
+            //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
             // const float fr = abs(residual);
             // float hw = fr < params.huberTH ? 1 : params.huberTH / fr;
+            // float energy_for_this_pt=hw *residual*residual*(2-hw);
             // energy += hw *residual*residual*(2-hw);
+
+            // float energy_for_this_pt=clamp(residual*residual,0, 1); //works but it's not better than the original
+            float energy_for_this_pt=map(residual,0,ngf_eta,0,1);
+            energy+=energy_for_this_pt;
+
+
+            //DEBUG why is the energy lower in some other regions for ngf
+            if(idx==13){
+                // imageStore(debug, ivec2(kp) , vec4(0,energy/10,0,255) );
+                // imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) ); //green for tracing
+                imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) );
+            }
 
 
         }
@@ -312,14 +337,19 @@ void main(void) {
 
     }
 
+    // //DEBUG see the best kp
+    // //color it in blue depending on the differnce t  p[id].m_energyTH (if it's totally black it mean its too high and should be an outlier)
+    // float val=bestEnergy;
+    // imageStore(debug, ivec2(bestKp) , vec4(0,0,val/10,255) ); //blue for best point
 
-    float nr_pixel_acceses_along_epi=norm_epi/step_size*pattern_rot_nr_points;
-    //nr_times_along_epi epi is big for the vertical lines that we can triangulate well, and small for the horzontal lines which ar ambigous
-    if(nr_times_ambigous/nr_pixel_acceses_along_epi>0.9 && nr_times_ambigous!=0){ //the higher the value the more aggresive we are in dropping points
-        p[id].depth_filter.m_is_outlier=1; //discard the point
-        // imageStore(debug, ivec2(p[id].m_uv) , vec4(255,0,0,255) );
-        return;
-    }
+
+    // float nr_pixel_acceses_along_epi=norm_epi/step_size*pattern_rot_nr_points;
+    // //nr_times_along_epi epi is big for the vertical lines that we can triangulate well, and small for the horzontal lines which ar ambigous
+    // if(nr_times_ambigous/nr_pixel_acceses_along_epi>0.9 && nr_times_ambigous!=0){ //the higher the value the more aggresive we are in dropping points
+    //     p[id].depth_filter.m_is_outlier=1; //discard the point
+    //     // imageStore(debug, ivec2(p[id].m_uv) , vec4(255,0,0,255) );
+    //     return;
+    // }
 
     // if(nr_times_along_epi<10){ //the higher the value the more aggresive we are in dropping points
     //     p[id].depth_filter.m_is_outlier=1; //discard the point
@@ -334,8 +364,6 @@ void main(void) {
     // float pseudo_disp=distance(p[id].m_uv, bestKp)/100.0;
     // imageStore(debug, ivec2(p[id].m_uv) , vec4(0,pseudo_disp,0,255) );
 
-    // //store in debug the best kp
-    // imageStore(debug, ivec2(bestKp) , vec4(255,0,0,255) );
 
 
 
@@ -350,17 +378,14 @@ void main(void) {
     }
 
 
-    if ( bestEnergy > p[id].m_energyTH * 1.4f ) {
+    if ( bestEnergy > p[id].m_energyTH * 1.7f ) {
         is_outlier=1;
         // p[id].depth_filter.m_is_outlier=1;
+        //DEBUG is outlier
+        imageStore(debug, ivec2(bestKp) , vec4(255,0,0,255) );
     }
     else
     {
-        // vec2 epi_dir_inv=vec2(epi_dir.y,-epi_dir.x);
-        // float a = epi_dir * p[id].gradH * epi_dir;
-        // float b = epi_dir_inv * point.gradH * epi_dir_inv;
-        // float errorInPixel = 0.2f + 0.2f * (a+b) / a; // WO kommt das her? Scheint nicht zu NGF zu passen !
-        float errorInPixel=0.0f;
 
         if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
         {
@@ -420,7 +445,7 @@ void main(void) {
     z = 1.0f/idepth;
     if ( idepth<0.00000001 || idepth>99999999 || is_outlier==1 ) {
         p[id].depth_filter.m_b++; // increase outlier probability when no match was found
-        return;
+        // return;
     }
     //check nans and infs
 

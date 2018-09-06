@@ -77,7 +77,8 @@ layout (std140) uniform params_block{
     float outlierTHSumComponent; 		// higher -> less strong gradient-based reweighting .
     float huberTH; // Huber Threshold
     float convergence_sigma2_thresh;      //!< threshold on depth uncertainty for convergence.
-    float eta;
+    // float eta;
+    float pad;
 
     float gradH_th;
     int search_epi_method; //0=bca, 1=ngf
