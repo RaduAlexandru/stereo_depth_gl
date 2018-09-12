@@ -256,10 +256,10 @@ void Gui::update() {
     ImGui::End();
 
 
-    if (m_show_profiler_window && m_profiler->timings.size()>1 ){
+    if (m_show_profiler_window && m_profiler->m_timings.size()>1 ){
         ImGuiWindowFlags profiler_window_flags = 0;
         profiler_window_flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar;
-        int nr_timings=m_profiler->timings.size();
+        int nr_timings=m_profiler->m_timings.size();
         ImVec2 size(310,50*nr_timings);
         ImGui::SetNextWindowSize(size);
         ImGui::SetNextWindowPos(ImVec2(canvas_size.x -size.x , 0));
@@ -267,15 +267,17 @@ void Gui::update() {
         ImGui::PushItemWidth(135);
 
 
-        for (int i = 0; i < m_profiler->ordered_timers.size(); ++i){
-            const std::string &name = m_profiler->ordered_timers[i];
-            auto times=m_profiler->timings[name];
+        for (int i = 0; i < m_profiler->m_ordered_timers.size(); ++i){
+            const std::string &name = m_profiler->m_ordered_timers[i];
+            auto stats=m_profiler->m_stats[name];
+            auto times=m_profiler->m_timings[name];
 
-            std::stringstream stream_exp;
-            stream_exp << std::fixed << std::setprecision(1) << times.exp_avg();
-            std::string s_exp = stream_exp.str();
+
+            // std::stringstream stream_exp;
+            // stream_exp << std::fixed << std::setprecision(1) << stats.exp_avg();
+            // std::string s_exp = stream_exp.str();
             std::stringstream stream_cma;
-            stream_cma << std::fixed <<  std::setprecision(1) << times.avg();
+            stream_cma << std::fixed <<  std::setprecision(1) << stats.mean;
             std::string s_cma = stream_cma.str();
 
 //        std::string title = times.first +  "\n" + "(" + s_exp + ")" + "(" + s_cma + ")";

@@ -53,23 +53,23 @@ public:
 		back() = x;
 	}
 
-	void push_and_avg(const double& x) {
-		push(x);
-
-		//update the cumulative average and the exponential average. (If it's the first value we push into the ring, then just set it to the value)
-		if(std::is_arithmetic<value_type >::value){
-			if(first_value){
-				m_avg= x;
-				m_exp_avg= x;
-			}else{
-				m_avg=	m_avg + 1.0/(nr_inserted_values+1)*(x-m_avg);
-				m_exp_avg = m_exp_avg + alpha*(x-m_exp_avg);
-			}
-		}
-		first_value=false;
-		nr_inserted_values++;
-
-	}
+	// void push_and_avg(const double& x) {
+	// 	push(x);
+    //
+	// 	//update the cumulative average and the exponential average. (If it's the first value we push into the ring, then just set it to the value)
+	// 	if(std::is_arithmetic<value_type >::value){
+	// 		if(first_value){
+	// 			m_avg= x;
+	// 			m_exp_avg= x;
+	// 		}else{
+	// 			m_avg=	m_avg + 1.0/(nr_inserted_values+1)*(x-m_avg);
+	// 			m_exp_avg = m_exp_avg + alpha*(x-m_exp_avg);
+	// 		}
+	// 	}
+	// 	first_value=false;
+	// 	nr_inserted_values++;
+    //
+	// }
 
 	void pop() {
 		if( m_size > 0  ) {

@@ -12,6 +12,16 @@
 #include "stereo_depth_gl/ringbuffer.h"
 
 
+struct Stats{ //for each timer we store some stats so we can compute the avg, min, max an std-dev https://dsp.stackexchange.com/a/1187
+    int nr_samples=0;
+    float min=std::numeric_limits<float>::max(); //minimum time taken for that timer
+    float max=std::numeric_limits<float>::min(); //maximum time taken for that timer
+    float mean=0;
+    float variance=0;
+    float std_dev=0; //not really necesarry because we have the variance but it's nice to have
+};
+
+
 class Timer{
 public:
     void start(){
@@ -67,7 +77,7 @@ public:
         std::string full_name=name;
 
 
-        timers[full_name].start();
+        m_timers[full_name].start();
 
     }
 
@@ -80,20 +90,46 @@ public:
         std::string full_name=name;
 
         //it's the first time we stopped this timer and doesn't have any recordings yet
-        if(timings[full_name].empty()){
-            ordered_timers.push_back(full_name);
+        if(m_timings[full_name].empty()){
+            m_ordered_timers.push_back(full_name);
+
+            //the first time we time a functions it's usualy a warm up so the maximum can be quite big. We ignore this one so as to not squeue our stats
+            m_timers[full_name].stop();
+            double time_elapsed=m_timers[full_name].elapsed_ms();
+            m_timings[full_name].push(time_elapsed);
+            return; //don't store any stats, because this is the first time we time this function so it's likely to be bad
         }
 
         //get elapsed time for that timer and register it into the timings
-        if(timers[full_name].stop()){  //we manage to stop is correctly and it was no stopped before
-            double time_elapsed=timers[full_name].elapsed_ms();
-            timings[full_name].push_and_avg(time_elapsed);
+        if(m_timers[full_name].stop()){  //we manage to stop is correctly and it was no stopped before
+            double time_elapsed=m_timers[full_name].elapsed_ms();
+            m_timings[full_name].push(time_elapsed);
+
+            //we also store some evaluation things to be able to easily calculate min, max and std-dev
+            //https://dsp.stackexchange.com/a/1187
+            Stats& stats=m_stats[full_name];
+            stats.nr_samples+=1;
+            float prev_mean=stats.mean;
+            stats.mean= stats.mean + (time_elapsed-stats.mean)/stats.nr_samples;
+            stats.variance=stats.variance+ (time_elapsed - stats.mean)*(time_elapsed-prev_mean);
+            stats.std_dev=std::sqrt(stats.variance);
+            if(time_elapsed < stats.min){
+                stats.min=time_elapsed;
+            }
+            if(time_elapsed > stats.max){
+                stats.max=time_elapsed;
+            }
         }
+
+
+
+
     }
 
-    std::unordered_map<std::string, ringbuffer<float,100> > timings;  //contains the last N timings of the registers
-    std::unordered_map<std::string, Timer> timers;  //contains the timers for the registers
-    std::vector<std::string> ordered_timers;  //contains the timers in the order of insertion, useful for when we plot all of them, they will show in the order we inserted them
+    std::unordered_map<std::string, ringbuffer<float,100> > m_timings;  //contains the last N timings of the registers, for plotting in gui
+    std::unordered_map<std::string, Timer> m_timers;  //contains the timers for the registers
+    std::vector<std::string> m_ordered_timers;  //contains the timers in the order of insertion, useful for when we plot all of them, they will show in the order we inserted them
+    std::unordered_map<std::string, Stats > m_stats;
 private:
 
 
