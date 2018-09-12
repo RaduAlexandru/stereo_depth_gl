@@ -395,8 +395,8 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
     TIME_END_GL("ALL");
     //we need to do a sync because we need the data on the cpu side
-    sync_all_seeds_bufs(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
-    m_mesh=create_mesh(m_seeds_per_keyframe, m_ref_frames);
+    // sync_all_seeds_bufs(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
+    // m_mesh=create_mesh(m_seeds_per_keyframe, m_ref_frames);
     VLOG(1) << "m_mesh.V " << m_mesh.V.rows();
 
     TIME_END_GL("ALL_with_mesh");

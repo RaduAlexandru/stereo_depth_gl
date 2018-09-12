@@ -311,10 +311,10 @@ void main(void) {
             // vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
             // vec2 grads=hit_color_and_grads.yz;
             grads /= sqrt(dot(grads,grads)+ngf_eta);
-            const float nn = dot(grads,p[id].m_normalized_grad[idx]); //is 1 when it perfectly matches and 0 when its bad and -1 even worse- also if it's bigger than 1 it's bad
+            float nn = dot(grads,p[id].m_normalized_grad[idx]); //is 1 when it perfectly matches and 0 when its bad and -1 even worse- also if it's bigger than 1 it's bad
 
             float ideal=dot(p[id].m_normalized_grad[idx],p[id].m_normalized_grad[idx]);
-            float residual=(ideal-nn)  ; //ideal is not neceserally 1 because the dot product of m_normalized_grad with itself is scaled
+
             // float residual=1-clamp(nn,0,1); // workse like the unimodal one
             // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf (between 0 and 1)
             //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
@@ -324,15 +324,46 @@ void main(void) {
             // energy += hw *residual*residual*(2-hw);
 
             // float energy_for_this_pt=clamp(residual*residual,0, 1); //works but it's not better than the original
-            float energy_for_this_pt=map(residual*residual,0,ngf_eta,0,1);
+            // float energy_for_this_pt=map(residual*residual,0,ngf_eta,0,ngf_eta);
+            // residual = max(dot(grads,grads),ideal)-nn;
+
+            // //this works!
+            // float residual=(ideal-nn)  ; //ideal is not neceserally 1 because the dot product of m_normalized_grad with itself is scaled
+            // residual=1 - nn/max(dot(grads,grads),ideal);
+            // float energy_for_this_pt=residual*residual;
+            // energy+=energy_for_this_pt;
+
+            // //attempt to find why the minima is changed somehow
+            // // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));
+            // // float energy_for_this_pt=residual*residual;
+            // // energy+=energy_for_this_pt;
+            // float nn_changed=nn < 0 ? 1.f : 1-nn;
+            // const float fr = abs(nn_changed);
+            // float huber=0.01;
+            // float hw = fr < huber ? 1 : huber / fr;
+            // float energy_for_this_pt=hw *nn_changed*(2-hw);
+            // // float energy_for_this_pt=nn_changed;
+            // energy+=energy_for_this_pt;
+
+            //attempt2 to find why the minima is changed somehow
+            // nn=clamp(nn,0,1);
+            // nn=clamp(nn,0,1);
+            // float residual=(1-nn);
+            // float residual=1 - nn/max(dot(grads,grads),ideal); //works but why does it need to be nromalized=?
+            float residual=1-clamp(nn,0,1)/max(dot(grads,grads),ideal);
+            float energy_for_this_pt=residual*residual;
             energy+=energy_for_this_pt;
+
 
 
             //DEBUG why is the energy lower in some other regions for ngf
             if(idx==4){
                 // imageStore(debug, ivec2(kp) , vec4(0,energy/10,0,255) );
                 // imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) ); //green for tracing
-                imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) );
+                // imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) );
+
+                // float nn_to_show=1-clamp(nn,0,1);
+                imageStore(debug, ivec2(kp) , vec4(0,residual,0,255) );
             }
 
 
@@ -356,10 +387,10 @@ void main(void) {
 
     }
 
-    //DEBUG see the best kp
-    //color it in blue depending on the differnce t  p[id].m_energyTH (if it's totally black it mean its too high and should be an outlier)
-    // float val=bestEnergy;
-    imageStore(debug, ivec2(bestKp) , vec4(0,0,255,255) ); //blue for best point
+    // //DEBUG see the best kp
+    // //color it in blue depending on the differnce t  p[id].m_energyTH (if it's totally black it mean its too high and should be an outlier)
+    // // float val=bestEnergy;
+    // imageStore(debug, ivec2(bestKp) , vec4(0,0,255,255) ); //blue for best point
 
 
     // float nr_pixel_acceses_along_epi=norm_epi/step_size*pattern_rot_nr_points;
@@ -398,7 +429,7 @@ void main(void) {
 
 
     // if ( bestEnergy > p[id].m_energyTH * 1.1f ) {
-    if(bestEnergy>0.9){
+    if(bestEnergy>7.5){
         is_outlier=1;
         p[id].depth_filter.m_is_outlier=1;
         //DEBUG is outlier

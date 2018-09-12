@@ -279,7 +279,7 @@ void Gui::update() {
             std::string s_cma = stream_cma.str();
 
 //        std::string title = times.first +  "\n" + "(" + s_exp + ")" + "(" + s_cma + ")";
-            std::string title = name +  "\n" + "avg: " + s_exp + " ms";
+            std::string title = name +  "\n" + "avg: " + s_cma + " ms";
             ImGui::PlotLines(title.data(), times.data() , times.size() ,times.get_front_idx() );
         }
         ImGui::End();
