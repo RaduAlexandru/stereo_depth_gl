@@ -367,6 +367,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         // // trace(m_nr_seeds_created, m_ref_frame, frame_left);
 
         //trace
+        TIME_START_GL("upload_to_gpu");
         const Frame& cur_frame=frame_right;
         //upload the current frame only once so and trace for all buffere keyframes
         //TIME_START_GL("upload_gray_img");
@@ -376,6 +377,7 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         }
         m_cur_frame.upload_without_pbo(0,0,0, cur_frame.gray.cols, cur_frame.gray.rows, GL_RGB, GL_FLOAT, cur_frame.gray_with_gradients.ptr());
         //TIME_END_GL("upload_gray_img");
+        TIME_END_GL("upload_to_gpu");
 
         for (size_t i = 0; i < m_nr_buffered_keyframes; i++) {
             trace(m_seeds_gl_buf_per_keyframe[i], m_nr_seeds_created_per_keyframe[i], m_ref_frames[i], cur_frame);
@@ -531,13 +533,15 @@ void DepthEstimatorGL::create_seeds_cpu(const Frame& frame){
 }
 
 void DepthEstimatorGL::create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& frame){
-    TIME_START_GL("create_seeds");
+    //TIME_START_GL("create_seeds");
 
+    //TIME_START_GL("upload_to_gpu");
     //upload img
     //TIME_START_GL("upload_gray_and_grad");
     int size_bytes=frame.gray_with_gradients.step[0] * frame.gray_with_gradients.rows;
     GL_C(m_ref_frame_tex.upload_data(GL_RGB32F, frame.gray_with_gradients.cols, frame.gray_with_gradients.rows, GL_RGB, GL_FLOAT, frame.gray_with_gradients.ptr(), size_bytes));
     //TIME_END_GL("upload_gray_and_grad");
+    //TIME_PAUSE_GL("upload_to_gpu");
 
 
     //TIME_START_GL("hessian_det_matrix");
@@ -607,7 +611,9 @@ void DepthEstimatorGL::create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& 
 
     //upload the seeds we have because we need the shader to see the uv coordinates
     //TIME_START_GL("upload_immature_points");
+    //TIME_START_GL("upload_to_gpu");
     seeds_gl_buf.upload_sub_data(0, seeds.size() * sizeof(Seed), seeds.data());
+    //TIME_END_GL("upload_to_gpu");
     // glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_seeds_gl_buf);
     // glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, m_seeds.size() * sizeof(Seed), m_seeds.data());   //have to do it subdata because we want to keep the big size of the buffer so that create_seeds_gpu can write to it
     //TIME_END_GL("upload_immature_points");
@@ -664,7 +670,7 @@ void DepthEstimatorGL::create_seeds_hybrid (gl::Buf& seeds_gl_buf, const Frame& 
 
 
 
-    TIME_END_GL("create_seeds");
+    //TIME_END_GL("create_seeds");
     VLOG(1) << "-------------------------seeds size is " << seeds.size();
     // return seeds;
 

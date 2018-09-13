@@ -264,7 +264,7 @@ void Core::update() {
             m_view->data().clear();
 
             Mesh& mesh=m_scene.get_mesh_with_idx(i);
-            TIME_START("set_mesh");
+            //TIME_START("set_mesh");
             if(mesh.m_is_visible){
                 if(m_do_transform_mesh_to_worlGL){
                    mesh.apply_transform(m_loader_ros->m_tf_worldGL_worldROS.cast<double>());
@@ -279,7 +279,7 @@ void Core::update() {
                     set_edges(mesh);
                 }
             }
-            TIME_END("set_mesh");
+            //TIME_END("set_mesh");
 
 
             mesh.m_visualization_should_change=false;

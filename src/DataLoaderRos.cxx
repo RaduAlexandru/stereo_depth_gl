@@ -209,7 +209,7 @@ bool DataLoaderRos::has_data_for_all_cams(){
 }
 
 Frame DataLoaderRos::get_next_frame_for_cam(const int cam_id){
-    TIME_SCOPE("get_next_frame");
+    //TIME_SCOPE("get_next_frame");
 
 
     Frame frame ;

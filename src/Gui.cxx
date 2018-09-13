@@ -256,7 +256,7 @@ void Gui::update() {
     ImGui::End();
 
 
-    if (m_show_profiler_window && m_profiler->m_timings.size()>1 ){
+    if (m_show_profiler_window && m_profiler->m_timings.size()>0 ){
         ImGuiWindowFlags profiler_window_flags = 0;
         profiler_window_flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar;
         int nr_timings=m_profiler->m_timings.size();

@@ -19,20 +19,31 @@ struct Stats{ //for each timer we store some stats so we can compute the avg, mi
     float mean=0;
     float variance=0;
     float std_dev=0; //not really necesarry because we have the variance but it's nice to have
+
+    float S=0; //used to calculate the variance and std_dev as explained here https://dsp.stackexchange.com/a/1187
 };
 
 
 class Timer{
 public:
+    //https://stackoverflow.com/a/40136853
+    using precision = long double;
+    using ratio = std::milli;
+    using clock_t=std::chrono::high_resolution_clock;
+    using duration_t = std::chrono::duration<precision, ratio>;
+    using timepoint_t = std::chrono::time_point<clock_t, duration_t>;
+
+
     void start(){
-        m_StartTime = std::chrono::high_resolution_clock::now();
+        m_start_time = clock_t::now();
         m_running = true;
     }
 
     bool stop(){
         //only stop if it was running otherwise it was already stopped before
         if (m_running){
-            m_EndTime = std::chrono::high_resolution_clock::now();
+            m_end_time = clock_t::now() +m_duration_other_sections;
+            m_duration_other_sections=duration_t::zero();
             m_running = false;
             return true;
         }else{
@@ -40,16 +51,23 @@ public:
         }
     }
 
+    bool pause(){
+        if(stop()){ //if we managed to stop it correctly and it wasn't stopped before
+            //if its running we stop the timer and save the time it took until now so we can sum it up the last time we do TIME_END
+            m_duration_other_sections  += std::chrono::high_resolution_clock::now()-m_start_time;
+        }
+    }
+
     double elapsed_ms(){
-        std::chrono::time_point<std::chrono::high_resolution_clock> endTime;
+        timepoint_t endTime;
 
         if(m_running){
-            endTime = std::chrono::high_resolution_clock::now();
+            endTime = clock_t::now();
         }else{
-            endTime = m_EndTime;
+            endTime = m_end_time;
         }
 
-        return std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_StartTime).count();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_start_time).count();
     }
 
     double elapsed_s(){
@@ -58,8 +76,9 @@ public:
 
 
 private:
-    std::chrono::time_point<std::chrono::high_resolution_clock> m_StartTime;
-    std::chrono::time_point<std::chrono::high_resolution_clock> m_EndTime;
+    timepoint_t m_start_time;
+    timepoint_t m_end_time;
+    duration_t m_duration_other_sections=duration_t::zero(); //each time you do a pause we accumulate the time it took for that section of start-pause. This will get summed up at the end for the last start-end
     bool m_running = false;
 };
 
@@ -75,7 +94,6 @@ public:
         // std::string thread_id_string = ss.str();
         // std::string full_name=name+ thread_id_string;
         std::string full_name=name;
-
 
         m_timers[full_name].start();
 
@@ -111,18 +129,32 @@ public:
             stats.nr_samples+=1;
             float prev_mean=stats.mean;
             stats.mean= stats.mean + (time_elapsed-stats.mean)/stats.nr_samples;
-            stats.variance=stats.variance+ (time_elapsed - stats.mean)*(time_elapsed-prev_mean);
-            stats.std_dev=std::sqrt(stats.variance);
+            stats.S=stats.S+ (time_elapsed - stats.mean)*(time_elapsed-prev_mean);
+            if(stats.nr_samples>1){ //to avoid division by zero
+                stats.std_dev=std::sqrt( stats.S/ (stats.nr_samples-1) );
+                stats.variance=stats.S/ (stats.nr_samples-1);
+            }
             if(time_elapsed < stats.min){
                 stats.min=time_elapsed;
             }
             if(time_elapsed > stats.max){
                 stats.max=time_elapsed;
             }
+
         }
 
+    }
 
 
+    void pause_time( std::string name ){
+        // std::thread::id thread_id= std::this_thread::get_id();
+        // std::stringstream ss;
+        // ss << thread_id;
+        // std::string thread_id_string = ss.str();
+        // std::string full_name=name+ thread_id_string;
+        std::string full_name=name;
+
+        m_timers[full_name].pause();
 
     }
 
@@ -146,3 +178,7 @@ private:
 
 #define TIME_END_2(name,profiler) \
     profiler->stop_time(name);
+
+//when you have to sections that are disjoin but you want to get the time it take for both, you cdo start-pause start-end
+#define TIME_PAUSE_2(name,profiler) \
+    profiler->pause_time(name);

@@ -456,7 +456,7 @@ bool DataLoaderPNG::has_data_for_all_cams(){
 }
 
 Frame DataLoaderPNG::get_next_frame_for_cam(const int cam_id){
-    TIME_SCOPE("get_next_frame");
+    //TIME_SCOPE("get_next_frame");
 
     if(m_get_last_published_frame_for_cam[cam_id] && m_last_frame_per_cam[cam_id].rgb.data){
         m_get_last_published_frame_for_cam[cam_id]=false;
@@ -900,7 +900,7 @@ void DataLoaderPNG::republish_last_frame_all_cams(){
 
 cv::Mat DataLoaderPNG::undistort_image(const cv::Mat& gray_img, Eigen::Matrix3f& K, const Eigen::VectorXf& distort_coeffs, const int cam_id){
 
-    TIME_START("undistort");
+    TIME_SCOPE("undistort");
     //if we don't have the undistorsion maps yet, create them
     if ( m_undistort_map_x_per_cam[cam_id].empty() ||  m_undistort_map_y_per_cam[cam_id].empty() ){
         cv::Mat_<double> Kc = cv::Mat_<double>::eye( 3, 3 );
@@ -922,7 +922,6 @@ cv::Mat DataLoaderPNG::undistort_image(const cv::Mat& gray_img, Eigen::Matrix3f&
     cv::Mat undistorted_img;
     cv::remap ( gray_img, undistorted_img, m_undistort_map_x_per_cam[cam_id], m_undistort_map_y_per_cam[cam_id], cv::INTER_LINEAR );
     // gray_img=undistorted_img.clone(); //remap cannot function in-place so we copy the gray image back
-    TIME_END("undistort");
     return undistorted_img;
 
 }
