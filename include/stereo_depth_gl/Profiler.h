@@ -13,6 +13,7 @@
 
 
 struct Stats{ //for each timer we store some stats so we can compute the avg, min, max an std-dev https://dsp.stackexchange.com/a/1187
+
     int nr_samples=0;
     float min=std::numeric_limits<float>::max(); //minimum time taken for that timer
     float max=std::numeric_limits<float>::min(); //maximum time taken for that timer
@@ -21,7 +22,20 @@ struct Stats{ //for each timer we store some stats so we can compute the avg, mi
     float std_dev=0; //not really necesarry because we have the variance but it's nice to have
 
     float S=0; //used to calculate the variance and std_dev as explained here https://dsp.stackexchange.com/a/1187
+
 };
+
+inline std::ostream& operator<<(std::ostream& os, const Stats& s){
+    // os << "\n";
+    os << "\t -nr_samples: " << s.nr_samples << " \n";
+    os << "\t -min: " << s.min << " \n";
+    os << "\t -max: " << s.max << " \n";
+    os << "\t -mean: " << s.mean << " \n";
+    os << "\t -variance: " << s.variance << " \n";
+    os << "\t -std_dev: " << s.std_dev << " \n";
+
+    return os;
+}
 
 
 class Timer{
@@ -156,6 +170,15 @@ public:
 
         m_timers[full_name].pause();
 
+    }
+
+    void print_all_stats(){
+        //goes through all the timers and prints all the stats
+        for (size_t i = 0; i < m_ordered_timers.size(); i++) {
+            std::string name=m_ordered_timers[i];
+            std::cout << "\t name: " << name << " \n";
+            std::cout << m_stats[name] << '\n';
+        }
     }
 
     std::unordered_map<std::string, ringbuffer<float,100> > m_timings;  //contains the last N timings of the registers, for plotting in gui

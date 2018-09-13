@@ -215,6 +215,10 @@ void Gui::update() {
     ImGui::Separator();
     if (ImGui::CollapsingHeader("Misc")) {
         ImGui::SliderInt("log_level", &loguru::g_stderr_verbosity, -3, 9);
+        if (ImGui::Button("Print profiling stats")){
+            m_core->m_profiler->print_all_stats();
+
+        }
     }
 
 

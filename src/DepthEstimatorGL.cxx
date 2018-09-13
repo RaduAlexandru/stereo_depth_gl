@@ -324,11 +324,13 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
             int nr_seeds_created=m_nr_seeds_created_per_keyframe[m_idx_next_keyframe_to_insert];
             gl::Buf& seeds_buf=m_seeds_gl_buf_per_keyframe[m_idx_next_keyframe_to_insert];
 
+            TIME_START_GL("download_seeds");
             sync_seeds_buf(seeds_buf, seeds_cpu, nr_seeds_created);
             Frame& ref_frame=m_ref_frames[m_idx_next_keyframe_to_insert];
             assign_neighbours_for_points(seeds_buf, seeds_cpu, ref_frame.gray.cols, ref_frame.gray.rows);
             remove_grazing_seeds(seeds_buf, seeds_cpu);
             seeds_buf.set_cpu_dirty(false); //I dont' care if they are dirty on the cpu because we will overwrite them with new seeds soon
+            TIME_END_GL("download_seeds");
             // sync_seeds_buf(seeds_buf, seeds_cpu, nr_seeds_created);
 
             m_last_finished_mesh = create_mesh( seeds_cpu, ref_frame );
@@ -345,7 +347,9 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         //     create_seeds_gpu(frame_left);
         // }
         //HYBRID implementation, fastest!
+        TIME_START_GL("create_seeds_hybrid");
         create_seeds_hybrid(m_seeds_gl_buf_per_keyframe[m_idx_next_keyframe_to_insert], ref_frame);
+        TIME_END_GL("create_seeds_hybrid");
 
         // assign_neighbours_for_points(m_seeds, m_ref_frame.gray.cols, m_ref_frame.gray.rows);
         m_started_new_keyframe=true;
@@ -379,9 +383,11 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
         //TIME_END_GL("upload_gray_img");
         TIME_END_GL("upload_to_gpu");
 
+        TIME_START_GL("trace");
         for (size_t i = 0; i < m_nr_buffered_keyframes; i++) {
             trace(m_seeds_gl_buf_per_keyframe[i], m_nr_seeds_created_per_keyframe[i], m_ref_frames[i], cur_frame);
         }
+        TIME_END_GL("trace");
 
 
         //create a mesh
@@ -407,6 +413,10 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
     //LOG(INFO) << "ALL took an average of " << std::fixed << std::setprecision(1) <<  m_profiler->timings["ALL"].avg();
     //LOG(INFO) << "ALL_with_mesh took an average of " << std::fixed << std::setprecision(1) <<  m_profiler->timings["ALL_with_mesh"].avg();
+
+    if(m_print_stats_enabled){
+        m_profiler->print_all_stats();
+    }
 
 }
 

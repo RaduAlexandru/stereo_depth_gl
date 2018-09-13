@@ -267,12 +267,6 @@ private:
 
 #define TIME_END_GL(name)\
     if (m_debug_enabled) std::cout<<"END: "<<name<<std::endl;\
-    if (m_print_stats_enabled)  std::cout << "name: " << name << std::endl; \
-    if (m_print_stats_enabled)  std::cout << "min: " << m_profiler->m_stats[name].min << std::endl; \
-    if (m_print_stats_enabled)  std::cout << "max: " << m_profiler->m_stats[name].max << std::endl;\
-    if (m_print_stats_enabled)  std::cout << "avg: " << m_profiler->m_stats[name].mean << std::endl;\
-    if (m_print_stats_enabled)  std::cout << "variance: " << m_profiler->m_stats[name].variance << std::endl;\
-    if (m_print_stats_enabled)  std::cout << "std_dev: " << m_profiler->m_stats[name].std_dev << std::endl;\
     if (m_gl_profiling_enabled) glFinish();\
     TIME_END_2(name,m_profiler);
 
