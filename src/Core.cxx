@@ -64,7 +64,7 @@ Core::Core() :
         m_loader_ros(new DataLoaderRos),
         // m_splatter(new SurfelSplatter),
         m_nr_callbacks(0),
-        dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5),
+        // dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5),
         m_player_paused(true),
         m_player_should_do_one_step(false),
         m_preload_mesh_subsample_factor(1){

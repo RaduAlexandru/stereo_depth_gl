@@ -70,7 +70,7 @@ find_package(catkin REQUIRED)
 # find_package(kqueue REQUIRED)
 # find_package(Ceres REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system thread filesystem)
-find_package(kqueue REQUIRED)
+# find_package(kqueue REQUIRED)
 if(CORE_WITH_HALIDE)
     find_package(Halide REQUIRED)
 endif()
@@ -211,9 +211,9 @@ set_target_properties(TINY_PROCESS_LIB PROPERTIES LINKER_LANGUAGE C)
 # #Boost 1.64 libraries
 
 
-add_executable(stereo_depth_gl ${MY_SRC}  deps/GL/glad.c deps/dir_watcher/dir_watcher.cpp  ${IMGUI_SRC}   )
+add_executable(stereo_depth_gl ${MY_SRC}  deps/GL/glad.c   ${IMGUI_SRC}   )
 
-set(LIBS ${catkin_LIBRARIES}  ${OpenCV_LIBS}  TINY_PROCESS_LIB ${KQUEUE_LIBRARIES})
+set(LIBS ${catkin_LIBRARIES}  ${OpenCV_LIBS}  TINY_PROCESS_LIB )
 if(CORE_WITH_VIEWER)
     set(LIBS ${LIBS} igl::core igl::opengl igl::opengl_glfw)
 else()

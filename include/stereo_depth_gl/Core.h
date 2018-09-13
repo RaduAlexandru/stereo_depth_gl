@@ -22,8 +22,8 @@
 #include <sensor_msgs/CompressedImage.h>
 // #include "stereo_depth_gl/point_types.h"
 
-//dir watcher
-#include "dir_watcher.hpp"
+// //dir watcher
+// #include "dir_watcher.hpp"
 
 
 #define NUM_CLASSES 66
@@ -108,7 +108,7 @@ public:
     std::shared_ptr<DataLoaderRos> m_loader_ros;
     // std::shared_ptr<RosBagPlayer> m_player;
     // std::shared_ptr<SurfelSplatter> m_splatter;
-    emilib::DelayedDirWatcher dir_watcher;
+    // emilib::DelayedDirWatcher dir_watcher;
 
 
     //Misc
