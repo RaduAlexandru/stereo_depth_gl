@@ -86,6 +86,7 @@ void DepthEstimatorGL::init_params(){
     m_pattern_file= (std::string)depth_config["pattern_file"];
     m_estimated_seeds_per_keyframe=depth_config["estimated_seeds_per_keyframe"];
     m_nr_buffered_keyframes=depth_config["nr_buffered_keyframes"];
+    m_error_type=depth_config["error_type"];
 
     m_seeds_per_keyframe.resize(m_nr_buffered_keyframes);
     m_nr_seeds_created_per_keyframe.resize(m_nr_buffered_keyframes);
@@ -860,6 +861,7 @@ void DepthEstimatorGL::trace(gl::Buf& seeds_gl_buf, const int nr_seeds_created, 
     glUniform3fv(glGetUniformLocation(m_compute_trace_seeds_prog_id,"Kt_cr"), 1, Kt_cr_eigen.data());
     glUniform1f(glGetUniformLocation(m_compute_trace_seeds_prog_id,"focal_length"), focal_length);
     glUniform1f(glGetUniformLocation(m_compute_trace_seeds_prog_id,"ngf_eta"), cur_frame.ngf_eta);
+    glUniform1i(glGetUniformLocation(m_compute_trace_seeds_prog_id,"error_type"), m_error_type);
     glUniform2fv(glGetUniformLocation(m_compute_trace_seeds_prog_id,"pattern_rot_offsets"), pattern_rot.get_nr_points(), pattern_rot.get_offset_matrix().data()); //upload all the offses as an array of vec2 offsets
     glUniform1i(glGetUniformLocation(m_compute_trace_seeds_prog_id,"pattern_rot_nr_points"), pattern_rot.get_nr_points());
     // TIME_END_GL("upload_matrices");

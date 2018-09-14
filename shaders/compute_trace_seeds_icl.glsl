@@ -31,6 +31,7 @@ struct Seed{
     float m_energyTH;
     float m_intensity[MAX_RES_PER_POINT]; //gray value for each point on the pattern
     vec2 m_normalized_grad[MAX_RES_PER_POINT];
+    vec2 m_grad[MAX_RES_PER_POINT];
     mat2 m_gradH; //2x2 matrix for the hessian (gx2, gxgy, gxgy, gy2), used for calculating the alpha value
     vec2 m_uv; //position in x,y of the seed in th host_frame
     vec2 m_scaled_uv; //scaled uv position depending on the pyramid level of the image
@@ -144,6 +145,7 @@ uniform float focal_length;
 uniform vec2 pattern_rot_offsets[MAX_RES_PER_POINT];
 uniform int pattern_rot_nr_points;
 uniform float ngf_eta;
+uniform int error_type; //0=BCA, 1=grad_magnitude, 2=original_ugf, 3=sgf
 
 
 
@@ -277,15 +279,6 @@ void main(void) {
 
             //float hitColor = getInterpolatedElement31(frame->dI, (float)(kp(0)+rotatetPattern[idx][0]), (float)(kp(1)+rotatetPattern[idx][1]), wG[0]);
             vec2 offset=pattern_rot_offsets[idx];
-            // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x+0.5)/640.0, (kp.y + offset.y+0.5)/480.0)).x;
-            // float hit_color=texelFetch(gray_img_sampler, ivec2( (kp.x + offset.x), (kp.y + offset.y)), 0).x;
-            // float hit_color=texture_interpolate(frames[i].gray, kp.x+offset.x, kp.y+offset.y , InterpolationType::LINEAR);
-            // if(!std::isfinite(hit_color)) {energy-=1e5; continue;}
-
-            //for the case when the image is padded
-            // float hit_color=texture(gray_img_sampler, vec2( (kp.x + offset.x)/1024, ( 1024-480+  kp.y + offset.y)/1024)).x;
-
-
 
             //check if the gradient is perpendicular to the epipolar direction in which case we set the points as outlier because we won't be able to estimate the correct depth
             vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
@@ -301,70 +294,54 @@ void main(void) {
             //     // return;
             // }
 
-            // //(Brightness Constancy Assumption) high qualty filter from openglsuperbible
-            // // float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
-            // const float residual = hit_color - (p[id].m_intensity[idx]);
-            // float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
-            // energy += hw *residual*residual*(2-hw);
-
-            //Uni modal NGF
-            // vec3 hit_color_and_grads=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).xyz;
-            // vec2 grads=hit_color_and_grads.yz;
-            grads /= sqrt(dot(grads,grads)+ngf_eta);
-            float nn = dot(grads,p[id].m_normalized_grad[idx]); //is 1 when it perfectly matches and 0 when its bad and -1 even worse- also if it's bigger than 1 it's bad
-
-            float ideal=dot(p[id].m_normalized_grad[idx],p[id].m_normalized_grad[idx]);
-
-            // float residual=1-clamp(nn,0,1); // workse like the unimodal one
-            // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf (between 0 and 1)
-            //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
-            // const float fr = abs(residual);
-            // float hw = fr < params.huberTH ? 1 : params.huberTH / fr;
-            // float energy_for_this_pt=hw *residual*residual*(2-hw);
-            // energy += hw *residual*residual*(2-hw);
-
-            // float energy_for_this_pt=clamp(residual*residual,0, 1); //works but it's not better than the original
-            // float energy_for_this_pt=map(residual*residual,0,ngf_eta,0,ngf_eta);
-            // residual = max(dot(grads,grads),ideal)-nn;
-
-            // //this works!
-            // float residual=(ideal-nn)  ; //ideal is not neceserally 1 because the dot product of m_normalized_grad with itself is scaled
-            // residual=1 - nn/max(dot(grads,grads),ideal);
-            // float energy_for_this_pt=residual*residual;
-            // energy+=energy_for_this_pt;
-
-            // //attempt to find why the minima is changed somehow
-            // // const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));
-            // // float energy_for_this_pt=residual*residual;
-            // // energy+=energy_for_this_pt;
-            // float nn_changed=nn < 0 ? 1.f : 1-nn;
-            // const float fr = abs(nn_changed);
-            // float huber=0.01;
-            // float hw = fr < huber ? 1 : huber / fr;
-            // float energy_for_this_pt=hw *nn_changed*(2-hw);
-            // // float energy_for_this_pt=nn_changed;
-            // energy+=energy_for_this_pt;
-
-            //attempt2 to find why the minima is changed somehow
-            // nn=clamp(nn,0,1);
-            // nn=clamp(nn,0,1);
-            // float residual=(1-nn);
-            // float residual=1 - nn/max(dot(grads,grads),ideal); //works but why does it need to be nromalized=?
-            float residual=1-clamp(nn,0,1)/max(dot(grads,grads),ideal);
-            float energy_for_this_pt=residual*residual;
-            energy+=energy_for_this_pt;
-
-
-
-            //DEBUG why is the energy lower in some other regions for ngf
-            if(idx==4){
-                // imageStore(debug, ivec2(kp) , vec4(0,energy/10,0,255) );
-                // imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) ); //green for tracing
-                // imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) );
-
-                // float nn_to_show=1-clamp(nn,0,1);
-                imageStore(debug, ivec2(kp) , vec4(0,residual,0,255) );
+            //0=BCA, 1=grad_magnitude, 2=original_ugf, 3=sgf
+            if(error_type==0){
+                //(Brightness Constancy Assumption) high qualty filter from openglsuperbible
+                // float hit_color=hqfilter(gray_with_gradients_img_sampler, vec2( (kp.x + offset.x+0.5)/frame_size.x, (kp.y + offset.y+0.5)/frame_size.y)).x;
+                const float residual = hit_color - (p[id].m_intensity[idx]);
+                float hw = abs(residual) < params.huberTH ? 1 : params.huberTH / abs(residual);
+                energy += hw *residual*residual*(2-hw);
+            }else if(error_type==1){
+                //gradient magnitude
+                float ref_grad_magnitude=dot(p[id].m_grad[idx],p[id].m_grad[idx]);
+                float cur_grad_magnitude=dot(grads,grads);
+                float residual_for_this_pt=abs(ref_grad_magnitude - cur_grad_magnitude);
+                energy+=residual_for_this_pt;
+            }else if(error_type==2){
+                //original ugf
+                grads /= sqrt(dot(grads,grads)+ngf_eta);
+                const float nn = dot(grads,p[id].m_normalized_grad[idx]);
+                const float residual = max(0.f,min(1.f,nn < 0 ? 1.f : 1-nn ));// uni modal ngf
+                //const float residual = std::max<float>(0.f,std::min<float>(1.f,1.f-nn*nn)); // original ngf residual
+                const float fr = abs(residual);
+                float hw = fr < params.huberTH ? 1 : params.huberTH / fr;
+                energy += hw *residual*residual*(2-hw);
+            }else if (error_type==3){
+                //our sgf
+                grads /= sqrt(dot(grads,grads)+ngf_eta);
+                float nn = dot(grads,p[id].m_normalized_grad[idx]);
+                float ideal=dot(p[id].m_normalized_grad[idx],p[id].m_normalized_grad[idx]);
+                float residual=1-clamp(nn,0,1)/max(dot(grads,grads),ideal);
+                float energy_for_this_pt=residual*residual;
+                energy+=energy_for_this_pt;
+            }else{
+                //we don't have this error_type
+                return;
             }
+
+
+
+
+
+            // //DEBUG why is the energy lower in some other regions for ngf
+            // if(idx==4){
+            //     // imageStore(debug, ivec2(kp) , vec4(0,energy/10,0,255) );
+            //     // imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) ); //green for tracing
+            //     // imageStore(debug, ivec2(kp) , vec4(0,energy_for_this_pt,0,255) );
+            //
+            //     // float nn_to_show=1-clamp(nn,0,1);
+            //     imageStore(debug, ivec2(kp) , vec4(0,residual,0,255) );
+            // }
 
 
         }
@@ -429,14 +406,14 @@ void main(void) {
 
 
     // if ( bestEnergy > p[id].m_energyTH * 1.1f ) {
-    if(bestEnergy>7.5){
-        is_outlier=1;
-        p[id].depth_filter.m_is_outlier=1;
-        //DEBUG is outlier
-        imageStore(debug, ivec2(bestKp) , vec4(255,0,0,255) );
-    }
-    else
-    {
+    // if(bestEnergy>7.5){
+    //     is_outlier=1;
+    //     p[id].depth_filter.m_is_outlier=1;
+    //     //DEBUG is outlier
+    //     imageStore(debug, ivec2(bestKp) , vec4(255,0,0,255) );
+    // }
+    // else
+    // {
 
         if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
         {
@@ -460,7 +437,7 @@ void main(void) {
         // memoryBarrier();
         // barrier();
         // memoryBarrier();
-    }
+    // }
     // memoryBarrier();
     // barrier();
     // memoryBarrier();

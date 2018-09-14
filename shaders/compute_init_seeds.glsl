@@ -31,6 +31,7 @@ struct Seed{
     float m_energyTH;
     float m_intensity[MAX_RES_PER_POINT]; //gray value for each point on the pattern
     vec2 m_normalized_grad[MAX_RES_PER_POINT];
+    vec2 m_grad[MAX_RES_PER_POINT];
     mat2 m_gradH; //2x2 matrix for the hessian (gx2, gxgy, gxgy, gy2), used for calculating the alpha value
     vec2 m_uv; //position in x,y of the seed in th host_frame
     vec2 m_scaled_uv; //scaled uv position depending on the pyramid level of the image
@@ -239,6 +240,7 @@ Seed create_seed(ivec2 img_coords, vec3 hessian, int seed_idx){
 
 
         //for ngf
+        s.m_grad[p_idx] = grads;
         s.m_normalized_grad[p_idx] = grads;
         s.m_normalized_grad[p_idx] /= sqrt( dot(grads,grads) + ngf_eta);
         if( length(s.m_normalized_grad[p_idx])<1e-3){

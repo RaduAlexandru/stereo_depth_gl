@@ -91,6 +91,7 @@ struct Seed{
     float m_energyTH=0;
     float m_intensity[MAX_RES_PER_POINT]; //gray value for each point on the pattern
     Eigen::Vector2f m_normalized_grad[MAX_RES_PER_POINT];
+    Eigen::Vector2f m_grad[MAX_RES_PER_POINT];
     Eigen::Matrix2f m_gradH; //2x2 matrix for the hessian (gx2, gxgy, gxgy, gy2), used for calculating the alpha value
     Eigen::Vector2f m_uv; //position in x,y of the seed in th host_frame
     Eigen::Vector2f m_scaled_uv; //scaled uv position depending on the pyramid level of the image
@@ -195,6 +196,7 @@ public:
     std::string m_pattern_file;
     int m_estimated_seeds_per_keyframe; //conservative estimate of nr of seeds created per frame
     int m_nr_buffered_keyframes; //nr of keyframes for which we store the seeds
+    int m_error_type; //0=BCA, 1=grad_magnitude, 2=original_ugf, 3=sgf
     Params m_params; //parameters for depth estimation that may also be needed inside the gl shader
 
 
