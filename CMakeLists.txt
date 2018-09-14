@@ -14,7 +14,8 @@ set(PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include
                         ${CMAKE_SOURCE_DIR}/deps/dir_watcher
                         ${CMAKE_SOURCE_DIR}/deps/gl_lib
                         ${CMAKE_SOURCE_DIR}/deps/cv_lib
-                        ${CMAKE_SOURCE_DIR}/deps/Configuru)		# Header folder
+                        ${CMAKE_SOURCE_DIR}/deps/Configuru
+                        ${CMAKE_SOURCE_DIR}/deps/nativefiledialog/src/include)		# Header folder
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11 -std=gnu++11 -fext-numeric-literals")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w") #supress all warnings
@@ -22,9 +23,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DAPC_CAPTURE_DEBUG=1")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -O2") #optimizations
 
 #global options https://stackoverflow.com/questions/15201064/cmake-conditional-preprocessor-define-on-code
-option(CORE_WITH_VIEWER "Use a libigl viewer, or if we don't have it available we will still publish to RViz" OFF)
+option(CORE_WITH_VIEWER "Use a libigl viewer, or if we don't have it available we will still publish to RViz" ON)
 option(CORE_WITH_HALIDE "Compile Halide" OFF)
-option(CORE_WITH_LOADER_PNG "Read images from pngs" OFF)
+option(CORE_WITH_LOADER_PNG "Read images from pngs" ON)
 
 
 
@@ -57,6 +58,12 @@ if(CORE_WITH_VIEWER)
       include(${CGAL_USE_FILE})
     endif()
     find_package(LIBIGL REQUIRED)
+
+    # for native file dialog
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+
+
 else()
     find_package(GLFW REQUIRED)
 endif()
@@ -154,6 +161,13 @@ catkin_package(
 
 if(CORE_WITH_VIEWER)
     file(GLOB IMGUI_SRC ${CMAKE_SOURCE_DIR}/deps/imgui/*.c* ${CMAKE_SOURCE_DIR}/deps/imgui/examples/opengl3_example/imgui_impl_glfw_gl3.cpp)
+
+    #nativefiledialog
+    set (NFD_SOURCES ${CMAKE_SOURCE_DIR}/deps/nativefiledialog/src/nfd_common.c)
+    set (NFD_SOURCES ${NFD_SOURCES}  ${CMAKE_SOURCE_DIR}/deps/nativefiledialog/src/nfd_gtk.c )
+    include_directories(${GTK3_INCLUDE_DIRS})
+    add_library(nativefiledialog ${NFD_SOURCES})
+    target_link_libraries(nativefiledialog ${GTK3_LIBRARIES})
 endif()
 
 
@@ -216,6 +230,7 @@ add_executable(stereo_depth_gl ${MY_SRC}  deps/GL/glad.c   ${IMGUI_SRC}   )
 set(LIBS ${catkin_LIBRARIES}  ${OpenCV_LIBS}  TINY_PROCESS_LIB )
 if(CORE_WITH_VIEWER)
     set(LIBS ${LIBS} igl::core igl::opengl igl::opengl_glfw)
+    set(LIBS ${LIBS} nativefiledialog)
 else()
     set(LIBS ${LIBS} ${GLFW_LIBRARIES})
 endif()

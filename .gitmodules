@@ -19,3 +19,6 @@
 [submodule "deps/Configuru"]
 	path = deps/Configuru
 	url = https://github.com/RaduAlexandru/Configuru.git
+[submodule "deps/nativefiledialog"]
+	path = deps/nativefiledialog
+	url = https://github.com/mlabbe/nativefiledialog.git

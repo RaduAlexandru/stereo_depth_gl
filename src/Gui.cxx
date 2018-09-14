@@ -18,6 +18,9 @@
 #include "imgui_impl_glfw_gl3.h"
 #include "curve.hpp"
 
+//nativefiledialog
+#include <nfd.h>
+
 //loguru
 //#include <loguru.hpp>
 
@@ -221,18 +224,39 @@ void Gui::update() {
 
 
     ImGui::Separator();
+    if (ImGui::CollapsingHeader("IO")) {
+        if (ImGui::Button("Read mesh from file")){
+            nfdchar_t *path = NULL;
+            nfdresult_t result = NFD_OpenDialog( NULL, NULL, &path );
+            if ( result == NFD_OKAY ) {
+                puts("Success!");
+                puts(path);
+                Mesh mesh=m_core->read_mesh_from_file(std::string(path));
+                m_core->m_scene.add_mesh(mesh,"from_file");
+                free(path);
+            }
+        }
+
+        ImGui::InputText("exported filename", m_core->m_exported_filename, IM_ARRAYSIZE(m_core->m_exported_filename));
+        if (ImGui::Button("Write PLY")){
+            m_core->write_ply();
+        }
+        if (ImGui::Button("Write OBJ")){
+            m_core->write_obj();
+        }
+        if (ImGui::Button("Write PCD")){
+            m_core->write_pcd();
+        }
+    }
+
+
+    ImGui::Separator();
     ImGui::Text(("Nr of points: " + format_with_commas(m_core->m_scene.get_total_nr_vertices())).data());
     ImGui::Text(("Nr of triangles: " + format_with_commas(m_core->m_scene.get_total_nr_vertices())).data());
     ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
 
-    ImGui::InputText("exported filename", m_core->m_exported_filename, 1000);
-    if (ImGui::Button("Write PLY")){
-        m_core->write_ply();
-    }
-    if (ImGui::Button("Write OBJ")){
-        m_core->write_obj();
-    }
+
 
     // static float f = 0.0f;
     // ImGui::Text("Hello, world!");

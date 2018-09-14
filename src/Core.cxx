@@ -23,6 +23,7 @@
 #include "stereo_depth_gl/DataLoaderRos.h"
 // #include "stereo_depth_gl/SurfelSplatter.h"
 
+
 //libigl
 #ifdef WITH_VIEWER
 #include <igl/opengl/glfw/Viewer.h>
@@ -31,6 +32,10 @@
 #include <igl/writePLY.h>
 #include <igl/writeOBJ.h>
 #include <igl/per_vertex_normals.h>
+
+//pcd for writing pcd files
+#include <pcl/io/pcd_io.h>
+
 #endif
 // #include <igl/embree/ambient_occlusion.h>
 // #include <igl/embree/EmbreeIntersector.h>
@@ -450,6 +455,26 @@ void Core::init_params() {
         Mesh& mesh = m_scene.get_mesh_with_idx(idx);
         strcat (m_exported_filename,".obj");
         igl::writeOBJ(m_exported_filename, mesh.V, mesh.F);
+    }
+
+    void Core::write_pcd(){
+        int idx= m_view->selected_data_index;
+        Mesh& mesh = m_scene.get_mesh_with_idx(idx);
+        strcat (m_exported_filename,".pcd");
+
+        //make cloud
+        pcl::PointCloud<pcl::PointXYZ> cloud;
+        cloud.width    = mesh.V.rows();
+        cloud.height   = 1;
+        cloud.is_dense = false;
+        cloud.points.resize (mesh.V.rows());
+        for (size_t i = 0; i < mesh.V.rows(); i++) {
+            cloud.points[i].x=mesh.V(i,0);
+            cloud.points[i].y=mesh.V(i,1);
+            cloud.points[i].z=mesh.V(i,2);
+        }
+
+        pcl::io::savePCDFileASCII (m_exported_filename, cloud);
     }
 
 #endif

@@ -78,6 +78,7 @@ public:
         void set_edges(const Mesh& mesh);
         void write_ply();
         void write_obj();
+        void write_pcd ();
     #endif
     Eigen::MatrixXd color_points(const Mesh& mesh)const;  //creates color for all the points in the mesh depending on the m_color_type value
 
