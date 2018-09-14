@@ -911,6 +911,8 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
     mesh.V.resize(seeds.size(),3);
     mesh.V.setZero();
 
+    std::vector<bool> is_seed_valid(seeds.size(),false);
+
     int nr_seeds_valid=0;
     for (size_t i = 0; i < seeds.size(); i++) {
         float u=seeds[i].m_uv.x();
@@ -935,6 +937,8 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
             Eigen::Vector3f point_world=ref_frame.tf_cam_world.inverse()*point_cam;
             // mesh.V.row(i)=point_cam.cast<double>();
             mesh.V.row(i)=point_world.cast<double>();
+
+            is_seed_valid[i]=true;
 
             nr_seeds_valid++;
         }
@@ -962,6 +966,11 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
         float gray_val = seeds[i].m_intensity[4]; //center points of the pattern;
         mesh.C(i,0)=mesh.C(i,1)=mesh.C(i,2)=gray_val;
     }
+
+
+    //get rid of the points that are zeros
+    mesh.V=filter(mesh.V,is_seed_valid,true);
+    mesh.C=filter(mesh.C,is_seed_valid,true);
 
 
     return mesh;
