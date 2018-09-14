@@ -1287,19 +1287,19 @@ void DepthEstimatorGL::remove_grazing_seeds (gl::Buf& seeds_gl_buf, std::vector<
         }
 
 
-        if(max_mu-min_mu>0.02){
+        if(max_mu-min_mu>0.05){
         // if(max_mu-min_mu>0.05){
             point.depth_filter.m_is_outlier=1;
 
-            // right.depth_filter.m_is_outlier=1;
-            // left.depth_filter.m_is_outlier=1;
-            // above.depth_filter.m_is_outlier=1;
-            // below.depth_filter.m_is_outlier=1;
-            //
-            // left_upper.depth_filter.m_is_outlier=1;
-            // right_upper.depth_filter.m_is_outlier=1;
-            // left_lower.depth_filter.m_is_outlier=1;
-            // right_lower.depth_filter.m_is_outlier=1;
+            right.depth_filter.m_is_outlier=1;
+            left.depth_filter.m_is_outlier=1;
+            above.depth_filter.m_is_outlier=1;
+            below.depth_filter.m_is_outlier=1;
+
+            left_upper.depth_filter.m_is_outlier=1;
+            right_upper.depth_filter.m_is_outlier=1;
+            left_lower.depth_filter.m_is_outlier=1;
+            right_lower.depth_filter.m_is_outlier=1;
 
             nr_points_removed++;
         }
