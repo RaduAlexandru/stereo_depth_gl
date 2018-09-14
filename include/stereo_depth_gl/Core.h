@@ -67,8 +67,6 @@ public:
     void init_ros();
     void start(); // to be executed by main after all the core objcts have been linked together correctly
 
-    void read_ros_msgs();
-
     void read_scene(std::string file_path);
     void read_uv_map_thekla(std::string file_path);
     Mesh split_mesh_from_uv(const Mesh& mesh, const Mesh& uv_mesh);
@@ -143,6 +141,7 @@ public:
       bool m_player_paused;
       bool m_player_should_do_one_step;
       bool m_accumulate_meshes;
+      bool m_merge_meshes;
 
 
 private:

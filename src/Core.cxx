@@ -223,7 +223,13 @@ void Core::update() {
                 std::string cloud_name="finished_cloud";
                 last_cloud.name=cloud_name;
                 last_cloud.m_show_points=true;
-                m_scene.add_mesh(last_cloud, cloud_name);
+
+                if(m_merge_meshes){
+                    m_scene.merge_mesh(last_cloud,cloud_name);
+                }else{
+                    m_scene.add_mesh(last_cloud, cloud_name);
+                }
+
             #endif
         }
 
@@ -313,6 +319,7 @@ void Core::init_params() {
     m_preload_mesh_subsample_factor=vis_cfg["preload_mesh_subsample_factor"];
     m_do_transform_mesh_to_worlGL=vis_cfg["do_transform_mesh_to_worlGL"];
     m_accumulate_meshes=vis_cfg["accumulate_meshes"];
+    m_merge_meshes=vis_cfg["merge_meshes"];
 
     Config loader_cfg = cfg["loader"];
     m_player_paused=loader_cfg["player_paused"];

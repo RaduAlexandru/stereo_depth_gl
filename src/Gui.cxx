@@ -201,8 +201,6 @@ void Gui::update() {
         // if(ImGui::SliderFloat("denoise_theta", &m_core->m_depth_estimator_gl->m_params.denoise_theta, 0.00001, 20)){
         //     m_core->m_depth_estimator_gl->compute_depth_and_create_mesh();
         // }
-
-
     }
     show_stereo_textures();
     show_rgb_textures();

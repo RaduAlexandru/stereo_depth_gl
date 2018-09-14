@@ -87,3 +87,13 @@ bool Scene::does_mesh_with_name_exist(const std::string name){
     }
     return false;
 }
+
+void Scene::merge_mesh(const Mesh& mesh, const std::string name){
+    if(!does_mesh_with_name_exist(name)){
+        add_mesh(mesh,name);
+    }else{
+        Mesh& stored_mesh=get_mesh_with_name(name);
+        stored_mesh.add(mesh);
+        stored_mesh.m_visualization_should_change=true;
+    }
+}
