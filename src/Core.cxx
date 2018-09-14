@@ -130,6 +130,16 @@ void Core::start(){
              mesh.m_show_points=true;
              mesh.m_color_type=0; //jetcolor
              // mesh.m_color_type=1; //graysclae
+
+             //apply some correction given by a matrix from Jan. The poses from eth are fucked up for some reason
+             Eigen::Affine3d correction;
+             correction.linear()<< 0.235, -0.356, 0.904,
+                                   -0.971, -0.116, 0.207,
+                                    0.031, -0.927, -0.373;
+            correction.translation() << 0.85, 2.192, 0.938;
+            VLOG(1) << "geom mesh correction " << correction.matrix();
+            mesh.apply_transform(correction.inverse());
+
              m_scene.add_mesh(mesh,"geom");
          }
      #endif
@@ -612,7 +622,7 @@ Mesh Core::compute_camera_frustum_mesh(const Frame& frame, const float scale_mul
 Mesh Core::subsample_point_cloud(const Mesh& mesh){
 
     Mesh mesh_subsampled;
-    if(m_preload_mesh_subsample_factor==1){
+    if(m_preload_mesh_subsample_factor<=1){
         mesh_subsampled=mesh;
     }else{
         int nr_points_to_keep=mesh.V.rows()/m_preload_mesh_subsample_factor;
