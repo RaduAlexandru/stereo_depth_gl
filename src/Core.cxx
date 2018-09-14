@@ -360,6 +360,18 @@ void Core::init_params() {
            mesh.C/=255.0;
        } else if (fileExt == "obj") {
            igl::readOBJ(file_path, mesh.V, mesh.F);
+       } else if(fileExt == "pcd"){
+           pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+           int ret=pcl::io::loadPCDFile<pcl::PointXYZ> (file_path, *cloud);
+           if (ret==-1){
+               LOG(ERROR) << "Couldn't read file " << file_path;
+           }
+           mesh.V.resize(cloud->points.size(),3);
+           for (size_t i = 0; i < cloud->points.size (); ++i){
+               mesh.V.row(i) << cloud->points[i].x,cloud->points[i].y,cloud->points[i].z;
+           }
+       }else{
+           LOG(ERROR) << "Cannot read mesh with extension " << fileExt;
        }
 
        return mesh;

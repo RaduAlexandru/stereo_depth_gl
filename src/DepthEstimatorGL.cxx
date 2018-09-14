@@ -406,8 +406,8 @@ void DepthEstimatorGL::compute_depth_and_update_mesh_stereo(const Frame& frame_l
 
     //TIME_END_GL("ALL");
     //we need to do a sync because we need the data on the cpu side
-    // sync_all_seeds_bufs(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
-    // m_mesh=create_mesh(m_seeds_per_keyframe, m_ref_frames);
+    sync_all_seeds_bufs(); //after this, the cpu and cpu will have the same data, in m_seeds and m_seeds_gl_buf
+    m_mesh=create_mesh(m_seeds_per_keyframe, m_ref_frames);
     VLOG(1) << "m_mesh.V " << m_mesh.V.rows();
 
     //TIME_END_GL("ALL_with_mesh");
@@ -923,8 +923,9 @@ Mesh DepthEstimatorGL::create_mesh(const std::vector<Seed>& seeds, Frame& ref_fr
 
         // std::cout << "seeds has x y and depth " << u << " " << v << " " << depth << '\n';
 
-        if(std::isfinite(seeds[i].depth_filter.m_mu) && seeds[i].depth_filter.m_mu>=0.1
-            && seeds[i].depth_filter.m_is_outlier==0 && seeds[i].m_nr_times_visible>2 ){
+        if(std::isfinite(seeds[i].depth_filter.m_mu) && seeds[i].depth_filter.m_mu>=0.1  && seeds[i].depth_filter.m_is_outlier==0 && seeds[i].m_nr_times_visible>2){
+        // if(std::isfinite(seeds[i].depth_filter.m_mu) && seeds[i].depth_filter.m_mu>=0.1
+        //     && seeds[i].depth_filter.m_is_outlier==0 && seeds[i].m_nr_times_visible>2 ){
 
             //backproject the immature point
             Eigen::Vector3f point_screen;
