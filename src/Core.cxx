@@ -136,17 +136,21 @@ void Core::start(){
              mesh.m_color_type=0; //jetcolor
              // mesh.m_color_type=1; //graysclae
 
-             //apply some correction given by a matrix from Jan. The poses from eth are fucked up for some reason
-             Eigen::Affine3d correction;
-             correction.linear()<< 0.235, -0.356, 0.904,
-                                   -0.971, -0.116, 0.207,
-                                    0.031, -0.927, -0.373;
-            correction.translation() << 0.85, 2.192, 0.938;
-            VLOG(1) << "geom mesh correction " << correction.matrix();
-            mesh.apply_transform(correction.inverse());
+            //  //apply some correction given by a matrix from Jan. The poses from eth are fucked up for some reason
+            //  Eigen::Affine3d correction;
+            //  correction.linear()<< 0.235, -0.356, 0.904,
+            //                        -0.971, -0.116, 0.207,
+            //                         0.031, -0.927, -0.373;
+            // correction.translation() << 0.85, 2.192, 0.938;
+            // VLOG(1) << "geom mesh correction " << correction.matrix();
+            // mesh.apply_transform(correction.inverse());
 
              m_scene.add_mesh(mesh,"geom");
          }
+
+         // add a mesh for the path of the agent
+         Mesh path_mesh=show_poses_as_mesh(m_loader_png->m_worldROS_baselink_vec);
+         m_scene.add_mesh(path_mesh, "path");
      #endif
 
 
@@ -688,4 +692,33 @@ Mesh Core::subsample_point_cloud(const Mesh& mesh){
 
     return mesh_subsampled;
 
+}
+
+Mesh Core::show_poses_as_mesh(const std::vector<std::pair<uint64_t, Eigen::Affine3f> >&  worldROS_baselink_vec){
+
+    Mesh path_mesh;
+
+    //Make vertices as many as poses
+    Eigen::MatrixXd V(worldROS_baselink_vec.size(),3);
+
+    for (size_t i = 0; i < worldROS_baselink_vec.size(); i++) {
+        Eigen::Affine3f tf_worldGL_baselink=  worldROS_baselink_vec[i].second;
+        Eigen::Vector3f translation=tf_worldGL_baselink.translation();
+        V.row(i)=translation.cast<double>();
+    }
+
+    //edges in between pairs
+    Eigen::MatrixXi E(V.rows()-1,2);
+    for (size_t i = 0; i < V.rows()-1; i++) {
+        E.row(i) << i, i+1;
+    }
+
+
+    path_mesh.V=V;
+    path_mesh.E=E;
+
+    path_mesh.m_show_points=false;
+    path_mesh.m_show_edges=true;
+
+    return path_mesh;
 }

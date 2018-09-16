@@ -154,9 +154,9 @@ void main(void) {
 
     int id = int(gl_GlobalInvocationID.x);
 
-    // if(p[id].depth_filter.m_is_outlier==1){
-    //     return;
-    // }
+    if(p[id].depth_filter.m_is_outlier==1){
+        return;
+    }
 
     p[id].m_time_alive++;
 
@@ -230,16 +230,16 @@ void main(void) {
     const float  half_length = 0.5f * norm_epi;
 
     //the epiline is too long, and it would take too much time to search
-    // if(norm_epi>200){
-    //     p[id].depth_filter.m_is_outlier=1; //discard the point
-    //     return;
-    // }
+    if(norm_epi>200){
+        p[id].depth_filter.m_is_outlier=1; //discard the point
+        return;
+    }
 
-    // //if the alive time is bigger than 15 and it was visible less than 5 frames , we ignore this points
-    // if(p[id].m_time_alive>15 && p[id].m_nr_times_visible<15){
-    //     p[id].depth_filter.m_is_outlier=1; //discard the point
-    //     return;
-    // }
+    //if the alive time is bigger than 15 and it was visible less than 5 frames , we ignore this points
+    if(p[id].m_time_alive>15 && p[id].m_nr_times_visible<15){
+        p[id].depth_filter.m_is_outlier=1; //discard the point
+        return;
+    }
 
     //calculate a per seed px_error_angle
     const float e_a = dot(epi_line, p[id].m_gradH * epi_line ) ;
@@ -398,22 +398,22 @@ void main(void) {
 
     //check that the best energy is different enough from the second best
     int is_outlier=0;
-    // if(bestEnergy*1.1>second_best_energy && second_best_energy!=1e10
-    //     && distance(bestKp,second_best_kp)>3 ){
-    //     is_outlier=1;
-    //      p[id].depth_filter.m_is_outlier=1;
-    // }
+    if(bestEnergy*1.1>second_best_energy && second_best_energy!=1e10
+        && distance(bestKp,second_best_kp)>3 ){
+        is_outlier=1;
+         p[id].depth_filter.m_is_outlier=1;
+    }
 
 
     // if ( bestEnergy > p[id].m_energyTH * 1.1f ) {
-    // if(bestEnergy>7.5){
-    //     is_outlier=1;
-    //     p[id].depth_filter.m_is_outlier=1;
-    //     //DEBUG is outlier
-    //     imageStore(debug, ivec2(bestKp) , vec4(255,0,0,255) );
-    // }
-    // else
-    // {
+    if(bestEnergy>7.5){
+        is_outlier=1;
+        p[id].depth_filter.m_is_outlier=1;
+        //DEBUG is outlier
+        imageStore(debug, ivec2(bestKp) , vec4(255,0,0,255) );
+    }
+    else
+    {
 
         if( epi_dir.x*epi_dir.x>epi_dir.y*epi_dir.y )
         {
@@ -437,7 +437,7 @@ void main(void) {
         // memoryBarrier();
         // barrier();
         // memoryBarrier();
-    // }
+    }
     // memoryBarrier();
     // barrier();
     // memoryBarrier();
