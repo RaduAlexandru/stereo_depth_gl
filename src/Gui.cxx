@@ -222,6 +222,18 @@ void Gui::update() {
         }
     }
 
+    //----------Nee to be the last one so that all the other imgu commands are added to the list and drawn correctly so we can record also the GUI in the movie
+    ImGui::Separator();
+    if (ImGui::CollapsingHeader("Movies")) {
+        ImGui::SliderFloat("m_magnification", &m_core->m_magnification, 0.2, 3);
+        ImGui::InputText("results_path", m_core->m_results_path, IM_ARRAYSIZE(m_core->m_results_path));
+        if (ImGui::Button("Write Single PNG")){
+            m_core->write_single_png();
+        }
+        ImGui::SameLine();
+        ImGui::InputText("", m_core->m_single_png_filename, IM_ARRAYSIZE(m_core->m_single_png_filename));
+    }
+
 
     ImGui::Separator();
     if (ImGui::CollapsingHeader("IO")) {

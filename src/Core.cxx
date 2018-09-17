@@ -72,7 +72,8 @@ Core::Core() :
         // dir_watcher("/media/alex/Data/Master/SHK/c_ws/src/stereo_depth_gl/shaders/",5),
         m_player_paused(true),
         m_player_should_do_one_step(false),
-        m_preload_mesh_subsample_factor(1){
+        m_preload_mesh_subsample_factor(1),
+        m_magnification(1.0){
 
     init_params();
 
@@ -288,7 +289,7 @@ void Core::update() {
             m_view->selected_data_index=i;
             m_view->data().clear();
 
-            Mesh& mesh=m_scene.get_mesh_with_idx(i);
+            Mesh mesh=m_scene.get_mesh_with_idx(i);
             //TIME_START("set_mesh");
             if(mesh.m_is_visible){
                 if(m_do_transform_mesh_to_worlGL){
@@ -306,7 +307,7 @@ void Core::update() {
             }
             //TIME_END("set_mesh");
 
-
+            m_scene.get_mesh_with_idx(i).m_visualization_should_change=false; //need to set it for the mesh in the scene because this mesh is no longer a reference but a copy. We made it a copy so as to be able to apply one time m_do_transform_mesh_to_worlGL otherwise they would accumular on top of the mesh
             mesh.m_visualization_should_change=false;
         }
     }
@@ -721,4 +722,128 @@ Mesh Core::show_poses_as_mesh(const std::vector<std::pair<uint64_t, Eigen::Affin
     path_mesh.m_show_edges=true;
 
     return path_mesh;
+}
+
+
+///-------MOVIES--------------------------------------------------------------------------------
+
+
+void Core::write_single_png(){
+    fs::path dir (m_results_path);
+    fs::path png_name (m_single_png_filename);
+    fs::path full_path = dir / png_name;
+    fs::create_directory(dir);
+    std::cout << " write_single_png: " << full_path << std::endl;
+
+    write_viewer_to_png(m_view, full_path.string(), m_magnification);
+
+}
+
+
+void Core::write_viewer_to_png(const std::shared_ptr<igl::opengl::glfw::Viewer> view, const std::string full_path, const float magnification ){
+    std::cout << "writing viewer to png " << '\n';
+
+
+    int width  = std::round(view->core.viewport(2));
+    int height = std::round(view->core.viewport(3));
+    width*=magnification;
+    height*=magnification;
+
+
+    // unsigned x = R.rows();
+    // unsigned y = R.cols();
+
+    // Create frame buffer
+    GLuint frameBuffer;
+    glGenFramebuffers(1, &frameBuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+
+    // Create texture to hold color buffer
+    GLuint texColorBuffer;
+    glGenTextures(1, &texColorBuffer);
+    glBindTexture(GL_TEXTURE_2D, texColorBuffer);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texColorBuffer, 0);
+
+    // Create Renderbuffer Object to hold depth and stencil buffers
+    GLuint rboDepthStencil;
+    glGenRenderbuffers(1, &rboDepthStencil);
+    glBindRenderbuffer(GL_RENDERBUFFER, rboDepthStencil);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboDepthStencil);
+
+    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+
+
+
+    std::cout << "neww" << '\n';
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+    std::cout << "rendering" << '\n';
+
+    // Clear the buffer
+    glClearColor(view->core.background_color(0), view->core.background_color(1), view->core.background_color(2), 0.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Save old viewport
+    Eigen::Vector4f viewport_ori = view->core.viewport;
+    view->core.viewport << 0,0,width,height;
+
+
+    // Draw
+    // view->core.draw(view->core.data,false);
+    // view->draw();
+    for(int i = 0;i<view->data_list.size();i++){
+        view->core.draw(view->data_list[i],false);
+    }
+
+    // Restore viewport
+    view->core.viewport = viewport_ori;
+
+    // Copy back in the given Eigen matrices
+    GLubyte* pixels = (GLubyte*)calloc(width*height*4,sizeof(GLubyte));
+    glReadPixels
+    (
+     0, 0,
+     width, height,
+     GL_RGBA, GL_UNSIGNED_BYTE, pixels
+     );
+
+    cv::Mat img;
+    img=cv::Mat(height,width,CV_8UC4);
+    int count = 0;
+    for (unsigned i=0; i<height; ++i){
+      for (unsigned j=0; j<width; ++j){
+        img.at<cv::Vec4b>(i,j)[2] = pixels[count*4+0];
+        img.at<cv::Vec4b>(i,j)[1] = pixels[count*4+1];
+        img.at<cv::Vec4b>(i,j)[0] = pixels[count*4+2];
+        img.at<cv::Vec4b>(i,j)[3] = pixels[count*4+3];
+        // alpha.at<uchar>(i,j) = pixels[count*4+3];
+        // std::cout << "rgba is " << int(pixels[count*4+0]) << " " << int(pixels[count*4+1]) << " " << int(pixels[count*4+2])  << " " << int(pixels[count*4+3]) << '\n';
+        ++count;
+      }
+    }
+
+
+
+    // std::cout << "type of rgb image is" << type2string(rgba_img.type()) << '\n';
+
+
+    cv::Mat final_img_flipped;
+    cv::flip(img, final_img_flipped, 0);
+    cv::imwrite(full_path,final_img_flipped);
+
+
+    // Clean up
+    free(pixels);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteRenderbuffers(1, &rboDepthStencil);
+    glDeleteTextures(1, &texColorBuffer);
+    glDeleteFramebuffers(1, &frameBuffer);
+
+
 }

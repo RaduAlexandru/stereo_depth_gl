@@ -145,6 +145,13 @@ public:
       bool m_accumulate_meshes;
       bool m_merge_meshes;
 
+      //movies
+      char m_results_path[256] = "./results_movies/";
+      char m_single_png_filename[64] = "img.png";
+      float m_magnification;
+      void write_single_png();
+       void write_viewer_to_png(const std::shared_ptr<igl::opengl::glfw::Viewer> view, const std::string full_path, const float magnification ); //the function that actually does the saving to a file
+
 
 private:
 
