@@ -79,7 +79,7 @@ public:
         void write_ply();
         void write_obj();
         void write_pcd ();
-        Mesh show_poses_as_mesh(const std::vector<std::pair<uint64_t, Eigen::Affine3f> >&  worldROS_baselink_vec);
+        Mesh show_poses_as_mesh(const std::vector<std::pair<double, Eigen::Affine3f> >&  worldROS_baselink_vec);
     #endif
     Eigen::MatrixXd color_points(const Mesh& mesh)const;  //creates color for all the points in the mesh depending on the m_color_type value
 

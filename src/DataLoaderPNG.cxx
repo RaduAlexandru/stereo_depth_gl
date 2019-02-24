@@ -102,6 +102,7 @@ void DataLoaderPNG::init_params(){
         else if(dataset_type_string=="nts") m_dataset_type=DatasetType::NTS;
         else LOG(FATAL) << " Dataset type is not known " << dataset_type_string;
         m_pose_file= (m_data_path / (std::string)loader_config["pose_file"]).string();
+        m_timestamp_multiplier= loader_config["pose_timestamp_multiplier"];
     }
 
 
@@ -304,7 +305,7 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
 
             fs::path rgb_filename=m_rgb_filenames_per_cam[cam_id][ m_idx_img_to_read_per_cam[cam_id] ];
             m_idx_img_to_read_per_cam[cam_id]++;
-            uint64_t timestamp=-1;
+            double timestamp=-1;
             if(m_dataset_type==DatasetType::NTS){
                 std::string filename=rgb_filename.stem().string();
                 filename.erase(0,6);
@@ -313,9 +314,12 @@ void DataLoaderPNG::read_data_for_cam(const int cam_id){
                 timestamp=std::stoull(rgb_filename.stem().string());
             }
             frame.timestamp=timestamp; //store the unrounded one because when we check for the labels we check for the same filename
+            // frame.timestamp*=1.0e-9;
+            LOG(INFO) << "time stamp  " << std::fixed << timestamp << "rounded to " << frame.timestamp;
+            LOG(INFO) << "Query with " << std::fixed << frame.timestamp;
 
             //POSE---
-            if (!m_only_rgb && !get_pose_at_timestamp(frame.tf_cam_world, timestamp, cam_id )){
+            if (!m_only_rgb && !get_pose_at_timestamp(frame.tf_cam_world, frame.timestamp, cam_id )){
                 LOG(WARNING) << "Not found any pose at timestamp " << timestamp << " Discarding";
                 continue;
             }
@@ -538,7 +542,7 @@ void DataLoaderPNG::read_pose_file_eth(){
     VLOG(1) << "Reading pose file for ETH mav dataset";
 
     uint64_t scan_nr;
-    uint64_t timestamp;
+    double timestamp;
     Eigen::Vector3f position;
     Eigen::Quaternionf quat;
 
@@ -564,13 +568,18 @@ void DataLoaderPNG::read_pose_file_eth(){
         quat.normalize();
         // quat=quat.conjugate();
 
+
+        //move time stampp to nanoseconds 
+        // timestamp*=1e9;
+        timestamp*=m_timestamp_multiplier;
+
         // std::cout << "input is \n" << " " << timestamp << " " << position << " " << quat.matrix()  << "\n";
         Eigen::Affine3f pose;
         pose.matrix().block<3,3>(0,0)=quat.toRotationMatrix();
         pose.matrix().block<3,1>(0,3)=position;
 
         m_worldROS_baselink_map[timestamp]=pose;
-        m_worldROS_baselink_vec.push_back ( std::pair<uint64_t, Eigen::Affine3f>(timestamp,pose) );
+        m_worldROS_baselink_vec.push_back ( std::pair<double, Eigen::Affine3f>(timestamp,pose) );
     }
 
 }
@@ -583,7 +592,7 @@ void DataLoaderPNG::read_pose_file_icl(){
     VLOG(1) << "Reading pose file for ICL-NUIM dataset";
 
     uint64_t scan_nr;
-    uint64_t timestamp;
+    double timestamp;
     Eigen::Vector3f position;
     Eigen::Quaternionf quat;
 
@@ -610,7 +619,7 @@ void DataLoaderPNG::read_pose_file_icl(){
 
 
         m_worldROS_baselink_map[timestamp]=pose;
-        m_worldROS_baselink_vec.push_back ( std::pair<uint64_t, Eigen::Affine3f>(timestamp,pose) );
+        m_worldROS_baselink_vec.push_back ( std::pair<double, Eigen::Affine3f>(timestamp,pose) );
     }
 
 }
@@ -624,7 +633,7 @@ void DataLoaderPNG::read_pose_file_nts(){
     VLOG(1) << "Reading pose file for NTS dataset";
 
     std::string line;
-    uint64_t timestamp=0;
+    double timestamp=0;
     while (std::getline(infile, line)) {
         std::istringstream iss(line);
 
@@ -660,7 +669,7 @@ void DataLoaderPNG::read_pose_file_nts(){
 
 }
 
-bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp, const uint64_t cam_id){
+bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const double timestamp, const uint64_t cam_id){
 
 
     //return the closest one
@@ -683,7 +692,7 @@ bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t 
     //     return false;
     // }
 
-    if ( smallest_timestamp_diff!=0 ){
+    if ( smallest_timestamp_diff>200 ){
         LOG(WARNING) << "time difference for pose is way too large! " << smallest_timestamp_diff << '\n';
         return false;
     }
@@ -760,7 +769,7 @@ bool DataLoaderPNG::get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t 
     }
 
     // std::cout << "closest idx is " << closest_idx << '\n';
-    // std::cout << " timestamp is " << timestamp << " closest timestamp is " << m_worldROS_baselink_vec[closest_idx].first << '\n';
+    std::cout << " timestamp is " <<std::fixed << timestamp << " closest timestamp is " << m_worldROS_baselink_vec[closest_idx].first << '\n';
     // std::cout << "returning cam pose \n" << pose.matrix()  << '\n';
 
 

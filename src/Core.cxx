@@ -695,7 +695,7 @@ Mesh Core::subsample_point_cloud(const Mesh& mesh){
 
 }
 
-Mesh Core::show_poses_as_mesh(const std::vector<std::pair<uint64_t, Eigen::Affine3f> >&  worldROS_baselink_vec){
+Mesh Core::show_poses_as_mesh(const std::vector<std::pair<double, Eigen::Affine3f> >&  worldROS_baselink_vec){
 
     Mesh path_mesh;
 

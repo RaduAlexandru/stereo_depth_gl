@@ -168,3 +168,14 @@ inline void CheckOpenGLError(const char* stmt, const char* fname, int line)
 // {
 //     return out << glm::to_string(g);
 // }
+
+auto file_to_string = [](const std::string &filename)->std::string{
+    std::ifstream t(filename);
+    if (t.is_open()) {
+        return std::string((std::istreambuf_iterator<char>(t)),
+                std::istreambuf_iterator<char>());
+    }else{
+        LOG(FATAL) << "Failed to open file " << filename;
+        return "";
+    }
+};

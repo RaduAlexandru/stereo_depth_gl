@@ -102,8 +102,8 @@ public:
 
     //transforms
     Eigen::Affine3f m_tf_worldGL_worldROS;
-    std::unordered_map<uint64_t, Eigen::Affine3f> m_worldROS_baselink_map;
-    std::vector<std::pair<uint64_t, Eigen::Affine3f> >m_worldROS_baselink_vec;
+    std::unordered_map<double, Eigen::Affine3f> m_worldROS_baselink_map;
+    std::vector<std::pair<double, Eigen::Affine3f> >m_worldROS_baselink_vec;
 
     std::vector< std::vector<fs::path> > m_rgb_filenames_per_cam; //list of images paths for each cam to read
     std::vector<int> m_idx_img_to_read_per_cam;
@@ -136,6 +136,7 @@ private:
     // std::string m_dataset_type;
     DatasetType m_dataset_type;
     std::string m_pose_file;
+    double m_timestamp_multiplier; // to multiply the timetampt we read from the file so we can conver to s or ns or whatever
     std::vector<Frame> m_last_frame_per_cam; //stores the last frame for each of the cameras
     std::vector<bool> m_get_last_published_frame_for_cam; //if we shoudl return the last published frame or not
 
@@ -155,7 +156,7 @@ private:
     void read_pose_file_nts();
 
     //get poses depending on the datset
-    bool get_pose_at_timestamp(Eigen::Affine3f& pose, const uint64_t timestamp, const uint64_t cam_id);
+    bool get_pose_at_timestamp(Eigen::Affine3f& pose, const double timestamp, const uint64_t cam_id);
 
     //get the intrinsics depending on the dataset
     void get_intrinsics(Eigen::Matrix3f& K, Eigen::Matrix<float, 5, 1>& distort_coeffs, const uint64_t cam_id);

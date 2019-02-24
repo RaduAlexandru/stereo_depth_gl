@@ -540,11 +540,11 @@ inline std::vector<std::string> split(const std::string& str, const std::string&
 }
 
 
-inline std::string file_to_string (const std::string &filename){
-    std::ifstream t(filename);
-    return std::string((std::istreambuf_iterator<char>(t)),
-            std::istreambuf_iterator<char>());
-}
+// inline std::string file_to_string (const std::string &filename){
+//     std::ifstream t(filename);
+//     return std::string((std::istreambuf_iterator<char>(t)),
+//             std::istreambuf_iterator<char>());
+// }
 
 //sometimes you want to allocate memory that is multiple of 64 bytes, so therefore you want to allocate more memory but you need a nr that is divisible by 64
 inline int round_up_to_nearest_multiple(const int number, const int divisor){

@@ -15,7 +15,7 @@ public:
 
     cv::Mat mask;
     cv::Mat depth;
-    unsigned long long int timestamp;
+    double timestamp;
     Eigen::Matrix3f K;
     Eigen::Matrix<float, 5, 1> distort_coeffs;
     Eigen::Affine3f tf_cam_world;
